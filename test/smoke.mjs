@@ -1053,6 +1053,32 @@ async function main() {
     if (refusedPlanWrite) ok('writePlan refuses a gated artifact')
     else bad('writePlan guard', 'a manifest was written without a gate')
 
+    // Reference audio takes the same road as reference images: a list of names
+    // in ComfyUI's input directory, stored on the marker, read back by the
+    // voice screen. Blank and non-string entries are dropped at the route --
+    // an empty name would reach a loader node as a request for a file called "".
+    const refsSaved = await callRoute(routes, '/studio/project', '/studio/project', {
+      method: 'POST',
+      body: { project: 'smoke', voice_references: ['clone-a.wav', '  clone-b.flac  ', '', 7] },
+    })
+    const savedRefs = refsSaved.json().project?.voice_references
+    if (refsSaved.statusCode === 200
+      && Array.isArray(savedRefs) && savedRefs.length === 2
+      && savedRefs[0] === 'clone-a.wav' && savedRefs[1] === 'clone-b.flac')
+      ok('reference audio names round-trip through the marker, trimmed and filtered')
+    else bad('voice_references save', refsSaved.statusCode + ' ' + JSON.stringify(savedRefs))
+
+    // A save that does not mention them must not clear them. The panel writes
+    // one field at a time, so a patch that overwrote absent fields would drop
+    // the clips the moment anyone renamed the project.
+    await callRoute(routes, '/studio/project', '/studio/project', {
+      method: 'POST', body: { project: 'smoke', title: '改过的标题' },
+    })
+    const afterOther = await callRoute(routes, '/studio/state', '/studio/state?project=smoke', {})
+    if (afterOther.json().project?.voice_references?.length === 2)
+      ok('an unrelated project save leaves the reference audio alone')
+    else bad('references clobbered', JSON.stringify(afterOther.json().project?.voice_references))
+
     const platformSaved = await callRoute(routes, '/studio/project', '/studio/project', {
       method: 'POST', body: { project: 'smoke', target_platform: 'douyin' },
     })
@@ -2412,6 +2438,151 @@ async function main() {
   }
 
 
+  console.log('\n== 源码都在仓库里 ==')
+  {
+    // .gitignore said `client/` to exclude the BUILD output. A bare directory
+    // pattern matches at any depth, so it also swallowed `src/client/` -- the
+    // whole UI, twenty-four files, never committed. `git status` stayed clean
+    // the entire time, which is exactly why nothing caught it: an ignored file
+    // is indistinguishable from a file that does not need committing.
+    //
+    // Comparing what is on disk against what git tracks is the only check that
+    // sees the difference.
+    const fs = await import('node:fs')
+    const { execFileSync } = await import('node:child_process')
+    let tracked
+    try {
+      tracked = new Set(execFileSync('git', ['ls-files'], { encoding: 'utf-8' })
+        .split(String.fromCharCode(10)).filter((line) => line !== ''))
+    } catch {
+      tracked = undefined
+    }
+    if (tracked === undefined) {
+      // A published tarball has no git. Nothing to check, and nothing broken.
+      ok('no git here, so nothing to compare (skipped)')
+    } else {
+      const missing = []
+      const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const path = dir + '/' + entry.name
+          if (entry.isDirectory()) walk(path)
+          else if (/\.(ts|tsx|mjs|json|md)$/.test(entry.name) && !tracked.has(path)) missing.push(path)
+        }
+      }
+      for (const dir of ['src', 'test', 'docs']) if (fs.existsSync(dir)) walk(dir)
+      if (missing.length === 0) ok('every source file under src/, test/ and docs/ is tracked by git')
+      else bad('untracked source', missing.length + ' file(s), e.g. ' + missing.slice(0, 4).join(', '))
+    }
+
+    // The root cause, asserted directly: an unanchored directory pattern.
+    const ignore = fs.readFileSync('.gitignore', 'utf-8')
+    const unanchored = ignore.split(String.fromCharCode(10))
+      .map((line) => line.trim())
+      .filter((line) => line !== '' && !line.startsWith('#'))
+      .filter((line) => line.endsWith('/') && !line.startsWith('/') && !line.includes('*'))
+      .filter((line) => line !== 'node_modules/')
+    if (unanchored.length === 0) ok('build-output ignores are anchored, so they cannot match a nested directory')
+    else bad('unanchored ignore', unanchored.join(', ') + ' matches at any depth')
+  }
+  console.log('\n== 配音请求 ==')
+  {
+    // The sibling of 生图请求, and here for the same reason: while this string
+    // lived inside the voice screen as a closure, nothing could check it, and
+    // a line silently missing from it looks exactly like a line that is there.
+    const { buildVoiceJob } = await import('../lib/voice-job.js')
+    const base = {
+      workflow: 'Alpha-TTS',
+      voice: 'jiangshuo_male',
+      sections: [
+        { id: 's1', text: '三十年前，科幻片还在预言未来。', deliveryNote: '沉稳，略慢' },
+        { id: 's2', text: '现在它在描述昨天。', deliveryNote: '' },
+      ],
+    }
+
+    const plain = buildVoiceJob({ ...base, voiceReferences: [] })
+    if (plain.includes('`jiangshuo_male`') && plain.includes('三十年前') && plain.includes('表达：沉稳，略慢'))
+      ok('voice, lines and delivery notes all reach the message')
+    else bad('voice job body', plain)
+
+    // An ordinary library voice must not grow a reference line out of nowhere:
+    // a workflow with no reference input would be handed a parameter it has no
+    // slot for.
+    if (!plain.includes('参考音频')) ok('with no reference clips the message says nothing about them')
+    else bad('phantom reference', plain)
+
+    const one = buildVoiceJob({ ...base, voiceReferences: ['clone-a.wav'] })
+    if (one.includes('参考音频：`clone-a.wav`')) ok('a single reference clip is named')
+    else bad('one reference lost', one)
+
+    // The regression this exists to catch. The shots screen shipped a request
+    // whose positive prompt had gone missing and nothing failed; a reference
+    // clip is the same shape of omission -- the run still succeeds, it just
+    // clones nobody.
+    const many = buildVoiceJob({ ...base, voiceReferences: ['clone-a.wav', 'clone-b.flac'] })
+    if (many.includes('clone-a.wav') && many.includes('clone-b.flac')
+      && many.includes('参考音频1') && many.includes('参考音频2'))
+      ok('several reference clips ship numbered, so slot order survives')
+    else bad('references lost', many)
+
+    // Names only. Telling the model which node to load them into would be a
+    // second, staler copy of the workflow's own parameter list.
+    if (!/LoadAudio|加载节点/.test(many)) ok('the message names files, not loader nodes')
+    else bad('loader named', many)
+
+    // Same protocol as the shots screen: a failure on the last segment must not
+    // throw away every earlier one.
+    if (plain.includes('异步') && plain.includes('不要等全部跑完') && plain.includes('不要提交 completed'))
+      ok('the message asks for async, incremental submission and no self-approval')
+    else bad('missing async protocol', plain)
+  }
+
+
+  console.log('\n== 参考音频面板 ==')
+  {
+    const fs = await import('node:fs')
+    const picker = fs.readFileSync('src/client/asset-picker.tsx', 'utf-8')
+
+    // The bug this closes. The picker was written for reference images and its
+    // file input said accept="image/*". Opened for audio it filtered every
+    // file out -- the browser's dialog simply showed nothing selectable, with
+    // no error to explain why.
+    if (!picker.includes('accept="image')) ok('the picker no longer hard-codes an image filter')
+    else bad('image-only picker', 'an image-only accept is still in the source')
+    if (picker.includes('const accept = wanted.map') && picker.includes('accept={accept}'))
+      ok('the file filter is derived from the kinds the picker was opened for')
+    else bad('accept not derived', 'the input filter does not follow `kinds`')
+
+    // Two panels, one upload path. Renaming it to uploadAsset was the point:
+    // an `uploadImage` that also takes audio invites the next person to add a
+    // second one.
+    const comfyClient = fs.readFileSync('src/client/comfy.ts', 'utf-8')
+    if (comfyClient.includes('uploadAsset') && !comfyClient.includes('uploadImage'))
+      ok('there is one upload path, not one per media type')
+    else bad('upload path', 'uploadImage still exists alongside uploadAsset')
+
+    // ComfyUI's only upload endpoint is /upload/image and its form field is
+    // `image` whatever the bytes are. Renaming the field to match the media
+    // would 400, so the field name is asserted rather than left to intuition.
+    if (comfyClient.includes("form.append('image'")) ok('the multipart field stays `image`, as ComfyUI requires')
+    else bad('upload field renamed', 'ComfyUI /upload/image only reads the `image` field')
+
+    // Audio references must not be handed to the image workflow, or the other
+    // way round: two lists, two pickers, each opened for one kind.
+    const audioScreen = fs.readFileSync('src/client/audio-screen.tsx', 'utf-8')
+    const shotsScreen = fs.readFileSync('src/client/shots-screen.tsx', 'utf-8')
+    if (audioScreen.includes("kinds={['audio']}")) ok('the voice screen opens the picker for audio only')
+    else bad('voice picker kind', 'the voice screen does not restrict the picker to audio')
+    if (shotsScreen.includes("kinds={['image']}")) ok('the shots screen still opens it for images only')
+    else bad('shots picker kind', 'the shots screen lost its image restriction')
+
+    // It has to actually be on screen, and it has to preview rather than list.
+    const bundle = fs.readFileSync('client/client.js', 'utf-8')
+    if (bundle.includes('参考音频')) ok('the 参考音频 panel ships in the bundle')
+    else bad('panel missing', 'no 参考音频 in the client bundle')
+    if (audioScreen.includes('setPlayingRef') && audioScreen.includes('<audio'))
+      ok('a reference clip can be auditioned in place, not just named')
+    else bad('no preview', 'the reference slots only show a filename')
+  }
   console.log('\n== 镜头语言技能 ==')
   {
     const { STUDIO_CINEMATOGRAPHY_SKILL } = await import('../lib/skill-cinematography.js')

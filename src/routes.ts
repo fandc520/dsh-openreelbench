@@ -495,6 +495,7 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
           loraName?: string
           loraStrength?: number
           references?: string[]
+          voiceReferences?: string[]
           targetPlatform?: string
           shotPlan?: Record<string, Array<{ prompt?: string; weight?: number }>>
         } = {}
@@ -525,6 +526,12 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
         // artifact still show their plan until their first save lifts it over.
         if (Array.isArray(input.references)) {
           patch.references = input.references
+            .filter((entry): entry is string => typeof entry === 'string')
+            .map((entry) => entry.trim())
+            .filter((entry) => entry !== '')
+        }
+        if (Array.isArray(input.voice_references)) {
+          patch.voiceReferences = input.voice_references
             .filter((entry): entry is string => typeof entry === 'string')
             .map((entry) => entry.trim())
             .filter((entry) => entry !== '')

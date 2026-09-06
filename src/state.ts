@@ -280,6 +280,7 @@ export class StateMachine {
     loraName?: string
     loraStrength?: number
     references?: string[]
+    voiceReferences?: string[]
     targetPlatform?: string
     /** @deprecated storage moved to the scene_plan artifact; read-only legacy. */
     shotPlan?: Record<string, Array<{ prompt?: string; weight?: number }>>
@@ -299,6 +300,7 @@ export class StateMachine {
         ...(patch.loraName !== undefined ? { lora_name: patch.loraName } : {}),
         ...(patch.loraStrength !== undefined ? { lora_strength: patch.loraStrength } : {}),
         ...(patch.references !== undefined ? { references: patch.references } : {}),
+        ...(patch.voiceReferences !== undefined ? { voice_references: patch.voiceReferences } : {}),
         ...(patch.targetPlatform !== undefined ? { target_platform: patch.targetPlatform } : {}),
         ...(patch.shotPlan !== undefined ? { shot_plan: patch.shotPlan } : {}),
       }

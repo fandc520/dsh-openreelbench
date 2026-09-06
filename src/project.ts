@@ -85,6 +85,17 @@ export interface ProjectMarker {
    */
   references?: string[]
   /**
+   * Reference AUDIO for voice-cloning style TTS workflows, by the name
+   * ComfyUI knows it under. Same contract as `references` above — a name in
+   * ComfyUI's input directory, not a copy in the project.
+   *
+   * Kept separate from `references` rather than folded into one list even
+   * though both are "files a loader reads": the two are consumed by different
+   * workflows at different stages, and a single list would hand the image
+   * workflow an audio file whenever the slot order happened to line up.
+   */
+  voice_references?: string[]
+  /**
    * The shot plan: how many pictures each section is cut into, and what each
    * one is meant to show.
    *
