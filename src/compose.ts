@@ -29,7 +29,7 @@ import type { AssetManifest, AssetRecord, RenderOutput, RenderReport, Script, Sc
 import type { Playbook } from './playbooks.js'
 import type { Cut, CutSection } from './cuts.js'
 import { resolveVideoProfile } from './media-profile.js'
-import { type SubtitleBackground, subtitleForceStyle } from './subtitle-style.js'
+import { type SubtitleBackground, renderAss } from './subtitle-style.js'
 import { type ProjectLayout, ensureDir, resolveInProject, toProjectRelative } from './project.js'
 import { type SubtitleCue, cuesForSection, renderSrt } from './subtitle.js'
 
@@ -675,6 +675,31 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
     subtitleRelative = toProjectRelative(layout, subtitleAbsolute)
   }
 
+  // Per render, not per install: whether this cut needs subtitles baked in is a
+  // decision about where it is going, and that changes between exports of the
+  // same project. The setting stays as the default.
+  const burning = (options.burnSubtitles ?? config.burnSubtitles) && cues.length > 0
+
+  // Burning reads an ASS we write, never the SRT.
+  //
+  // ASS sizes are units in the script's own coordinate space, and libass falls
+  // back to 384x288 when the file declares none — which an SRT never does. A
+  // `force_style` asking for 46px therefore rendered at 46 * 1080/288, roughly
+  // 172px, and MarginV was wrong by the same factor: three huge lines across
+  // the middle of the frame. Declaring PlayRes ourselves makes every number a
+  // real pixel. The .srt is still written, still shipped, still the portable
+  // one — it just is not what gets burned.
+  let burnAbsolute: string | undefined
+  if (burning) {
+    burnAbsolute = join(layout.workDir, stem + '.ass')
+    await fs.writeFile(burnAbsolute, renderAss(cues, {
+      width: config.video.width,
+      height: config.video.height,
+      ...(options.subtitleBackground === undefined ? {} : { background: options.subtitleBackground }),
+      ...(config.subtitleFont.trim() === '' ? {} : { fontName: config.subtitleFont.trim() }),
+    }), 'utf-8')
+  }
+
   // 6. Mux. Stream-copy the video unless subtitles have to be burned in.
   notify('muxing')
   const outputAbsolute = join(layout.outputDir, stem + '.mp4')
@@ -682,19 +707,9 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
   // Per render, not per install: whether this cut needs subtitles baked in is a
   // decision about where it is going, and that changes between exports of the
   // same project. The setting stays as the default.
-  const burning = (options.burnSubtitles ?? config.burnSubtitles) && subtitleAbsolute !== undefined
-  if (burning) {
-    // force_style, not libass's defaults. Bare `subtitles=` gives 16pt Arial
-    // pinned to the frame edge — under a phone's gesture bar on a vertical
-    // render, and unreadably small at 4K.
-    const style = subtitleForceStyle({
-      width: config.video.width,
-      height: config.video.height,
-      ...(options.subtitleBackground === undefined ? {} : { background: options.subtitleBackground }),
-      ...(config.subtitleFont.trim() === '' ? {} : { fontName: config.subtitleFont.trim() }),
-    })
+  if (burning && burnAbsolute !== undefined) {
     muxArgs.push(
-      '-vf', "subtitles='" + escapeFilterPath(subtitleAbsolute!) + "':force_style='" + style + "'",
+      '-vf', "subtitles='" + escapeFilterPath(burnAbsolute) + "'",
       '-c:v', config.video.codec,
       '-crf', String(config.video.crf),
       '-preset', config.video.preset,

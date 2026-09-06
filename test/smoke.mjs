@@ -2530,75 +2530,107 @@ async function main() {
   }
 
 
-  console.log('\n== 字幕排版 ==')
+  console.log('\n== 烧录字幕排版 ==')
   {
-    const { subtitleForceStyle } = await import('../lib/subtitle-style.js')
-    const read = (style, key) => (new RegExp(key + '=([^,]*)').exec(style) ?? [])[1]
+    const { renderAss, subtitleMetrics } = await import('../lib/subtitle-style.js')
+    const cues = [
+      { start: 0.2, end: 2.0, text: '第一条字幕' },
+      { start: 2.0, end: 4.0, text: '第二条' + String.fromCharCode(10) + '分成两行' },
+    ]
 
-    // Sizes scale off the SHORT side, not the height. Scale by height and a
-    // 1080x1920 render gets text nearly twice the physical size of a landscape
-    // one — the same spec number producing two different-looking films.
-    const landscape = subtitleForceStyle({ width: 1920, height: 1080 })
-    const vertical = subtitleForceStyle({ width: 1080, height: 1920 })
-    if (read(landscape, 'FontSize') === read(vertical, 'FontSize'))
-      ok('portrait and landscape get the same physical text size')
-    else bad('size differs by orientation', read(landscape, 'FontSize') + ' vs ' + read(vertical, 'FontSize'))
+    // THE BUG THIS FILE EXISTS FOR. ASS sizes are units in the script's own
+    // coordinate space; libass falls back to 384x288 when a file declares none,
+    // which an SRT never does. A force_style asking for 46px rendered at
+    // 46 * 1080/288 — roughly 172px, three vast lines across the middle of the
+    // frame — and MarginV was wrong by the same factor. Declaring PlayRes is
+    // what makes every other number in here a real pixel.
+    const ass = renderAss(cues, { width: 1920, height: 1080 })
+    if (ass.includes('PlayResX: 1920') && ass.includes('PlayResY: 1080'))
+      ok('the ASS declares the frame, so its sizes are real pixels')
+    else bad('no PlayRes', ass.split(String.fromCharCode(10)).slice(0, 6).join(' | '))
 
-    const uhd = subtitleForceStyle({ width: 3840, height: 2160 })
-    if (Number(read(uhd, 'FontSize')) === Number(read(landscape, 'FontSize')) * 2)
-      ok('4K doubles the text rather than leaving it unreadable')
-    else bad('4K not scaled', read(uhd, 'FontSize'))
+    const wide = subtitleMetrics({ width: 1920, height: 1080 })
+    if (wide.fontSize === 46 && wide.marginBottom === 64) ok('1080p gets the spec values unscaled')
+    else bad('1080p metrics', JSON.stringify(wide))
 
-    // Title-safe: text inside 90% of the frame width.
-    const sideMargin = Number(read(landscape, 'MarginL'))
-    if (Math.abs(sideMargin - 1920 * 0.05) < 2) ok('side margins keep text title-safe')
-    else bad('unsafe margins', String(sideMargin))
+    // Scaling from the short side keeps a vertical render the same physical
+    // size; scaling by height would make 1080x1920 nearly twice as large.
+    const tall = subtitleMetrics({ width: 1080, height: 1920 })
+    if (tall.fontSize === wide.fontSize) ok('a vertical frame gets the same text size, not a bigger one')
+    else bad('vertical scaling', wide.fontSize + ' vs ' + tall.fontSize)
+    const uhd = subtitleMetrics({ width: 3840, height: 2160 })
+    if (uhd.fontSize === wide.fontSize * 2) ok('4K doubles it')
+    else bad('4K scaling', String(uhd.fontSize))
 
-    // 60px at 1080p is the floor: below it a phone gesture bar covers the line.
-    if (Number(read(landscape, 'MarginV')) >= 60) ok('bottom margin clears a phone gesture bar')
-    else bad('bottom margin too small', read(landscape, 'MarginV'))
+    // Title-safe: text inside 90% of the width, whichever way the frame turns.
+    if (Math.abs(wide.sideMargin - 1920 * 0.05) < 1 && Math.abs(tall.sideMargin - 1080 * 0.05) < 1)
+      ok('side margins hold the title-safe 90%')
+    else bad('safe area', wide.sideMargin + ' / ' + tall.sideMargin)
 
-    // The two backgrounds have to actually differ, or the picker is a placebo.
-    const boxed = subtitleForceStyle({ width: 1920, height: 1080, background: 'box' })
-    if (read(boxed, 'BorderStyle') === '3' && read(landscape, 'BorderStyle') === '1')
-      ok('box and outline produce different libass border styles')
-    else bad('backgrounds identical', read(boxed, 'BorderStyle') + ' vs ' + read(landscape, 'BorderStyle'))
+    // A raw newline would end the Dialogue line and the rest would parse as an
+    // unknown directive — the cue vanishes with no error anywhere.
+    const twoLine = ass.split(String.fromCharCode(10)).find((line) => line.includes('第二条'))
+    if (twoLine !== undefined && twoLine.includes(String.fromCharCode(92) + 'N') && !twoLine.endsWith('第二条'))
+      ok('a two-line cue is escaped, not truncated')
+    else bad('newline escaping', String(twoLine))
 
-    // Commas separate style entries, so one inside a value splits the style in
-    // half and libass silently drops the remainder.
-    const commas = subtitleForceStyle({ width: 1920, height: 1080, fontName: 'Bad, Font' })
-    if (commas.split(',').length === landscape.split(',').length)
-      ok('a comma in a value cannot split the style')
-    else bad('style splittable', commas)
+    if (ass.includes('0:00:00.20,0:00:02.00')) ok('times are ASS centiseconds')
+    else bad('timestamp format', ass.split(String.fromCharCode(10)).find((l) => l.startsWith('Dialogue')) ?? '')
 
-    // AND libass has to accept it. A malformed force_style is not an error —
-    // ffmpeg renders the film with the defaults and says nothing, so the only
-    // way to know is to burn one and read what the filter reported.
-    const srt = join(WS, 'style-probe.srt')
-    const EOL = String.fromCharCode(13) + String.fromCharCode(10)
-    await fs.writeFile(srt, ['1', '00:00:00,100 --> 00:00:01,500',
-      '三十年前，科幻片还在预言未来', '', ''].join(EOL), 'utf-8')
-    const burned = join(WS, 'style-probe.mp4')
-    const style = subtitleForceStyle({ width: 640, height: 360 })
-    let log = ''
-    try {
-      const probe = await run(config.ffmpegPath, [
-        '-y', '-nostdin', '-f', 'lavfi', '-i', 'color=c=navy:s=640x360:d=1',
-        '-vf', "subtitles='" + escapeFilterPath(srt) + "':force_style='" + style + "'",
-        '-c:v', 'libx264', '-crf', '32', '-pix_fmt', 'yuv420p', burned,
+    // AND IT HAS TO PUT PIXELS ON THE SCREEN.
+    //
+    // The test this replaces burned a clip and asserted the output file was
+    // non-empty. It passed while the subtitles rendered at 172px across the
+    // middle of the frame, and kept passing when they stopped rendering at
+    // all — a file with no visible text is still a file. Only the pixels can
+    // tell those apart.
+    //
+    // The measurement is a byte comparison rather than a brightness average:
+    // averages of a whole band move by fractions when text covers 1% of it,
+    // and a threshold needs a magic number. Two captures of the same frame,
+    // one burned and one not, differ in exactly the pixels the glyphs cover —
+    // zero when nothing drew, thousands when something did.
+    const burnDir = join(WS, 'subtitle-burn')
+    await fs.mkdir(burnDir, { recursive: true })
+    const assPath = join(burnDir, 'burn.ass')
+    await fs.writeFile(assPath, renderAss(
+      [{ start: 0, end: 3, text: '字幕烧录测试' }],
+      { width: 640, height: 360 },
+    ), 'utf-8')
+
+    /** Raw grey pixels of the bottom third, with and without the burn. */
+    const band = async (name, prefix) => {
+      const target = join(burnDir, name)
+      await run(config.ffmpegPath, [
+        '-v', 'error', '-y', '-nostdin',
+        '-f', 'lavfi', '-i', 'color=c=navy:s=640x360:d=1',
+        '-frames:v', '1',
+        '-vf', prefix + 'crop=640:120:0:240,format=gray',
+        '-f', 'rawvideo', '-pix_fmt', 'gray', target,
       ])
-      log = (probe.stderr ?? '') + (probe.stdout ?? '')
-    } catch (error) {
-      log = String(error.message ?? error)
+      return fs.readFile(target)
     }
-    const burnedSize = await fs.stat(burned).then((info) => info.size).catch(() => 0)
-    if (burnedSize > 0) ok('ffmpeg burns subtitles with the generated style')
-    else bad('burn failed', log.slice(-400))
-    // libass falls back silently when a font is missing; the filter says so.
-    const fontLine = log.split(String.fromCharCode(10)).find((line) => line.includes('fontselect')) ?? ''
-    if (fontLine === '' || !/-> *(default|sans-serif)/i.test(fontLine))
-      ok('the requested font resolved, not a substitute')
-    else bad('font substituted', fontLine)
+
+    let drawn
+    let burnError
+    try {
+      const plain = await band('plain.raw', '')
+      const burnt = await band('burnt.raw', "subtitles='" + escapeFilterPath(assPath) + "',")
+      drawn = 0
+      for (let index = 0; index < plain.length; index += 1) {
+        if (plain[index] !== burnt[index]) drawn += 1
+      }
+    } catch (error) {
+      burnError = String(error.message ?? error)
+    }
+    if (burnError !== undefined) bad('burn could not run', burnError.slice(-300))
+    else if (drawn > 200) ok('burned subtitles put ' + drawn + ' pixels on screen')
+    else bad('subtitles invisible', drawn + ' pixels changed — it renders a file and shows nothing')
+
+    const boxed = renderAss(cues, { width: 1920, height: 1080, background: 'box' })
+    const styleOf = (text) => text.split(String.fromCharCode(10)).find((l) => l.startsWith('Style: Default'))
+    if (styleOf(boxed) !== styleOf(ass)) ok('box and outline produce different styles')
+    else bad('background ignored', 'both render identically')
   }
 
 
