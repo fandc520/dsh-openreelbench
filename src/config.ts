@@ -99,6 +99,7 @@ export interface Config {
   /** The SRT is always a sidecar; burning it in costs a re-encode. */
   writeSubtitles: boolean
   burnSubtitles: boolean
+  subtitleFont: string
   bindings: {
     tts: CapabilityBinding
     image: CapabilityBinding
@@ -150,7 +151,11 @@ export const Config: z<Config> = z.object({
   writeSubtitles: z.boolean().default(true)
     .description('输出 .srt 字幕文件（与成片同名同目录）。字幕时间轴按实测配音排，不按脚本预估。'),
   burnSubtitles: z.boolean().default(false)
-    .description('把字幕烧进画面。需要重新编码，且依赖系统中文字体；关闭时字幕只作为旁挂 .srt。'),
+    .description('把字幕烧进画面的默认值。需要重新编码，且依赖系统中文字体；'
+      + '关闭时字幕只作为旁挂 .srt。成片页可以逐次覆盖这个默认。'),
+  subtitleFont: z.string().default('')
+    .description('烧录字幕的字体名，留空用「Microsoft YaHei」。'
+      + '字体必须装在本机——装不上时 libass 会静默换成别的字体，不会报错。'),
 
   /**
    * Which ComfyUI workflow backs each capability. Empty until the workflow

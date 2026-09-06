@@ -29,6 +29,7 @@ import type { AssetManifest, AssetRecord, RenderOutput, RenderReport, Script, Sc
 import type { Playbook } from './playbooks.js'
 import type { Cut, CutSection } from './cuts.js'
 import { resolveVideoProfile } from './media-profile.js'
+import { type SubtitleBackground, subtitleForceStyle } from './subtitle-style.js'
 import { type ProjectLayout, ensureDir, resolveInProject, toProjectRelative } from './project.js'
 import { type SubtitleCue, cuesForSection, renderSrt } from './subtitle.js'
 
@@ -510,7 +511,7 @@ function stillFilter(config: Config, playbook: Playbook, frames: number): string
 }
 
 /** FFmpeg filter arguments need drive letters and separators escaped twice. */
-function escapeFilterPath(path: string): string {
+export function escapeFilterPath(path: string): string {
   return path.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'")
 }
 
@@ -528,6 +529,13 @@ export interface ComposeOptions {
    * or `generic` leaves it to the configured default.
    */
   targetPlatform?: string | undefined
+  /**
+   * Bake the subtitles into the picture for this render. Defaults to the
+   * configured setting; the compose screen overrides it per export.
+   */
+  burnSubtitles?: boolean | undefined
+  /** `outline` keeps the picture visible; `box` guarantees contrast. */
+  subtitleBackground?: SubtitleBackground | undefined
   /** The editor's version, when one is being rendered. */
   cut?: Cut | undefined
   signal: AbortSignal
@@ -671,10 +679,22 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
   notify('muxing')
   const outputAbsolute = join(layout.outputDir, stem + '.mp4')
   const muxArgs = ['-y', '-nostdin', '-i', videoTrack, '-i', narrationBed]
-  const burning = config.burnSubtitles && subtitleAbsolute !== undefined
+  // Per render, not per install: whether this cut needs subtitles baked in is a
+  // decision about where it is going, and that changes between exports of the
+  // same project. The setting stays as the default.
+  const burning = (options.burnSubtitles ?? config.burnSubtitles) && subtitleAbsolute !== undefined
   if (burning) {
+    // force_style, not libass's defaults. Bare `subtitles=` gives 16pt Arial
+    // pinned to the frame edge — under a phone's gesture bar on a vertical
+    // render, and unreadably small at 4K.
+    const style = subtitleForceStyle({
+      width: config.video.width,
+      height: config.video.height,
+      ...(options.subtitleBackground === undefined ? {} : { background: options.subtitleBackground }),
+      ...(config.subtitleFont.trim() === '' ? {} : { fontName: config.subtitleFont.trim() }),
+    })
     muxArgs.push(
-      '-vf', "subtitles='" + escapeFilterPath(subtitleAbsolute!) + "'",
+      '-vf', "subtitles='" + escapeFilterPath(subtitleAbsolute!) + "':force_style='" + style + "'",
       '-c:v', config.video.codec,
       '-crf', String(config.video.crf),
       '-preset', config.video.preset,

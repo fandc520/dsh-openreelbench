@@ -12,7 +12,7 @@ import { Config } from '../lib/config.js'
 import { resolvePlaybook } from '../lib/playbooks.js'
 import { StateMachine } from '../lib/state.js'
 import { parseSrt, renderSrt } from '../lib/subtitle.js'
-import { probeDuration, renderProject } from '../lib/compose.js'
+import { escapeFilterPath, probeDuration, renderProject } from '../lib/compose.js'
 import { mediaKindOf, mediaUrl } from '../lib/http.js'
 import { registerStudioTools } from '../lib/tools.js'
 
@@ -275,9 +275,15 @@ async function testApply() {
   else bad('tool registration', toolNames)
 
   const skillNames = [...host.skills.values()].map((s) => s.name).sort()
-  if (skillNames.join(',') === 'dsh-creative-studio-cinematography,dsh-creative-studio-explainer,'
-    + 'dsh-creative-studio-reviewer,dsh-creative-studio-usage')
-    ok('apply registers all four skills')
+  const expectedSkills = [
+    'dsh-creative-studio-cinematography',
+    'dsh-creative-studio-explainer',
+    'dsh-creative-studio-reviewer',
+    'dsh-creative-studio-storytelling',
+    'dsh-creative-studio-usage',
+  ]
+  if (skillNames.join(',') === expectedSkills.join(','))
+    ok('apply registers all 5 skills')
   else bad('skill registration', skillNames.join(','))
 
   const section = host.section()
@@ -302,7 +308,7 @@ async function testApply() {
   } else {
     bad('skill re-render', 'still naming the old workflow after the settings change')
   }
-  if ([...host.skills.values()].length === 4) ok('re-rendering replaces the skills instead of stacking them')
+  if ([...host.skills.values()].length === 5) ok('re-rendering replaces the skills instead of stacking them')
   else bad('skill leak', [...host.skills.values()].length + ' skills registered')
 
   host.disposeAll()
@@ -2521,6 +2527,78 @@ async function main() {
     // resume from wherever the screen was mounted.
     if (timeline.includes('toggleRef.current()')) ok('the key reads the live toggle, not a stale closure')
     else bad('stale closure', 'space calls a captured togglePreview')
+  }
+
+
+  console.log('\n== 字幕排版 ==')
+  {
+    const { subtitleForceStyle } = await import('../lib/subtitle-style.js')
+    const read = (style, key) => (new RegExp(key + '=([^,]*)').exec(style) ?? [])[1]
+
+    // Sizes scale off the SHORT side, not the height. Scale by height and a
+    // 1080x1920 render gets text nearly twice the physical size of a landscape
+    // one — the same spec number producing two different-looking films.
+    const landscape = subtitleForceStyle({ width: 1920, height: 1080 })
+    const vertical = subtitleForceStyle({ width: 1080, height: 1920 })
+    if (read(landscape, 'FontSize') === read(vertical, 'FontSize'))
+      ok('portrait and landscape get the same physical text size')
+    else bad('size differs by orientation', read(landscape, 'FontSize') + ' vs ' + read(vertical, 'FontSize'))
+
+    const uhd = subtitleForceStyle({ width: 3840, height: 2160 })
+    if (Number(read(uhd, 'FontSize')) === Number(read(landscape, 'FontSize')) * 2)
+      ok('4K doubles the text rather than leaving it unreadable')
+    else bad('4K not scaled', read(uhd, 'FontSize'))
+
+    // Title-safe: text inside 90% of the frame width.
+    const sideMargin = Number(read(landscape, 'MarginL'))
+    if (Math.abs(sideMargin - 1920 * 0.05) < 2) ok('side margins keep text title-safe')
+    else bad('unsafe margins', String(sideMargin))
+
+    // 60px at 1080p is the floor: below it a phone gesture bar covers the line.
+    if (Number(read(landscape, 'MarginV')) >= 60) ok('bottom margin clears a phone gesture bar')
+    else bad('bottom margin too small', read(landscape, 'MarginV'))
+
+    // The two backgrounds have to actually differ, or the picker is a placebo.
+    const boxed = subtitleForceStyle({ width: 1920, height: 1080, background: 'box' })
+    if (read(boxed, 'BorderStyle') === '3' && read(landscape, 'BorderStyle') === '1')
+      ok('box and outline produce different libass border styles')
+    else bad('backgrounds identical', read(boxed, 'BorderStyle') + ' vs ' + read(landscape, 'BorderStyle'))
+
+    // Commas separate style entries, so one inside a value splits the style in
+    // half and libass silently drops the remainder.
+    const commas = subtitleForceStyle({ width: 1920, height: 1080, fontName: 'Bad, Font' })
+    if (commas.split(',').length === landscape.split(',').length)
+      ok('a comma in a value cannot split the style')
+    else bad('style splittable', commas)
+
+    // AND libass has to accept it. A malformed force_style is not an error —
+    // ffmpeg renders the film with the defaults and says nothing, so the only
+    // way to know is to burn one and read what the filter reported.
+    const srt = join(WS, 'style-probe.srt')
+    const EOL = String.fromCharCode(13) + String.fromCharCode(10)
+    await fs.writeFile(srt, ['1', '00:00:00,100 --> 00:00:01,500',
+      '三十年前，科幻片还在预言未来', '', ''].join(EOL), 'utf-8')
+    const burned = join(WS, 'style-probe.mp4')
+    const style = subtitleForceStyle({ width: 640, height: 360 })
+    let log = ''
+    try {
+      const probe = await run(config.ffmpegPath, [
+        '-y', '-nostdin', '-f', 'lavfi', '-i', 'color=c=navy:s=640x360:d=1',
+        '-vf', "subtitles='" + escapeFilterPath(srt) + "':force_style='" + style + "'",
+        '-c:v', 'libx264', '-crf', '32', '-pix_fmt', 'yuv420p', burned,
+      ])
+      log = (probe.stderr ?? '') + (probe.stdout ?? '')
+    } catch (error) {
+      log = String(error.message ?? error)
+    }
+    const burnedSize = await fs.stat(burned).then((info) => info.size).catch(() => 0)
+    if (burnedSize > 0) ok('ffmpeg burns subtitles with the generated style')
+    else bad('burn failed', log.slice(-400))
+    // libass falls back silently when a font is missing; the filter says so.
+    const fontLine = log.split(String.fromCharCode(10)).find((line) => line.includes('fontselect')) ?? ''
+    if (fontLine === '' || !/-> *(default|sans-serif)/i.test(fontLine))
+      ok('the requested font resolved, not a substitute')
+    else bad('font substituted', fontLine)
   }
 
 

@@ -655,6 +655,20 @@ function composeDefinition(runtime: StudioRuntime): ToolDefinition {
       type: 'object',
       properties: {
         project: { type: 'string', description: 'Project id.' },
+        burn_subtitles: {
+          type: 'boolean',
+          description:
+            'Bake the subtitles into the picture for this render. Omit to use the configured '
+            + 'default. Burning re-encodes the video and needs a system font for the script; '
+            + 'leaving it off still writes the .srt sidecar next to the film.',
+        },
+        subtitle_background: {
+          type: 'string',
+          enum: ['outline', 'box'],
+          description:
+            'How burned-in subtitles sit on the picture: "outline" (white text, dark stroke) '
+            + 'keeps the frame visible; "box" guarantees contrast on busy footage.',
+        },
         force: {
           type: 'boolean',
           description:
@@ -791,12 +805,15 @@ function composeDefinition(runtime: StudioRuntime): ToolDefinition {
       const platform = marker.target_platform ?? brief?.target_platform
       const profile = resolveVideoProfile(config.video, platform)
 
+      const background = optionalString(args, 'subtitle_background')
       const result = await renderProject({
         layout,
         script,
         manifest,
         config,
         playbook,
+        ...(typeof args.burn_subtitles === 'boolean' ? { burnSubtitles: args.burn_subtitles } : {}),
+        ...(background === 'outline' || background === 'box' ? { subtitleBackground: background } : {}),
         ...(platform === undefined ? {} : { targetPlatform: platform }),
         signal: exec.signal,
       })
