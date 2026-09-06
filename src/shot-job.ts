@@ -1,0 +1,111 @@
+/**
+ * The image generation request, as one testable function.
+ *
+ * This string is the most important one in the pipeline: it is the only thing
+ * standing between a plan and a batch of GPU jobs, and everything upstream —
+ * the scene plan, the five-layer builder, the style playbook — exists to make
+ * it right. It lived inside the shots screen as a closure, which meant nothing
+ * could check it without a browser, and a missing prompt looked exactly like a
+ * working one until someone read the message by eye.
+ *
+ * So it lives here: pure, no React, no DOM, no node built-ins. The host builds
+ * it for tests, the client bundles it for the panel, and both see the same
+ * words.
+ */
+
+/** One shot as the panel knows it, plus whatever was built for it. */
+export interface ShotJobItem {
+  sectionId: string
+  /** Position within the section, from zero. */
+  index: number
+  seconds: number
+  /** The narration this picture sits under. Atmosphere, never subject matter. */
+  text: string
+  /** The five-layer prompt, when one was built for this shot. */
+  built?: { prompt: string; missingSubject: boolean } | undefined
+  /** The raw subject, used only when no built prompt reached this shot. */
+  fallbackPrompt: string
+}
+
+export interface ShotJobInput {
+  workflow: string
+  negativePrompt: string
+  /** Reference image names in ComfyUI's input directory. Names only. */
+  references: readonly string[]
+  /** Free-text extra parameters (LoRA and its strength), passed verbatim. */
+  extraParams?: string | undefined
+  shots: readonly ShotJobItem[]
+}
+
+const NEWLINE = String.fromCharCode(10)
+
+/**
+ * Every prompt is handed over finished.
+ *
+ * Not a template. Sending "style prefix + subject + style suffix" is what made
+ * every picture in a film look the same, and instructing the model to assemble
+ * one would put that failure straight back — this time in prose, where no test
+ * would see it.
+ */
+export function buildShotJob(input: ShotJobInput): string {
+  const lines: string[] = [
+    '请用 ComfyUI 生成下面 ' + input.shots.length + ' 张分镜。',
+    '',
+    '工作流：`' + input.workflow + '`',
+    '负向提示词，一字不改：' + input.negativePrompt,
+    '　（工作流没有负向输入就忽略这一条）',
+  ]
+
+  // Just the names. Which loader node and which slot is something the model
+  // reads off the workflow's own parameter list; restating it here would be a
+  // second, staler copy.
+  if (input.references.length === 1) {
+    lines.push('参考图：`' + input.references[0] + '`')
+  } else if (input.references.length > 1) {
+    lines.push('参考图：' + input.references
+      .map((name, index) => '参考图' + (index + 1) + ' `' + name + '`').join('　'))
+  }
+
+  lines.push('尺寸：按成片尺寸生成')
+  if (input.extraParams !== undefined && input.extraParams.trim() !== '') {
+    lines.push('附加参数：' + input.extraParams.trim())
+  }
+
+  lines.push('')
+  lines.push('每张的**完整正面提示词**如下，已经拼好，**原样传给工作流**，不要再加风格前后缀：')
+  lines.push('')
+
+  for (const shot of input.shots) {
+    const where = '`' + shot.sectionId + '` 第 ' + (shot.index + 1) + ' 镜（' + shot.seconds.toFixed(1) + 's）'
+    const prompt = (shot.built?.prompt ?? '').trim() === ''
+      ? shot.fallbackPrompt.trim()
+      : shot.built!.prompt.trim()
+
+    if (prompt === '') {
+      // Nothing to draw from at all. Said plainly rather than emitting a bare
+      // heading with an empty line under it, which reads as a bug and leaves
+      // the model guessing at what was meant.
+      lines.push('- ' + where + '　⚠️ 这一镜没有画面描述，按下面的台词氛围自拟一句')
+    } else {
+      lines.push('- ' + where + (shot.built?.missingSubject === true
+        ? '　⚠️ 这一镜没写主体，下面只有风格和镜头语言，按台词氛围补上主体'
+        : ''))
+      lines.push('  ' + prompt)
+    }
+    // The line rides along as ATMOSPHERE, not as subject matter. Without it the
+    // model went looking for it anyway; unlabelled, it would start drawing the
+    // words. Naming what it is for settles both.
+    if (shot.text.trim() !== '') lines.push('  　参考台词氛围：' + shot.text.trim())
+  }
+
+  lines.push('')
+  lines.push('**请用异步方式逐张提交**，每收到一张返回就立即回填，不要等全部跑完再一起处理。')
+  lines.push(
+    '每张生成完用 `studio_project` 的 `action: "import"` 搬进项目（`kind: "image"`，'
+    + '`scene_id` 填段落编号），写进 `asset_manifest_shots` 并用 `studio_stage` 以 `in_progress` 记录；'
+    + '同一段有多张时按顺序写 `shot_index`。',
+  )
+  lines.push('**不要提交 completed** —— 我要在创意工作台看过再确认。')
+
+  return lines.join(NEWLINE)
+}

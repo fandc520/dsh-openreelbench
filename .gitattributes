@@ -1,0 +1,6 @@
+# Store text as LF regardless of the checkout platform. Without this a Windows
+# checkout commits CRLF and every file reads as wholly changed on another OS.
+* text=auto eol=lf
+
+# Generated and machine-owned: never worth reading in a diff.
+pnpm-lock.yaml linguist-generated=true -diff

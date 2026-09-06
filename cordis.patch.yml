@@ -1,0 +1,4 @@
+# dsh-creative-studio bundle patch: inserts the plugin into a profile's layer stack.
+- insert:
+    - id: studio
+      name: 'dsh-creative-studio'
