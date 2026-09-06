@@ -27,6 +27,7 @@ import { type AgentPhase, BusyLabel } from './busy.tsx'
 import { AdvicePanel } from './advice-panel.tsx'
 import { Strip } from './strip.tsx'
 import { Preview } from './preview.ts'
+import { buildMusicJob } from '../music-job.js'
 
 export interface TimelineScreenProps {
   state: StudioState
@@ -180,6 +181,15 @@ export function TimelineScreen({
    * this starts from, not the decision.
    */
   const [burnSubtitles, setBurnSubtitles] = useState<'off' | 'outline' | 'box'>('off')
+  /**
+   * The scoring workflow and the brief for it.
+   *
+   * Held as a draft and saved on blur rather than on every keystroke: the
+   * workflow name is remembered per project, and a write per character would be
+   * a marker write per character.
+   */
+  const [musicWorkflow, setMusicWorkflow] = useState(state.project.music?.workflow ?? '')
+  const [musicNote, setMusicNote] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [result, setResult] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [at, setAt] = useState(0)
@@ -678,6 +688,96 @@ export function TimelineScreen({
     } catch (error) {
       setPhase(null)
       say('error', (error as Error).message)
+    }
+  }
+
+  /* ------------------------------------------------------------- 配乐 */
+
+  const musicPath = state.project.music?.path
+  const musicUrl = musicPath === undefined || musicPath === ''
+    ? undefined
+    : '/studio/media?project=' + encodeURIComponent(state.project.id)
+      + '&path=' + encodeURIComponent(musicPath)
+
+  /** Remember the workflow name on the project, so the next film starts there. */
+  async function saveMusic(patch: { workflow?: string; path?: string }): Promise<void> {
+    try {
+      await api.updateProject({ project: state.project.id, music: patch })
+      await onReload()
+    } catch (error) {
+      say('error', (error as Error).message)
+    }
+  }
+
+  /**
+   * Hand the scoring job to the agent, with the sound-design skill loaded.
+   *
+   * Not run from the browser the way an audition is: choosing a bed is a
+   * judgement call, and the knowledge that makes it well is in a skill the
+   * agent has to be reading. The `/skill` gesture on the first line of the
+   * message is what loads it — for that turn only, which is why these skills
+   * are not resident.
+   */
+  async function addMusic(): Promise<void> {
+    if (phase !== null || busy !== null) return
+    if (musicWorkflow.trim() === '') {
+      say('error', '先填一个配乐工作流的名称。')
+      return
+    }
+    if (total <= 0) {
+      say('error', '时间轴还是空的，先把配音和分镜做完——曲子要多长是按全片时长算的。')
+      return
+    }
+    setResult(null)
+    setPhase('sending')
+    const before = state.project.music?.path ?? ''
+    try {
+      await saveMusic({ workflow: musicWorkflow.trim() })
+      await onSend(buildMusicJob({
+        projectId: state.project.id,
+        workflow: musicWorkflow.trim(),
+        styleName: state.style.playbook.name,
+        pacingProfile: state.style.playbook.narration.pacing_profile,
+        totalSeconds: total,
+        ...(state.project.target_platform === undefined ? {} : { platform: state.project.target_platform }),
+        ...(musicNote.trim() === '' ? {} : { note: musicNote.trim() }),
+      }))
+      setPhase('generating')
+      // The marker changing is the only signal this panel gets; the import
+      // records the path, so that is the field to watch.
+      for (let attempt = 0; attempt < 240; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2500))
+        const next = await api.state(state.project.id, cutId).catch(() => undefined)
+        if (next !== undefined && (next.project.music?.path ?? '') !== before) {
+          await onReload()
+          setPhase(null)
+          say('ok', '配乐搬回来了，听一遍。合成时会自动压在解说下面。')
+          return
+        }
+      }
+      setPhase(null)
+      say('error', '等了十分钟没等到配乐。去对话里看看 Agent 卡在哪。')
+    } catch (error) {
+      setPhase(null)
+      say('error', (error as Error).message)
+    }
+  }
+
+  /**
+   * Drop the bed from the film.
+   *
+   * The file stays on disk. Removing it here is a decision about this cut, and
+   * deleting the audio would make "put it back" mean "generate it again".
+   */
+  async function removeMusic(): Promise<void> {
+    setBusy('music')
+    try {
+      await saveMusic({ path: '' })
+      say('ok', '配乐已从成片里去掉，文件还在项目里。')
+    } catch (error) {
+      say('error', (error as Error).message)
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -1264,12 +1364,98 @@ export function TimelineScreen({
                 </div>
               </div>
             ) : null}
+            {musicPath === undefined || musicPath === '' ? null : (
+              <div className="dcs-lane">
+                <span className="dcs-lane-label dcs-lane-label-plain">配乐</span>
+                <div className="dcs-lane-blocks" style={{ width: px(total) }}>
+                  {/* One block spanning the whole film, because that is what it
+                      is: the bed is looped and cut to exactly this length. */}
+                  <button
+                    type="button"
+                    className="dcs-music-block"
+                    style={{ left: px(0), width: px(total) }}
+                    title={fileNameOf(musicPath) + '　整片铺满，合成时压在解说下面'}
+                    onClick={() => seek(0)}
+                  >
+                    <span className="dcs-music-name">♪　{fileNameOf(musicPath)}</span>
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="dcs-playhead" style={{ left: (LANE_LABEL + at * pps) + 'px' }} />
             </div>
           </Strip>
         </div>
         <div className="dcs-film-perf" aria-hidden="true" />
       </div>
+
+      {/* 配乐. Always here, whether or not there is a bed yet: an empty screen
+          cannot tell you that a music track is something this film can have. */}
+      <section className="dcs-panel dcs-music">
+        <div className="dcs-group-head">
+          <h3 className="dcs-group-title">配乐</h3>
+          <span className="dcs-hint">
+            {musicPath === undefined || musicPath === ''
+              ? '整片一条音乐床，合成时自动压在解说下面'
+              : '已铺满全片 · ' + fileNameOf(musicPath)}
+          </span>
+          <span className="dcs-spacer" />
+          {musicPath === undefined || musicPath === '' ? null : (
+            <button
+              type="button"
+              className="dcs-btn dcs-btn-small"
+              disabled={busy !== null || phase !== null}
+              title="从成片里去掉配乐。文件留在项目里，随时可以换回来"
+              onClick={() => void removeMusic()}
+            >去掉</button>
+          )}
+        </div>
+
+        <div className="dcs-music-form">
+          <label className="dcs-inline-pick">
+            <span className="dcs-hint">工作流</span>
+            <input
+              className="dcs-input dcs-input-small"
+              value={musicWorkflow}
+              placeholder="ComfyUI 里的配乐工作流名称"
+              disabled={phase !== null}
+              onChange={(event) => setMusicWorkflow(event.target.value)}
+              onBlur={() => {
+                if (musicWorkflow.trim() !== (state.project.music?.workflow ?? '')) {
+                  void saveMusic({ workflow: musicWorkflow.trim() })
+                }
+              }}
+            />
+          </label>
+          <input
+            className="dcs-input"
+            value={musicNote}
+            placeholder="想要什么样的音乐（可留空，Agent 会按风格和语速自己定）"
+            disabled={phase !== null}
+            onChange={(event) => setMusicNote(event.target.value)}
+          />
+          <button
+            type="button"
+            className="dcs-btn dcs-btn-primary"
+            disabled={phase !== null || busy !== null || musicWorkflow.trim() === ''}
+            title="交给 Agent：先读配乐技能选曲，再用这条工作流生成，然后搬进项目"
+            onClick={() => void addMusic()}
+          >
+            <BusyLabel
+              phase={phase}
+              idle={musicPath === undefined || musicPath === '' ? '添加音乐' : '换一首'}
+            />
+          </button>
+        </div>
+
+        {/* The bed itself, playable. A filename is not a preview. */}
+        {musicUrl === undefined ? null : <audio className="dcs-audio" src={musicUrl} controls preload="metadata" />}
+
+        <p className="dcs-hint">
+          音量、压制、EQ 和响度由合成时的 ffmpeg 处理——音乐床压 20dB、解说一响再让 8dB、
+          挖掉 2–4kHz 给人声让路、整体压到目标平台的响度。这些不用你调，也不用 Agent 调。
+        </p>
+      </section>
 
       {/* Editing, in the environment the judgement was made in. */}
       {activeShot !== undefined && activeTiming !== undefined ? (

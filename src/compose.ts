@@ -29,8 +29,9 @@ import type { AssetManifest, AssetRecord, RenderOutput, RenderReport, Script, Sc
 import type { Playbook } from './playbooks.js'
 import type { Cut, CutSection } from './cuts.js'
 import { resolveVideoProfile } from './media-profile.js'
+import { loudnessFor, loudnormAnalyseArgs, loudnormFilter, musicMixFilter, parseLoudnorm } from './audio-mix.js'
 import { type SubtitleBackground, renderAss } from './subtitle-style.js'
-import { type ProjectLayout, ensureDir, resolveInProject, toProjectRelative } from './project.js'
+import { type ProjectLayout, ensureDir, pathExists, resolveInProject, toProjectRelative } from './project.js'
 import { type SubtitleCue, cuesForSection, renderSrt } from './subtitle.js'
 
 export class ComposeError extends Error {
@@ -536,6 +537,11 @@ export interface ComposeOptions {
   burnSubtitles?: boolean | undefined
   /** `outline` keeps the picture visible; `box` guarantees contrast. */
   subtitleBackground?: SubtitleBackground | undefined
+  /**
+   * Project-relative path of the background music bed, when the project has
+   * one. Looped and cut to the film's length, ducked under the narration.
+   */
+  musicPath?: string | undefined
   /** The editor's version, when one is being rendered. */
   cut?: Cut | undefined
   signal: AbortSignal
@@ -700,10 +706,78 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
     }), 'utf-8')
   }
 
-  // 6. Mux. Stream-copy the video unless subtitles have to be burned in.
+  // 6. The music bed, when the project has one.
+  //
+  // Looped rather than padded with silence: a bed that stops two thirds of the
+  // way through sounds like a fault, and the skill tells the model to ask for
+  // one at least as long as the film precisely so the loop point is rare.
+  let musicAbsolute: string | undefined
+  if (options.musicPath !== undefined && options.musicPath.trim() !== '') {
+    musicAbsolute = resolveInProject(layout, options.musicPath.trim())
+    if (!(await pathExists(musicAbsolute))) {
+      throw new ComposeError(
+        'the project names a music bed at ' + options.musicPath
+        + ' but the file is not there. Re-import it, or clear the music track on the compose screen.',
+      )
+    }
+    const musicSeconds = await probeDuration(ffprobePath, musicAbsolute, signal)
+    if (musicSeconds !== undefined && musicSeconds + 0.5 < totalDuration) {
+      // Not fatal — it loops — but the seam is audible, and this is the only
+      // place that knows both numbers.
+      warnings.push(
+        'the music bed is ' + musicSeconds.toFixed(1) + 's and the film is '
+        + totalDuration.toFixed(1) + 's, so it loops ' + Math.ceil(totalDuration / musicSeconds)
+        + ' times; a longer track would avoid the seam',
+      )
+    }
+  }
+
+  // 7. Mix the bed under the narration, and measure the result.
+  //
+  // A separate ffmpeg run rather than one graph inside the mux, because the
+  // loudness pass needs a finished mix to measure — see `audio-mix.ts` for why
+  // it must be measured rather than normalised on the fly.
+  const loudness = loudnessFor(options.targetPlatform)
+  let audioTrack = narrationBed
+  let audioFilter: string | undefined
+  if (musicAbsolute !== undefined) {
+    notify('mixing the music bed')
+    const mixed = join(layout.workDir, 'mix.wav')
+    await run(ffmpegPath, [
+      '-y', '-nostdin',
+      '-i', narrationBed,
+      '-stream_loop', '-1', '-i', musicAbsolute,
+      '-filter_complex', musicMixFilter({
+        totalSeconds: totalDuration,
+        loudness,
+        // Input 0 is the narration here; in the mux it was input 1. Passing the
+        // indices in rather than hard-coding them is what lets the same graph
+        // serve both without a second copy that drifts.
+        voiceInput: 0,
+        musicInput: 1,
+      }),
+      '-map', '[out]',
+      '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le',
+      mixed,
+    ], signal, stepTimeout)
+    audioTrack = mixed
+
+    notify('measuring loudness')
+    const analysis = await run(ffmpegPath, loudnormAnalyseArgs(mixed, loudness), signal, stepTimeout)
+    const measured = parseLoudnorm(analysis.stderr)
+    if (measured === undefined) {
+      // The mix is still correct; only the target is missed. Said out loud
+      // because a film a few dB off is something the user can act on, and
+      // guessing at it silently is what we are refusing to do.
+      warnings.push('could not measure the mix loudness, so it was only peak-limited, not normalised')
+    }
+    audioFilter = loudnormFilter(loudness, measured)
+  }
+
+  // 8. Mux. Stream-copy the video unless subtitles have to be burned in.
   notify('muxing')
   const outputAbsolute = join(layout.outputDir, stem + '.mp4')
-  const muxArgs = ['-y', '-nostdin', '-i', videoTrack, '-i', narrationBed]
+  const muxArgs = ['-y', '-nostdin', '-i', videoTrack, '-i', audioTrack]
   // Per render, not per install: whether this cut needs subtitles baked in is a
   // decision about where it is going, and that changes between exports of the
   // same project. The setting stays as the default.
@@ -718,8 +792,14 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
   } else {
     muxArgs.push('-c:v', 'copy')
   }
+  muxArgs.push('-map', '0:v:0', '-map', '1:a:0')
+  // Normalisation runs ONLY on the music path. A narration-only render already
+  // sits at whatever level the TTS produced, and moving every existing
+  // project's audio to a new target is a separate change with its own risk.
+  // Adding a second source is what makes the level uncertain, so that is where
+  // it starts.
+  if (audioFilter !== undefined) muxArgs.push('-af', audioFilter)
   muxArgs.push(
-    '-map', '0:v:0', '-map', '1:a:0',
     '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2',
     '-movflags', '+faststart',
     '-shortest',
@@ -739,7 +819,7 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
     throw error
   }
 
-  // 7. Report what the file actually is, not what was asked for.
+  // 9. Report what the file actually is, not what was asked for.
   const info = await probeVideoStream(ffprobePath, outputAbsolute, signal)
   const stat = await fs.stat(outputAbsolute)
   const measuredDuration = info.duration ?? totalDuration
@@ -771,6 +851,7 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
       sections: timeline.length,
       subtitles: subtitleRelative ?? null,
       subtitles_burned: burning,
+      music: musicAbsolute === undefined ? null : toProjectRelative(layout, musicAbsolute),
       style: playbook.name,
       ken_burns: playbook.kenBurns,
       fit: playbook.fit,

@@ -591,6 +591,26 @@ const CSS = `
 .dcs-cue .dcs-pad-handle { width: 5px; }
 .dcs-lane-sep { width: 1px; align-self: stretch; background: var(--dsw-alias-border-l1); margin: 0 4px; }
 
+/* The music bed: one block the length of the film, because that is literally
+   what it is after looping and trimming. Deliberately flatter than a shot or a
+   take -- it is the thing everything else sits on top of, not a peer. */
+.dcs-music-block {
+  position: absolute; top: 0; height: 20px; overflow: hidden;
+  padding: 0 6px; cursor: pointer; font: inherit; font-size: 10px;
+  display: flex; align-items: center; text-align: left;
+  border-radius: 3px; white-space: nowrap;
+  border: 1px solid rgba(141, 196, 244, .28);
+  background: rgba(141, 196, 244, .12); color: rgba(255, 255, 255, .6);
+}
+.dcs-music-block:hover { border-color: rgba(141, 196, 244, .5); color: #fff; }
+.dcs-music-name { overflow: hidden; text-overflow: ellipsis; }
+
+.dcs-music { gap: 9px; }
+/* The workflow field stays narrow; the brief takes the rest of the row. */
+.dcs-music-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dcs-music-form > .dcs-input { flex: 1 1 220px; min-width: 0; }
+.dcs-input-small { width: 190px; }
+
 /* Info area: what the one-line lanes had to leave out. */
 .dcs-info { gap: 10px; }
 .dcs-info-split { display: flex; gap: 18px; align-items: flex-start; }

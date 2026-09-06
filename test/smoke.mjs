@@ -279,11 +279,12 @@ async function testApply() {
     'dsh-creative-studio-cinematography',
     'dsh-creative-studio-explainer',
     'dsh-creative-studio-reviewer',
+    'dsh-creative-studio-sound-design',
     'dsh-creative-studio-storytelling',
     'dsh-creative-studio-usage',
   ]
   if (skillNames.join(',') === expectedSkills.join(','))
-    ok('apply registers all 5 skills')
+    ok('apply registers all 6 skills')
   else bad('skill registration', skillNames.join(','))
 
   const section = host.section()
@@ -308,7 +309,7 @@ async function testApply() {
   } else {
     bad('skill re-render', 'still naming the old workflow after the settings change')
   }
-  if ([...host.skills.values()].length === 5) ok('re-rendering replaces the skills instead of stacking them')
+  if ([...host.skills.values()].length === 6) ok('re-rendering replaces the skills instead of stacking them')
   else bad('skill leak', [...host.skills.values()].length + ' skills registered')
 
   host.disposeAll()
@@ -572,6 +573,97 @@ async function main() {
     const srt = await fs.readFile(join(layout.dir, result.subtitlePath), 'utf-8').catch(() => undefined)
     if (srt && srt.includes('-->')) ok('wrote ' + result.subtitlePath + ' (' + srt.split('\n\n').filter(Boolean).length + ' cues)')
     else bad('subtitles', 'no SRT written')
+
+
+    // ---- the same film, with a music bed -------------------------------
+    //
+    // The filter graph is measured on its own further down; this is the other
+    // half of the question — that the render actually reaches it, that a bed on
+    // the project changes the output, and that a two-pass loudness measurement
+    // survives a real ffmpeg run rather than only a hand-built one.
+    // Both renders write output/smoke.mp4 -- same project, same cut -- so the
+    // plain one has to be measured before the scored one replaces it. Measuring
+    // afterwards compared the music render against itself, which of course
+    // showed no difference at all.
+    const levelIn = async (relative) => {
+      const { stderr } = await run('ffmpeg', [
+        '-hide_banner', '-nostats', '-nostdin', '-i', join(layout.dir, relative),
+        '-af', 'highpass=f=600,highpass=f=600,highpass=f=600,lowpass=f=850,lowpass=f=850,volumedetect',
+        '-f', 'null', '-',
+      ])
+      const found = /mean_volume:\s*(-?[0-9.]+) dB/.exec(stderr)
+      return found === null ? undefined : Number(found[1])
+    }
+    const withoutBed = await levelIn(result.report.outputs[0].path)
+
+    const bed = join(layout.audioDir, 'music.wav')
+    await run('ffmpeg', [
+      '-y', '-v', 'error',
+      // Deliberately SHORTER than the film, to exercise the loop and the
+      // warning that goes with it.
+      '-f', 'lavfi', '-i', 'sine=frequency=700:duration=5:sample_rate=48000',
+      '-af', 'volume=4dB', '-ac', '2', bed,
+    ])
+    const scored = await expectOk('render with a music bed', async () => renderProject({
+      layout,
+      script: await machine.readArtifact(layout, 'script'),
+      manifest: {
+        version: '1.0',
+        assets: [
+          ...(await machine.readArtifact(layout, 'asset_manifest_audio')).assets,
+          ...(await machine.readArtifact(layout, 'asset_manifest_shots')).assets,
+        ],
+      },
+      config,
+      playbook,
+      musicPath: 'assets/audio/music.wav',
+      signal: new AbortController().signal,
+    }))
+    if (scored) {
+      if (scored.report.metadata.music === 'assets/audio/music.wav')
+        ok('the render report names the bed it was scored with')
+      else bad('music not reported', JSON.stringify(scored.report.metadata.music))
+
+      // A bed shorter than the film loops, and the seam is audible. Not fatal,
+      // but this is the only place that knows both numbers.
+      const looped = scored.warnings.find((line) => line.includes('loops'))
+      if (looped !== undefined) ok('a short bed warns that it loops')
+      else bad('no loop warning', JSON.stringify(scored.warnings))
+
+      // The bed has to reach the output. Comparing the two renders' audio is
+      // the only thing that can tell "mixed in" from "silently dropped" — both
+      // produce a playable file of about the same size. The narration fixtures
+      // are 440 Hz and the bed is 700 Hz, so a steep band around 700 separates
+      // them.
+      const withBed = await levelIn(scored.report.outputs[0].path)
+      if (withBed !== undefined && withoutBed !== undefined && withBed - withoutBed > 6)
+        ok('the bed is audible in the render (' + withBed.toFixed(1) + ' vs ' + withoutBed.toFixed(1) + ' dB)')
+      else bad('bed missing from the render', JSON.stringify([withBed, withoutBed]))
+    }
+
+    // A project naming a bed that is not on disk must say so, not render silence.
+    let missingBed
+    await renderProject({
+      layout,
+      script: await machine.readArtifact(layout, 'script'),
+      manifest: {
+        version: '1.0',
+        assets: [
+          ...(await machine.readArtifact(layout, 'asset_manifest_audio')).assets,
+          ...(await machine.readArtifact(layout, 'asset_manifest_shots')).assets,
+        ],
+      },
+      config,
+      playbook,
+      musicPath: 'assets/audio/nope.wav',
+      signal: new AbortController().signal,
+    }).catch((error) => { missingBed = String(error.message ?? error) })
+    // Naming the file is not enough: ffmpeg's own failure names it too. What
+    // the explicit check adds is what to DO about it, and that is the part
+    // worth asserting -- a raw ffmpeg error tells the user nothing actionable.
+    if (missingBed !== undefined && missingBed.includes('nope.wav') && missingBed.includes('Re-import'))
+      ok('a bed that is not on disk fails with something the user can act on')
+    else bad('missing bed', missingBed ?? 'rendered anyway')
 
     const fake = structuredClone(result.report)
     fake.outputs[0].path = 'output/not-real.mp4'
@@ -1078,6 +1170,50 @@ async function main() {
     if (afterOther.json().project?.voice_references?.length === 2)
       ok('an unrelated project save leaves the reference audio alone')
     else bad('references clobbered', JSON.stringify(afterOther.json().project?.voice_references))
+
+    // The music field is MERGED, not replaced. The panel saves the workflow
+    // name long before a file exists, and the agent's import writes the path
+    // without knowing what was typed -- a whole-object patch would make each
+    // of those erase the other.
+    const wf = await callRoute(routes, '/studio/project', '/studio/project', {
+      method: 'POST', body: { project: 'smoke', music: { workflow: 'Alpha-Music' } },
+    })
+    const bedSave = await callRoute(routes, '/studio/project', '/studio/project', {
+      method: 'POST', body: { project: 'smoke', music: { path: 'assets/audio/music.wav' } },
+    })
+    const both = bedSave.json().project?.music
+    if (wf.statusCode === 200 && both?.workflow === 'Alpha-Music' && both?.path === 'assets/audio/music.wav')
+      ok('saving the bed path keeps the workflow name, and the other way round')
+    else bad('music merge', JSON.stringify(both))
+
+    // Clearing the path must be possible without forgetting the workflow --
+    // that is the 去掉 button, and it should not cost the next film its setting.
+    const clearedBed = await callRoute(routes, '/studio/project', '/studio/project', {
+      method: 'POST', body: { project: 'smoke', music: { path: '' } },
+    })
+    const afterClear = clearedBed.json().project?.music
+    if (afterClear?.path === '' && afterClear?.workflow === 'Alpha-Music')
+      ok('dropping the bed from the film keeps the workflow for the next one')
+    else bad('music clear', JSON.stringify(afterClear))
+
+    // A stored path is a path compose will resolve inside the project. An
+    // absolute one or a `..` segment reaching the marker would be an escape
+    // route saved to disk, and compose would report it as a missing file
+    // rather than as what it is.
+    const escapes = []
+    for (const attempt of ['/etc/passwd', 'C:/windows/x.wav', '../../out.wav', 'a/../../b.wav']) {
+      const sent = await callRoute(routes, '/studio/project', '/studio/project', {
+        method: 'POST', body: { project: 'smoke', music: { path: attempt } },
+      })
+      if (sent.statusCode !== 400) escapes.push(attempt + ' -> ' + sent.statusCode)
+    }
+    if (escapes.length === 0) ok('an absolute or climbing music path is refused at the route')
+    else bad('music path escape', escapes.join('; '))
+    // And the refusal must not have taken the good value with it.
+    const stillThere = await callRoute(routes, '/studio/state', '/studio/state?project=smoke', {})
+    if (stillThere.json().project?.music?.workflow === 'Alpha-Music')
+      ok('a refused path leaves the stored music untouched')
+    else bad('refusal clobbered', JSON.stringify(stillThere.json().project?.music))
 
     const platformSaved = await callRoute(routes, '/studio/project', '/studio/project', {
       method: 'POST', body: { project: 'smoke', target_platform: 'douyin' },
@@ -2668,6 +2804,325 @@ async function main() {
   }
 
 
+  console.log('\n== 配乐面板 ==')
+  {
+    const fs = await import('node:fs')
+    const screen = fs.readFileSync('src/client/timeline-screen.tsx', 'utf-8')
+    const bundle = fs.readFileSync('client/client.js', 'utf-8')
+
+    if (bundle.includes('配乐')) ok('the 配乐 panel ships in the bundle')
+    else bad('panel missing', 'no 配乐 in the client bundle')
+
+    // Always on screen, bed or no bed. An empty screen cannot tell you that a
+    // music track is something this film can have -- the same reason the advice
+    // panel renders when it is clean.
+    if (!screen.includes('{musicPath === undefined ? null : (\n        <section className="dcs-panel dcs-music"'))
+      ok('the panel is rendered whether or not a bed exists yet')
+    else bad('panel hidden when empty', 'no bed means no way to add one')
+
+    // A filename is not a preview. The bed has to be playable in place, the
+    // same rule the media card and the reference slots follow.
+    const panelAt = screen.indexOf('dcs-panel dcs-music')
+    if (panelAt !== -1 && screen.slice(panelAt, panelAt + 3000).includes('<audio'))
+      ok('the bed can be played on the page, not just named')
+    else bad('no preview', 'the panel only shows a filename')
+
+    // And it has to appear as a track on the timeline, which is what the user
+    // asked for: one block the length of the film, because that is what it is.
+    if (screen.includes('dcs-music-block') && screen.includes("dcs-lane-label-plain\">配乐"))
+      ok('the bed shows as its own lane over the shared time axis')
+    else bad('no lane', 'the timeline has no music track')
+
+    // The message goes through the shared builder, so the skill gesture and the
+    // import instruction cannot drift from what the tests check.
+    if (screen.includes('buildMusicJob(')) ok('the panel sends the built request, not a second copy of it')
+    else bad('inline message', 'the timeline screen composes its own music request')
+  }
+  console.log('\n== 配乐技能 ==')
+  {
+    const { STUDIO_SOUND_DESIGN_SKILL } = await import('../lib/skill-sound-design.js')
+    const { buildMusicJob } = await import('../lib/music-job.js')
+    const { MIX } = await import('../lib/audio-mix.js')
+    const body = STUDIO_SOUND_DESIGN_SKILL.content
+    const name = STUDIO_SOUND_DESIGN_SKILL.name
+
+    // Same grammar check as the shot-language skill. A typo degrades silently:
+    // the message still sends, the body never loads, and the model picks a
+    // track with no guidance at all.
+    if (/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) ok('the skill name matches the harness gesture grammar')
+    else bad('skill name', name)
+    const job = buildMusicJob({
+      projectId: 'p', workflow: 'w', styleName: 's', pacingProfile: 'conversational', totalSeconds: 60,
+    })
+    if (job.includes('/' + name)) ok('the panel sends a load gesture naming this exact skill')
+    else bad('gesture mismatch', 'panel and skill disagree on the name')
+
+    // THE SPLIT THIS SKILL EXISTS TO MAKE. Levels are countable and are done in
+    // ffmpeg; a second copy of them here would be a number nothing checks, and
+    // an invitation to ask for a lever that does not exist. Anything that reads
+    // as a dB instruction to the model is the failure.
+    const levels = body.match(/-?\d+\s*(dB|LUFS|dBTP)/g) ?? []
+    // The one place levels may appear is the paragraph saying they are handled.
+    const handled = body.indexOf('全部由插件在 ffmpeg 里完成')
+    const stray = levels.filter((token) => {
+      const at = body.indexOf(token)
+      return handled === -1 || at < handled || at > handled + 400
+    })
+    if (stray.length === 0) ok('the skill states no level the model could try to set')
+    else bad('levels leaked into the skill', stray.join(', '))
+
+    // What it MUST carry: the two disqualifying rules and the BPM table.
+    for (const must of ['纯器乐', '动态', 'BPM']) {
+      if (!body.includes(must)) bad('skill missing content', must)
+    }
+    ok('the skill carries the two hard rules and the tempo table')
+
+    // The pacing profiles the skill names have to be the ones the playbooks
+    // actually use, or its table answers a question nobody asked.
+    const { listPlaybooks } = await import('../lib/playbooks.js')
+    const profiles = new Set(listPlaybooks({}).map((entry) => entry.playbook.narration.pacing_profile))
+    const unnamed = [...profiles].filter((profile) => !body.includes(profile))
+    if (unnamed.length === 0) ok('every pacing profile a built-in playbook uses appears in the skill')
+    else bad('profile not covered', unnamed.join(', '))
+
+    // And the job builder has to agree with the skill about them, or the two
+    // give the model different bands for the same film.
+    const disagreeing = []
+    for (const profile of profiles) {
+      const message = buildMusicJob({
+        projectId: 'p', workflow: 'w', styleName: 's', pacingProfile: profile, totalSeconds: 60,
+      })
+      if (message.includes('按技能里的表自己判断')) disagreeing.push(profile)
+    }
+    if (disagreeing.length === 0) ok('the job builder has a band for every profile the playbooks use')
+    else bad('no band for', disagreeing.join(', '))
+
+    // It must not tell the model to mix anything: there is no lever.
+    if (body.includes('管不了') || body.includes('你不用管'))
+      ok('the skill says plainly which decisions are not the model\u2019s')
+    else bad('lever not ruled out', 'the skill could be read as asking for a mix')
+
+    // The duck depth the skill and the panel quote has to be the one the filter
+    // actually applies -- three places said 9 dB while the measurement said 8.
+    if (MIX.duckRatio === 4) ok('the ratio in the mix is the measured one, not the calculated one')
+    else bad('duck ratio drifted', String(MIX.duckRatio))
+  }
+  console.log('\n== 配乐请求与登记 ==')
+  {
+    const { buildMusicJob } = await import('../lib/music-job.js')
+    const { musicPatchOf, IMPORT_KINDS } = await import('../lib/assets.js')
+
+    const job = buildMusicJob({
+      projectId: 'smoke',
+      workflow: 'Alpha-Music',
+      styleName: '干净科技',
+      pacingProfile: 'contemplative',
+      totalSeconds: 92.4,
+      platform: 'douyin',
+    })
+
+    // The skill gesture is the point of this message. Without it the model
+    // picks a track on vibes, which is exactly what the ported knowledge exists
+    // to replace. Whitespace-bounded and on its own line, or it does not load.
+    const firstLine = job.split(String.fromCharCode(10))[0]
+    if (firstLine === '/dsh-creative-studio-sound-design')
+      ok('the request opens with the sound-design skill gesture')
+    else bad('no skill gesture', firstLine)
+
+    // BPM comes off the playbook's pacing profile, not off the model's taste.
+    if (job.includes('60–80')) ok('the BPM band follows the playbook pacing profile')
+    else bad('wrong BPM band', job)
+    const fast = buildMusicJob({
+      projectId: 'p', workflow: 'w', styleName: 's', pacingProfile: 'energetic', totalSeconds: 30,
+    })
+    if (fast.includes('120–140')) ok('a different pacing profile asks for a different band')
+    else bad('band not derived', fast)
+    // An unknown profile must not silently produce a blank line where the
+    // number goes -- that reads as "no opinion" rather than "look it up".
+    const odd = buildMusicJob({
+      projectId: 'p', workflow: 'w', styleName: 's', pacingProfile: 'invented', totalSeconds: 30,
+    })
+    if (odd.includes('按技能里的表自己判断')) ok('an unknown pacing profile defers to the skill table')
+    else bad('unknown profile', odd)
+
+    // Length with headroom. A bed exactly the film's length loses its last
+    // second to the fade-out.
+    if (job.includes('至少 98 秒')) ok('the requested length clears the film plus the fade')
+    else bad('length', job)
+
+    // kind: music, and NO scene_id -- the bed belongs to no section, and a
+    // fabricated one would be rejected as an orphan.
+    if (job.includes('`kind` 填 `music`') && job.includes('不要填 `scene_id`'))
+      ok('the import instruction says music and no section')
+    else bad('import instruction', job)
+
+    // The two rules that disqualify a track outright are repeated in the
+    // request, not left to the skill alone: this is the last thing read.
+    if (job.includes('纯器乐') && job.includes('动态要平'))
+      ok('the two disqualifying rules are restated in the request itself')
+    else bad('rules missing', job)
+
+    // Levels are not the model's to set, and saying so is cheaper than
+    // fielding a request for a lever that does not exist.
+    if (job.includes('你不用管这些')) ok('the request says plainly that levels are not its job')
+    else bad('levels', job)
+
+    // ---- import records the bed on the project --------------------------
+
+    if (IMPORT_KINDS.includes('music')) ok('music is an importable kind')
+    else bad('import kinds', IMPORT_KINDS.join(','))
+
+    // Importing the file and recording it are ONE gesture. Split in two, a
+    // forgotten second step leaves the bed on disk with nothing pointing at
+    // it -- and a file nobody references looks exactly like no file.
+    const patch = musicPatchOf([
+      { source: 'a', kind: 'audio', scene_id: 's1', path: 'assets/audio/01-s1.wav', bytes: 1 },
+      { source: 'b', kind: 'music', scene_id: '', path: 'assets/audio/music.wav', bytes: 1 },
+    ])
+    if (patch?.path === 'assets/audio/music.wav') ok('importing a bed produces the marker patch that records it')
+    else bad('music patch', JSON.stringify(patch))
+    if (musicPatchOf([{ source: 'a', kind: 'audio', scene_id: 's1', path: 'p', bytes: 1 }]) === undefined)
+      ok('an import with no bed in it patches nothing')
+    else bad('spurious patch', 'a plain audio import touched the marker')
+    // A second bed replaces the first; it does not layer under it.
+    const two = musicPatchOf([
+      { source: 'a', kind: 'music', scene_id: '', path: 'assets/audio/music.wav', bytes: 1 },
+      { source: 'b', kind: 'music', scene_id: '', path: 'assets/audio/music.v2.wav', bytes: 1 },
+    ])
+    if (two?.path === 'assets/audio/music.v2.wav') ok('the last bed imported is the one that wins')
+    else bad('two beds', JSON.stringify(two))
+  }
+  console.log('\n== 配乐混音 ==')
+  {
+    const { MIX, loudnessFor, loudnormFilter, musicMixFilter, parseLoudnorm } =
+      await import('../lib/audio-mix.js')
+
+    // ---- the graph, read rather than run -------------------------------
+
+    const graph = musicMixFilter({
+      totalSeconds: 60, loudness: loudnessFor('youtube'), voiceInput: 0, musicInput: 1,
+    })
+    // amix halves every input by default to guarantee no clipping. That would
+    // drop the narration 6 dB below the level the bed offset, the duck depth
+    // and the loudness target are all measured against -- the film would come
+    // out quiet with nothing to point at.
+    if (graph.includes('normalize=0')) ok('amix does not silently halve both inputs')
+    else bad('amix normalize', graph)
+    // The FIRST input of sidechaincompress is the one that gets compressed.
+    // Swapped, it ducks the narration under the music, which is audible only
+    // as "the music is fine and I cannot hear the words".
+    if (graph.includes('[bed][key]sidechaincompress')) ok('the bed is what gets ducked, not the voice')
+    else bad('sidechain order', graph)
+
+    // ---- loudness --------------------------------------------------------
+
+    const short = loudnessFor('douyin')
+    const long = loudnessFor('youtube')
+    if (short.truePeak === -1 && long.truePeak === -1.5 && short.lufs === -14)
+      ok('the platform that already decides the frame also decides the loudness target')
+    else bad('platform loudness', JSON.stringify([short, long]))
+    if (loudnessFor(undefined).lufs === -14 && loudnessFor('myspace').lufs === -14)
+      ok('an absent or unknown platform still gets a target rather than nothing')
+    else bad('loudness fallback', JSON.stringify(loudnessFor('myspace')))
+
+    // The whole reason loudness is measured in a separate pass. Dynamic
+    // loudnorm rides the gain over time: it hears the gaps between sentences
+    // as too quiet and lifts the music back into them, undoing the ducking
+    // with no error and nothing in the output to point at.
+    const measured = parseLoudnorm('some log\n{"input_i":"-18.5","input_tp":"-2.1",'
+      + '"input_lra":"7.0","input_thresh":"-28.9","target_offset":"0.3"}\nmore log')
+    const applied = loudnormFilter(long, measured)
+    if (applied.includes('linear=true') && applied.includes('measured_I=-18.5'))
+      ok('a measured mix is normalised linearly, so the duck survives')
+    else bad('linear normalisation', applied)
+
+    // And when the measurement fails, it must NOT quietly fall back to the
+    // mode that undoes the ducking.
+    const fallback = loudnormFilter(long, undefined)
+    if (fallback.startsWith('alimiter') && !fallback.includes('loudnorm'))
+      ok('a failed measurement peak-limits rather than falling back to dynamic')
+    else bad('dynamic fallback', fallback)
+    if (parseLoudnorm('no json here') === undefined && parseLoudnorm('{"input_i":"-1"}') === undefined)
+      ok('an incomplete measurement is rejected rather than half-used')
+    else bad('loudnorm parsing', 'accepted something unusable')
+
+    // ---- the duck, measured on real audio --------------------------------
+
+    // A level table is worth nothing unless the filter actually applies it, and
+    // "the render produced a file" cannot tell the difference between a bed
+    // that ducks and one that does not.
+    //
+    // Two tones far apart: 200 Hz narration, present only in the second half,
+    // and a 800 Hz bed running throughout. Measuring the 800 Hz band in a
+    // silent stretch and in a spoken one gives the duck depth directly.
+    //
+    // THE BAND FILTER HAS TO BE STEEP. A single `bandpass` leaks enough of the
+    // 200 Hz tone to raise the floor of the ducked reading, which hid half the
+    // effect and made ratio changes look like they did almost nothing.
+    const band = 'highpass=f=500,highpass=f=500,highpass=f=500,lowpass=f=1400,lowpass=f=1400'
+    const mixDir = join(WS, 'music-mix')
+    await fs.mkdir(mixDir, { recursive: true })
+    const voice = join(mixDir, 'voice.wav')
+    const music = join(mixDir, 'music.wav')
+    const mixed = join(mixDir, 'mix.wav')
+
+    let duckError
+    let depth
+    let quiet
+    try {
+      // `sine` comes out at -18 dBFS, not full scale -- the reason an earlier
+      // version of this test measured no ducking at all was a key sitting below
+      // the threshold, not a broken filter.
+      await run(config.ffmpegPath, [
+        '-v', 'error', '-y', '-nostdin',
+        '-f', 'lavfi', '-i', 'sine=frequency=200:duration=10:sample_rate=48000',
+        '-af', "volume=6dB,volume=enable='lt(t,5)':volume=0",
+        '-ac', '2', voice,
+      ])
+      await run(config.ffmpegPath, [
+        '-v', 'error', '-y', '-nostdin',
+        '-f', 'lavfi', '-i', 'sine=frequency=800:duration=12:sample_rate=48000',
+        '-af', 'volume=4dB', '-ac', '2', music,
+      ])
+      await run(config.ffmpegPath, [
+        '-v', 'error', '-y', '-nostdin',
+        '-i', voice, '-stream_loop', '-1', '-i', music,
+        '-filter_complex', musicMixFilter({
+          totalSeconds: 10, loudness: long, voiceInput: 0, musicInput: 1,
+        }),
+        '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le', mixed,
+      ])
+
+      const levelOf = async (from, to) => {
+        const { stderr } = await run(config.ffmpegPath, [
+          '-hide_banner', '-nostats', '-nostdin', '-i', mixed,
+          '-af', 'atrim=' + from + ':' + to + ',' + band + ',volumedetect',
+          '-f', 'null', '-',
+        ])
+        const found = /mean_volume:\s*(-?[0-9.]+) dB/.exec(stderr)
+        if (found === null) throw new Error('volumedetect printed no level')
+        return Number(found[1])
+      }
+      quiet = await levelOf(2, 4)
+      const ducked = await levelOf(6, 8)
+      depth = quiet - ducked
+    } catch (error) {
+      duckError = String(error.message ?? error)
+    }
+
+    if (duckError !== undefined) {
+      bad('the mix could not run', duckError.slice(-300))
+    } else {
+      // The bed has to BE there in the gap, or there is nothing to duck.
+      if (quiet > -60) ok('the music bed reaches the mix (' + quiet.toFixed(1) + ' dB in the gap)')
+      else bad('no bed in the mix', quiet + ' dB — the graph dropped the music input')
+      // The range the source asks for. Both ends matter: under 6 dB the words
+      // fight the music, over 12 dB the bed pumps in and out audibly.
+      if (depth >= 6 && depth <= 12)
+        ok('narration ducks the bed by ' + depth.toFixed(1) + ' dB, inside the 6–12 dB the spec asks for')
+      else bad('duck depth', depth.toFixed(1) + ' dB is outside 6–12; ratio is ' + MIX.duckRatio)
+    }
+  }
   console.log('\n== 面板与快捷键 ==')
   {
     // The advice shell is the answer to "did anything check this?" — a question

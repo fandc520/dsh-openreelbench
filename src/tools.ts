@@ -22,7 +22,7 @@ import { resolveVideoProfile } from './media-profile.js'
 import { scoreSlideshowRisk } from './slideshow.js'
 import { checkSceneVariation } from './variation.js'
 import { mediaKindOf, mediaUrl } from './http.js'
-import { AssetError, IMPORT_KINDS, type ImportKind, type ImportRequest, importAssets } from './assets.js'
+import { AssetError, IMPORT_KINDS, type ImportKind, type ImportRequest, importAssets, musicPatchOf } from './assets.js'
 import { type Playbook, listPlaybooks, renderVisualContract, resolvePlaybook } from './playbooks.js'
 import { resolvePipeline } from './pipelines.js'
 import {
@@ -168,10 +168,17 @@ function projectDefinition(runtime: StudioRuntime): ToolDefinition {
             type: 'object',
             properties: {
               source: { type: 'string', description: 'Absolute local path, or an http(s) URL.' },
-              kind: { type: 'string', enum: ['image', 'audio'], description: 'Decides the destination directory.' },
-              scene_id: { type: 'string', description: 'The script section this asset belongs to. The file name is generated from it — you do not choose one.' },
+              kind: {
+                type: 'string',
+                enum: ['image', 'audio', 'music'],
+                description:
+                  'Decides the destination directory and the file name. '
+                  + "'music' is the film-wide background bed: it takes no scene_id, lands as music.wav, "
+                  + 'and is recorded on the project rather than in an asset manifest.',
+              },
+              scene_id: { type: 'string', description: "The script section this asset belongs to. The file name is generated from it — you do not choose one. Omit it for kind 'music'." },
             },
-            required: ['source', 'kind', 'scene_id'],
+            required: ['source', 'kind'],
           },
         },
       },
@@ -304,6 +311,12 @@ const parsed: ImportRequest[] = items.map((item, index) => {
           if (!(IMPORT_KINDS as readonly string[]).includes(kind)) {
             throw new StateViolationError('BAD_REQUEST', 'items[' + index + '].kind must be one of ' + IMPORT_KINDS.join(' | '))
           }
+          // Music has no section, so demanding one would be asking for a lie.
+          // Everything else still must name one -- that is what makes an asset
+          // traceable to the script without opening a manifest.
+          if (kind === 'music') {
+            return { source: requireString(record, 'source'), kind: 'music' as ImportKind }
+          }
           return {
             source: requireString(record, 'source'),
             kind: kind as ImportKind,
@@ -324,6 +337,10 @@ const parsed: ImportRequest[] = items.map((item, index) => {
             if (error instanceof AssetError) throw new StateViolationError('BAD_REQUEST', error.message)
             throw error
           })
+        // A music bed is recorded on the project, not in a manifest, and the
+        // import is where that happens -- see `musicPatchOf`.
+        const musicPatch = musicPatchOf(imported)
+        if (musicPatch !== undefined) await machine.updateProject(projectId, { music: musicPatch })
         return { action, imported, paths: pathsOf(layout) }
       }
 
@@ -815,6 +832,11 @@ function composeDefinition(runtime: StudioRuntime): ToolDefinition {
         ...(typeof args.burn_subtitles === 'boolean' ? { burnSubtitles: args.burn_subtitles } : {}),
         ...(background === 'outline' || background === 'box' ? { subtitleBackground: background } : {}),
         ...(platform === undefined ? {} : { targetPlatform: platform }),
+        // Read off the project, never taken as a tool argument: the bed is a
+        // property of the film, and letting a render name a different one would
+        // make two exports of the same cut differ in a way nothing recorded.
+        ...(marker.music?.path === undefined || marker.music.path === ''
+          ? {} : { musicPath: marker.music.path }),
         signal: exec.signal,
       })
       // Said out loud, always: a frame that silently differs from the settings

@@ -27,6 +27,7 @@ import { buildStudioSkill } from './skill.js'
 import { STUDIO_CINEMATOGRAPHY_SKILL } from './skill-cinematography.js'
 import { STUDIO_STORYTELLING_SKILL } from './skill-storytelling.js'
 import { STUDIO_REVIEWER_SKILL } from './skill-reviewer.js'
+import { STUDIO_SOUND_DESIGN_SKILL } from './skill-sound-design.js'
 import { STUDIO_USAGE_SKILL } from './skill-usage.js'
 import { StateMachine } from './state.js'
 import { type StudioRuntime, registerStudioTools } from './tools.js'
@@ -120,6 +121,7 @@ export function apply(ctx: Context, config: Config): void {
       skills.register(STUDIO_STORYTELLING_SKILL),
       skills.register(STUDIO_CINEMATOGRAPHY_SKILL),
       skills.register(STUDIO_REVIEWER_SKILL),
+      skills.register(STUDIO_SOUND_DESIGN_SKILL),
       skills.register(STUDIO_USAGE_SKILL),
     ]
   }

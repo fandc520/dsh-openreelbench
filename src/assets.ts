@@ -12,7 +12,13 @@ import { spawn } from 'node:child_process'
 
 import { type ProjectLayout, ensureDir, pathExists, resolveInProject, toProjectRelative } from './project.js'
 
-export const IMPORT_KINDS = ['image', 'audio'] as const
+/**
+ * `music` is not a third media type — it is audio with a different LIFETIME.
+ * Every other asset belongs to one script section and is named after it; the
+ * music bed belongs to the whole film and has no section to be named after.
+ * That difference is why it is a kind rather than a flag.
+ */
+export const IMPORT_KINDS = ['image', 'audio', 'music'] as const
 export type ImportKind = (typeof IMPORT_KINDS)[number]
 
 export class AssetError extends Error {
@@ -47,6 +53,15 @@ function assetExtension(source: string, kind: ImportKind): string {
   return kind === 'image' ? '.png' : '.wav'
 }
 
+/** `music.wav`, then `music.v2.wav`. Older beds stay on disk to go back to. */
+async function nextFreeMusicPath(dir: string, ext: string): Promise<string> {
+  for (let version = 1; version <= 999; version += 1) {
+    const candidate = dir + '/' + (version <= 1 ? 'music' : 'music.v' + version) + ext
+    if (!(await pathExists(candidate))) return candidate
+  }
+  throw new AssetError('too many music beds already on disk')
+}
+
 async function nextFreePath(dir: string, seq: number, sceneId: string, ext: string): Promise<string> {
   for (let version = 1; version <= 999; version += 1) {
     const candidate = dir + '/' + assetFileName(seq, sceneId, version, ext)
@@ -58,12 +73,14 @@ async function nextFreePath(dir: string, seq: number, sceneId: string, ext: stri
 export interface ImportRequest {
   source: string
   kind: ImportKind
-  sceneId: string
+  /** Absent for `music`, which belongs to the film rather than to a section. */
+  sceneId?: string | undefined
 }
 
 export interface ImportedAsset {
   source: string
   kind: ImportKind
+  /** Empty for `music`. */
   scene_id: string
   path: string
   bytes: number
@@ -81,17 +98,26 @@ export async function importAssets(
 ): Promise<ImportedAsset[]> {
   const imported: ImportedAsset[] = []
   for (const [index, item] of items.entries()) {
-    const seq = order.get(item.sceneId)
-    if (seq === undefined) {
-      throw new AssetError(
-        'items[' + index + '].scene_id ' + JSON.stringify(item.sceneId)
-        + ' is not a section in the approved script. Valid ids: ' + [...order.keys()].join(', '),
-      )
-    }
-
     const targetDir = toPosix(item.kind === 'image' ? layout.imagesDir : layout.audioDir)
     await ensureDir(targetDir)
-    const target = await nextFreePath(targetDir, seq, item.sceneId, assetExtension(item.source, item.kind))
+    const ext = assetExtension(item.source, item.kind)
+
+    // The music bed has no section, so it cannot take the sequenced name. It
+    // gets a fixed stem instead, which also means the compose step can find
+    // yesterday's bed without consulting anything.
+    let target: string
+    if (item.kind === 'music') {
+      target = await nextFreeMusicPath(targetDir, ext)
+    } else {
+      const seq = order.get(item.sceneId ?? '')
+      if (seq === undefined) {
+        throw new AssetError(
+          'items[' + index + '].scene_id ' + JSON.stringify(item.sceneId)
+          + ' is not a section in the approved script. Valid ids: ' + [...order.keys()].join(', '),
+        )
+      }
+      target = await nextFreePath(targetDir, seq, item.sceneId ?? '', ext)
+    }
 
     if (/^https?:\/\//i.test(item.source)) {
       // The generating workflow may live on another host, so a media URL is
@@ -103,7 +129,7 @@ export async function importAssets(
       const buffer = Buffer.from(await response.arrayBuffer())
       if (buffer.byteLength === 0) throw new AssetError(item.source + ' returned an empty body')
       await fs.writeFile(target, buffer)
-      imported.push({ ...item, scene_id: item.sceneId, path: toProjectRelative(layout, target), bytes: buffer.byteLength })
+      imported.push({ ...item, scene_id: item.sceneId ?? '', path: toProjectRelative(layout, target), bytes: buffer.byteLength })
       continue
     }
 
@@ -117,9 +143,27 @@ export async function importAssets(
     }
     await fs.copyFile(item.source, target)
     const stat = await fs.stat(target)
-    imported.push({ ...item, scene_id: item.sceneId, path: toProjectRelative(layout, target), bytes: stat.size })
+    imported.push({ ...item, scene_id: item.sceneId ?? '', path: toProjectRelative(layout, target), bytes: stat.size })
   }
   return imported
+}
+
+/**
+ * The marker patch an import implies.
+ *
+ * Music is the only kind that has one: it is recorded on the project rather
+ * than in an asset manifest, so importing the file and recording it are one
+ * gesture. Split into two, the file would sit on disk with nothing pointing at
+ * it whenever the second step was forgotten — and nothing would report that,
+ * because a file nobody references is indistinguishable from no file.
+ *
+ * The last one wins if several arrive together: a second bed replaces the
+ * first, it does not layer under it.
+ */
+export function musicPatchOf(imported: readonly ImportedAsset[]): { path: string } | undefined {
+  const beds = imported.filter((entry) => entry.kind === 'music')
+  const last = beds[beds.length - 1]
+  return last === undefined ? undefined : { path: last.path }
 }
 
 /* -------------------------------------------------------------- trimming */

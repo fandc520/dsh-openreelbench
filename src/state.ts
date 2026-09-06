@@ -281,6 +281,7 @@ export class StateMachine {
     loraStrength?: number
     references?: string[]
     voiceReferences?: string[]
+    music?: { path?: string; workflow?: string; prompt?: string }
     targetPlatform?: string
     /** @deprecated storage moved to the scene_plan artifact; read-only legacy. */
     shotPlan?: Record<string, Array<{ prompt?: string; weight?: number }>>
@@ -301,6 +302,10 @@ export class StateMachine {
         ...(patch.loraStrength !== undefined ? { lora_strength: patch.loraStrength } : {}),
         ...(patch.references !== undefined ? { references: patch.references } : {}),
         ...(patch.voiceReferences !== undefined ? { voice_references: patch.voiceReferences } : {}),
+        // Merged, not replaced: the panel saves the workflow name long before
+        // the file exists, and the agent writes the path without knowing what
+        // was typed. A whole-object patch would make each erase the other.
+        ...(patch.music !== undefined ? { music: { ...marker.music, ...patch.music } } : {}),
         ...(patch.targetPlatform !== undefined ? { target_platform: patch.targetPlatform } : {}),
         ...(patch.shotPlan !== undefined ? { shot_plan: patch.shotPlan } : {}),
       }

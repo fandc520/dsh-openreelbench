@@ -42,7 +42,7 @@ import { listPlaybooks, resolvePlaybook } from './playbooks.js'
 import { buildScenePrompts } from './prompt.js'
 import { checkSceneVariation } from './variation.js'
 import { scoreSlideshowRisk } from './slideshow.js'
-import { AssetError, IMPORT_KINDS, type ImportKind, type ImportRequest, importAssets, trimAudioAsset } from './assets.js'
+import { AssetError, IMPORT_KINDS, type ImportKind, type ImportRequest, importAssets, musicPatchOf, trimAudioAsset } from './assets.js'
 import { listPipelines, resolvePipeline } from './pipelines.js'
 import { planSections } from './compose.js'
 import { CutError, type Cut, deleteCut, listCuts, parseCut, readCut, writeCut } from './cuts.js'
@@ -496,6 +496,7 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
           loraStrength?: number
           references?: string[]
           voiceReferences?: string[]
+          music?: { path?: string; workflow?: string; prompt?: string }
           targetPlatform?: string
           shotPlan?: Record<string, Array<{ prompt?: string; weight?: number }>>
         } = {}
@@ -535,6 +536,27 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
             .filter((entry): entry is string => typeof entry === 'string')
             .map((entry) => entry.trim())
             .filter((entry) => entry !== '')
+        }
+        if (input.music !== null && typeof input.music === 'object' && !Array.isArray(input.music)) {
+          const music = input.music as Record<string, unknown>
+          const patchMusic: { path?: string; workflow?: string; prompt?: string } = {}
+          // Only the keys that were sent. An absent key means "leave it", which
+          // is what lets the panel save a workflow name and the agent save a
+          // path without either erasing the other.
+          if (typeof music.workflow === 'string') patchMusic.workflow = music.workflow.trim()
+          if (typeof music.prompt === 'string') patchMusic.prompt = music.prompt.trim()
+          if (typeof music.path === 'string') {
+            const relative = music.path.trim()
+            // Checked here rather than at render time: an absolute path or a
+            // `..` segment reaching the marker would be a stored escape route,
+            // and compose would report it as a missing file.
+            if (relative !== '' && (/^([a-zA-Z]:)?[\\/]/.test(relative) || relative.split(/[\\/]/).includes('..'))) {
+              sendJson(response, 400, { error: 'music.path must be relative to the project, got ' + JSON.stringify(relative) })
+              return
+            }
+            patchMusic.path = relative
+          }
+          if (Object.keys(patchMusic).length > 0) patch.music = patchMusic
         }
         if (typeof input.lora_strength === 'number' && Number.isFinite(input.lora_strength)) {
           patch.loraStrength = Math.min(2, Math.max(0, input.lora_strength))
@@ -849,6 +871,9 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
           if (!(IMPORT_KINDS as readonly string[]).includes(kind)) {
             throw new AssetError('kind must be one of ' + IMPORT_KINDS.join(' | '))
           }
+          if (kind === 'music') {
+            return { source: String(record.source ?? ''), kind: 'music' as ImportKind }
+          }
           return {
             source: String(record.source ?? ''),
             kind: kind as ImportKind,
@@ -857,6 +882,9 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
         })
         const order = new Map(script.sections.map((section, index) => [section.id, index + 1]))
         const imported = await importAssets(layout, order, parsed, AbortSignal.timeout(180_000))
+        // Importing the bed and recording it are one gesture -- see `musicPatchOf`.
+        const musicPatch = musicPatchOf(imported)
+        if (musicPatch !== undefined) await machine.updateProject(input.project, { music: musicPatch })
         sendJson(response, 200, { imported })
       } catch (error) {
         fail(response, error)

@@ -172,7 +172,7 @@ npx -p @deepseek-ai/dsh dsh plugin --profile <你的 profile> add D:\dev-project
 │   └── history/              被覆盖的旧 checkpoint
 ├── artifacts/<name>.json     brief / script / asset_manifest / render_report
 ├── assets/images/            配图
-├── assets/audio/             配音
+├── assets/audio/             配音，以及 music.wav（整片一条的背景音乐床）
 ├── work/                     渲染临时文件，渲完即删
 └── output/                   成片与 .srt
 ```
@@ -188,14 +188,39 @@ pnpm build
 pnpm test               # 端到端冒烟测试，需要 ffmpeg
 ```
 
-冒烟测试用 lavfi 合成素材跑完整条链路（48 项），覆盖两条状态机红线、schema 校验、
+冒烟测试用 lavfi 合成素材跑完整条链路（307 项），覆盖两条状态机红线、schema 校验、
 路径穿越拦截、时长回填、**冻结入参**、风格解析与回退、逐段停顿覆盖、
 `apply()` 对假服务的挂载（工具/技能/设置段注册、配置变更后重挂技能、dispose 清理干净）、
 分批生成的中途校验、真实出片、以及"重写早期阶段作废后续阶段"。
 
+音视频这类"文件生成了但内容是错的"的失败，一律**测量输出**而不是测量文件大小：
+字幕烧录比对同一帧烧与不烧的像素差，配乐压制用双音测量音乐频段在有无解说时的电平差。
+
 另有 `test/integration-comfyui.mjs`（不进 `pnpm test`）：驱动真实 ComfyUI 工作流跑完整链路，
 并断言各段产出互不相同——参数没传进去时 ComfyUI 会命中缓存返回同一结果，
 那种失败会让一条全绿的管线跑在错误的素材上。
+
+### 配乐
+
+合成页有一条**配乐**轨道。填一个 ComfyUI 配乐工作流的名称，点「添加音乐」，
+Agent 会先读 `dsh-creative-studio-sound-design` 技能选曲，再用那条工作流生成，
+最后以 `kind: "music"` 搬进项目——**不填 `scene_id`**，因为音乐属于整部片子。
+
+**音量不用调，也调不了。** 合成时 ffmpeg 按 W3C / BBC / 各平台规范处理：
+
+| 处理 | 值 | 出处 |
+|---|---|---|
+| 音乐床 | 解说下方 20 dB | W3C 无障碍 |
+| 解说在说时再压 | 约 8 dB（侧链压缩） | BBC，规范给 6–12 dB |
+| 音乐 EQ | 3 kHz 挖 −4 dB，给人声让出可懂度频段 | 同上 |
+| 淡入 / 淡出 | 1.5s / 2s | — |
+| 整体响度 | −14 LUFS，真峰值 −1.5 dBTP（短视频平台 −1） | 各平台 2025 规范 |
+
+响度走**两遍**：先测，再用 `linear=true` 施加一个固定增益。
+单遍 `loudnorm` 是动态的，会把句子之间的空隙当成"太安静"再把音乐顶回去——
+把刚做好的压制一段段抵消掉，而且不报错。
+
+曲子短于全片会自动循环并给一条警告；接缝是硬切，所以技能里要求宁可长。
 
 ### 素材生成顺序
 

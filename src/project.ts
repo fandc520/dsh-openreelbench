@@ -96,6 +96,25 @@ export interface ProjectMarker {
    */
   voice_references?: string[]
   /**
+   * The background music bed: which workflow scored it, and where the file is.
+   *
+   * Project-level rather than an entry in `asset_manifest_audio`, because every
+   * asset in that manifest must name a script section — the coverage and
+   * orphan checks are built on it — and the bed belongs to no section. Forcing
+   * it in would mean weakening a guard that catches real mistakes, to store one
+   * file that is not the kind of thing the guard is about.
+   *
+   * `path` is project-relative, like every other stored path. `workflow` is
+   * remembered per project because which workflow scores a film is a creative
+   * choice, not an installation setting.
+   */
+  music?: {
+    path?: string
+    workflow?: string
+    /** What the model asked the workflow for. Shown back, never re-parsed. */
+    prompt?: string
+  }
+  /**
    * The shot plan: how many pictures each section is cut into, and what each
    * one is meant to show.
    *
