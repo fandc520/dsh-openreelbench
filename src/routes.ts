@@ -46,6 +46,7 @@ import { AssetError, IMPORT_KINDS, type ImportKind, type ImportRequest, importAs
 import { MIX_BOUNDS } from './audio-mix.js'
 import { listPipelines, resolvePipeline } from './pipelines.js'
 import { planSections } from './compose.js'
+import { type ComposeResultPayload, composeProject } from './render-job.js'
 import { CutError, type Cut, deleteCut, listCuts, parseCut, readCut, writeCut } from './cuts.js'
 import { STAGES, STAGE_ARTIFACT, StateViolationError, isStage, isStatus } from './state.js'
 import type { StudioRuntime } from './tools.js'
@@ -320,6 +321,17 @@ async function libraryEntry(layout: ProjectLayout, title: string, createdAt: str
 
 /* --------------------------------------------------------------- mounting */
 
+/** One project's render, while it runs and after it stops. */
+interface RenderJob {
+  state: 'running' | 'done' | 'failed'
+  /** The composer's own progress line, shown verbatim on the page. */
+  progress: string
+  controller: AbortController
+  result?: ComposeResultPayload
+  error?: string
+  code?: string
+}
+
 /** Just the part of the host's skill registry this file asks about. */
 interface SkillCatalog {
   list?: (options: Record<string, unknown>) => Promise<Array<{
@@ -334,6 +346,21 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
 
   const disposers: Array<() => void> = []
   const { machine } = runtime
+
+  /**
+   * In-flight renders, one per project.
+   *
+   * Held in memory rather than on disk on purpose: a job is a fact about THIS
+   * host process, and a stale 'running' entry surviving a restart would leave a
+   * project permanently unable to render. Losing the record of a finished
+   * render costs nothing — the report is already in the checkpoint.
+   */
+  const renders = new Map<string, RenderJob>()
+  disposers.push(() => {
+    // Unloading the plugin mid-encode should stop ffmpeg, not orphan it.
+    for (const job of renders.values()) job.controller.abort()
+    renders.clear()
+  })
 
   // ---- GET /studio/skill?name= -------------------------------------------
   //
@@ -1029,6 +1056,121 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
           issues,
           text: issues.length === 0 ? '' : formatIssues(issues),
         })
+      } catch (error) {
+        fail(response, error)
+      }
+    },
+  }))
+
+  // ---- POST/GET /studio/compose -------------------------------------------
+  //
+  // The compose screen renders the film itself rather than asking the agent to.
+  // By this point nothing is left to decide: the cut, the pauses, the subtitle
+  // style and the music were all settled on the screen, and routing the last
+  // step through a model adds a round trip and a chance to mistranscribe them.
+  // `studio_compose` stays for unattended runs, and both go through
+  // `composeProject` so the prerequisites and the slideshow refusal cannot hold
+  // on one path and be skipped on the other.
+  //
+  // A render takes minutes, so POST starts one and returns; GET reports where
+  // it is. Holding the request open for the whole encode would give the page
+  // nothing to show and put the result at the mercy of an idle timeout.
+  disposers.push(webServer.register({
+    kind: 'exact',
+    path: '/studio/compose',
+    handler: async (request, response) => {
+      try {
+        const projectId = request.method === 'GET'
+          ? (query(request).get('project') ?? '')
+          : undefined
+
+        if (request.method === 'GET') {
+          if (projectId === '') {
+            sendJson(response, 400, { error: 'project is required' })
+            return
+          }
+          const job = renders.get(projectId as string)
+          sendJson(response, 200, job === undefined
+            ? { running: false, state: 'idle' }
+            : {
+                running: job.state === 'running',
+                state: job.state,
+                progress: job.progress,
+                ...(job.result === undefined ? {} : { result: job.result }),
+                ...(job.error === undefined ? {} : { error: job.error, code: job.code }),
+              })
+          return
+        }
+
+        if (request.method !== 'POST') {
+          sendJson(response, 405, { error: 'GET or POST only' })
+          return
+        }
+        if (!sameOrigin(request)) {
+          sendJson(response, 403, { error: 'cross-origin writes are refused' })
+          return
+        }
+        const input = ((await readJsonBody(request)) ?? {}) as Record<string, unknown>
+        const project = input.project
+        if (typeof project !== 'string' || project === '') {
+          sendJson(response, 400, { error: 'project is required' })
+          return
+        }
+        // One render per project at a time. Two concurrent encodes write the
+        // same work directory and the same output file, and the loser would
+        // corrupt the winner's film rather than merely wasting a CPU.
+        const existing = renders.get(project)
+        if (existing?.state === 'running') {
+          sendJson(response, 409, { error: '这个项目正在合成中', code: 'ALREADY_RENDERING', progress: existing.progress })
+          return
+        }
+        // Fail fast on a project that is not ready, so the button reports it
+        // instead of a job that dies a second later with nobody watching.
+        await machine.requireProject(project)
+
+        const background = input.subtitle_background
+        const controller = new AbortController()
+        const job: RenderJob = { state: 'running', progress: '准备中', controller }
+        renders.set(project, job)
+
+        // Deliberately not awaited: the response goes out now and the page
+        // polls. Every failure path below lands on the job, which is what the
+        // page reads -- an unhandled rejection here would be invisible.
+        void (async (): Promise<void> => {
+          try {
+            const result = await composeProject(runtime, {
+              projectId: project,
+              ...(typeof input.burn_subtitles === 'boolean' ? { burnSubtitles: input.burn_subtitles } : {}),
+              ...(background === 'outline' || background === 'box'
+                ? { subtitleBackground: background } : {}),
+              ...(input.force === true ? { force: true } : {}),
+              ...(typeof input.cut === 'string' && input.cut !== '' ? { cutId: input.cut } : {}),
+              signal: controller.signal,
+              onProgress: (message) => { job.progress = message },
+            })
+            // Recorded through the state machine, the same call studio_stage
+            // makes. The panel may advance the pipeline; it may not reach past
+            // the schema and asset checks while doing it, and writing the
+            // checkpoint here directly is exactly the shortcut that would.
+            job.progress = '记录成片'
+            await machine.write({
+              projectId: project,
+              stage: 'compose',
+              status: 'completed',
+              artifacts: { render_report: result.report as unknown as Record<string, unknown> },
+              humanApproved: false,
+            })
+            job.result = result
+            job.state = 'done'
+            job.progress = '完成'
+          } catch (error) {
+            job.state = 'failed'
+            job.error = errorMessage(error)
+            job.code = error instanceof StateViolationError ? error.code : 'RENDER_FAILED'
+          }
+        })()
+
+        sendJson(response, 202, { started: true, project })
       } catch (error) {
         fail(response, error)
       }

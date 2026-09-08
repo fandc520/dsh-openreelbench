@@ -15,6 +15,7 @@ import { parseSrt, renderSrt } from '../lib/subtitle.js'
 import { escapeFilterPath, probeDuration, renderProject } from '../lib/compose.js'
 import { mediaKindOf, mediaUrl } from '../lib/http.js'
 import { registerStudioTools } from '../lib/tools.js'
+import { parseCut, writeCut } from '../lib/cuts.js'
 
 const run = promisify(execFile)
 const WS = resolve('tmp/ws')
@@ -820,6 +821,172 @@ async function main() {
   // Last on purpose: the route block ends with a panel submit to `brief`,
   // which invalidates every later stage. Anything asserting on downstream
   // state has to have run already.
+  console.log('\n== 后台合成（不经过 Agent） ==')
+  {
+    const { apply: applyRender, Config: RenderConfig } = await import('../lib/index.js')
+    const host = fakeHost()
+    applyRender(host.ctx, RenderConfig({
+      workspaceRoot: WS,
+      video: { width: 480, height: 270, fps: 12, preset: 'ultrafast' },
+    }))
+    const routes = host.routes
+
+    // Its own project: the shared one has had its script rewritten by now, so
+    // its asset stages are invalidated -- which is a fine thing to assert
+    // against but not a thing to render from.
+    const id = 'render-route'
+    await machine.initProject({ id, title: '后台合成', targetDurationSeconds: 30 })
+    const layout = machine.layout(id)
+    await makeMedia(layout)
+
+    const poll = async () => {
+      for (let attempt = 0; attempt < 400; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 150))
+        const status = (await callRoute(routes, '/studio/compose',
+          '/studio/compose?project=' + id, {})).json()
+        if (status.state !== 'running') return status
+      }
+      return { state: 'timeout' }
+    }
+    const start = (body) => callRoute(routes, '/studio/compose', '/studio/compose', {
+      method: 'POST', body: { project: id, ...body },
+    })
+
+    // GOVERNANCE FIRST. The panel may advance the pipeline; it may not reach
+    // past the checks while doing it. A render before the assets are recorded
+    // has to fail the same way the tool's would.
+    //
+    // The brief and script go in BEFORE this attempt on purpose. Without them
+    // the render fails anyway -- on a missing artifact, with the same
+    // PREREQUISITE_VIOLATION code -- so the test would pass with the stage
+    // check deleted. Leaving only the asset stages missing makes that check the
+    // one thing standing in the way, and the message names which stage.
+    await machine.write({ projectId: id, stage: 'brief', status: 'completed', artifacts: { brief }, humanApproved: true })
+    await machine.write({ projectId: id, stage: 'script', status: 'completed', artifacts: { script: script() }, humanApproved: true })
+
+    await start({})
+    const tooEarly = await poll()
+    if (tooEarly.state === 'failed' && tooEarly.code === 'PREREQUISITE_VIOLATION'
+      && String(tooEarly.error).includes('assets_audio'))
+      ok('rendering before the assets are recorded is refused, and says which stage')
+    else bad('prerequisites skipped', JSON.stringify(tooEarly).slice(0, 200))
+
+    await machine.write({ projectId: id, stage: 'assets_audio', status: 'completed', artifacts: { asset_manifest_audio: audioManifest() }, humanApproved: true })
+    await machine.write({ projectId: id, stage: 'assets_shots', status: 'completed', artifacts: { asset_manifest_shots: videoManifest() }, humanApproved: true })
+
+    // The whole point: pressing 合成 produces a film without a model in the
+    // loop, and RECORDS it through the state machine rather than writing the
+    // checkpoint itself.
+    const accepted = await start({})
+    if (accepted.statusCode === 202) ok('POST returns as soon as the render is running')
+    else bad('compose start', accepted.statusCode + ' ' + accepted.text().slice(0, 200))
+
+    const done = await poll()
+    if (done.state === 'done') ok('the render finished with no agent involved')
+    else bad('render failed', JSON.stringify(done).slice(0, 300))
+
+    if (done.state === 'done') {
+      const checkpoint = await machine.readCheckpoint(layout, 'compose')
+      if (checkpoint?.status === 'completed')
+        ok('the report is recorded through the state machine, not written past it')
+      else bad('not recorded', JSON.stringify(checkpoint?.status))
+      // Recorded via machine.write means the asset check ran: a report naming a
+      // file that does not exist would have thrown rather than been stored.
+      const report = await machine.readArtifact(layout, 'render_report')
+      if (report?.outputs?.[0]?.path !== undefined) ok('and the stored report names the file it made')
+      else bad('no report', JSON.stringify(report))
+      // 1920x1080 rather than the 480x270 in this host's config, because the
+      // brief declares bilibili and a named platform decides the frame. That is
+      // the tool's rule, and seeing it here is how we know the route runs the
+      // same resolution rather than a second copy of it.
+      if (report?.outputs?.[0]?.resolution === '1920x1080')
+        ok('the platform on the brief decides the frame, on this path too')
+      else bad('frame', JSON.stringify(report?.outputs?.[0]?.resolution))
+      const said = done.result?.warnings?.some((line) => line.includes('target_platform'))
+      if (said === true) ok('and the render says which frame it used rather than leaving it silent')
+      else bad('frame not reported', JSON.stringify(done.result?.warnings))
+    }
+
+    // THE BUG THIS FOUND. `studio_compose` had no cut parameter, so the panel's
+    // message named a version the model could not pass on -- every render was
+    // of the plan, and the output was still a film, so nothing caught it.
+    const cutId = 'cut-route'
+    // A cut is a set of PER-SECTION OVERRIDES, not a selection of sections:
+    // leaving s2 out would just mean "nothing overridden for s2" and would
+    // render an identical film. A lead-in long enough to move the total is what
+    // makes "did the cut reach the renderer" answerable from the output.
+    await writeCut(layout, parseCut({
+      id: cutId,
+      name: '开头留白',
+      sections: [{ id: 's1', lead: 3 }, { id: 's2' }, { id: 's3' }],
+    }))
+    const cutStart = await start({ cut: cutId })
+    if (cutStart.statusCode === 202) {
+      const cutDone = await poll()
+      // Asserting on result.cut alone would only prove the request echoed back
+      // what it was sent -- it is set from the id whether or not the cut ever
+      // reached the renderer, which is exactly how the original bug hid. The
+      // duration is the output, and it has to have moved.
+      const planned = done.result?.report?.outputs?.[0]?.duration_seconds
+      const edited = cutDone.result?.report?.outputs?.[0]?.duration_seconds
+      if (cutDone.state === 'done' && edited !== undefined && planned !== undefined
+        && edited > planned + 1)
+        ok('a selected version is the version that gets rendered ('
+          + edited.toFixed(1) + 's against the plan at ' + planned.toFixed(1) + 's)')
+      else bad('cut ignored', JSON.stringify([planned, edited]))
+      // Its own file, so two versions can be compared rather than one
+      // overwriting the other.
+      const stored = await machine.readArtifact(layout, 'render_report')
+      if (stored?.outputs?.[0]?.path?.includes(cutId))
+        ok('and it renders to its own file rather than over the plan')
+      else bad('cut output path', JSON.stringify(stored?.outputs?.[0]?.path))
+    } else bad('cut render', cutStart.statusCode + ' ' + cutStart.text().slice(0, 200))
+
+    const missing = await start({ cut: 'cut-not-real' })
+    const missingDone = missing.statusCode === 202 ? await poll() : { state: 'rejected' }
+    if (missingDone.state === 'failed' && String(missingDone.error).includes('cut-not-real'))
+      ok('a version that does not exist fails by name')
+    else bad('unknown cut', JSON.stringify(missingDone).slice(0, 200))
+
+    // Two encodes at once write the same work directory and the same output
+    // file: the loser would corrupt the winner's film rather than merely waste
+    // a CPU. The second press has to be refused, not queued behind the first.
+    const first = await start({})
+    const second = await start({})
+    if (first.statusCode === 202 && second.statusCode === 409 && second.json().code === 'ALREADY_RENDERING')
+      ok('a second render of the same project is refused while one is running')
+    else bad('concurrent renders', first.statusCode + ' then ' + second.statusCode)
+    await poll()
+
+    const blank = await callRoute(routes, '/studio/compose', '/studio/compose', {
+      method: 'POST', body: {},
+    })
+    if (blank.statusCode === 400) ok('the route needs a project')
+    else bad('blank project', String(blank.statusCode))
+
+    // The panel drives this route rather than composing a message about it.
+    const screen = (await import('node:fs')).readFileSync('src/client/timeline-screen.tsx', 'utf-8')
+    // Scoped to the function, not the file: the surrounding comments name the
+    // tool on purpose, and a whole-file search would call that a regression.
+    const composeFrom = screen.indexOf('async function compose(): Promise<void> {')
+    const composeBody = composeFrom === -1
+      ? ''
+      : screen.slice(composeFrom, screen.indexOf(String.fromCharCode(10) + '  }', composeFrom))
+    if (composeBody.includes('api.startCompose(') && !composeBody.includes('onSend('))
+      ok('the compose button renders directly instead of asking the agent to')
+    else bad('still via the agent', 'the panel composes a studio_compose request')
+    // And it passes the version the user is looking at -- the thing the prose
+    // route could not carry.
+    if (screen.includes('cut: cut.id')) ok('and it sends the selected version with it')
+    else bad('cut not sent', 'the panel renders the plan whatever is selected')
+    // The tool keeps its place: a fully automatic run has no button to press.
+    const toolSource = (await import('node:fs')).readFileSync('src/tools.ts', 'utf-8')
+    if (toolSource.includes("name: 'studio_compose'") && toolSource.includes('composeProject(runtime'))
+      ok('the tool stays, and goes through the same function the route does')
+    else bad('tool path diverged', 'the agent and the panel no longer share a compose')
+
+    host.disposeAll()
+  }
   console.log('\n== routes ==')
   {
     const { apply: applyPlugin, Config: RouteConfig } = await import('../lib/index.js')
@@ -829,7 +996,8 @@ async function main() {
 
     const expected = ['/studio/catalog', '/studio/state', '/studio/media', '/studio/library',
       '/studio/project', '/studio/project/remove', '/studio/trash', '/studio/trash/restore',
-      '/studio/trash/purge', '/studio/import', '/studio/asset/trim', '/studio/validate', '/studio/stage']
+      '/studio/trash/purge', '/studio/import', '/studio/asset/trim', '/studio/validate', '/studio/stage',
+      '/studio/compose', '/studio/skill']
     const mounted = expected.filter((path) => routes.has(path))
     if (mounted.length === expected.length) ok(expected.length + ' routes mounted')
     else bad('route mounting', 'only ' + JSON.stringify(mounted))

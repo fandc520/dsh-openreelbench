@@ -168,7 +168,7 @@ export function TimelineScreen({
   /**
    * Whether the user has chosen to render past a blocking slideshow score.
    *
-   * Held here rather than sent silently: `studio_compose` refuses at 4.0, and
+   * Held here rather than sent silently: the render refuses at 4.0, and
    * the only thing that should lift that is a person saying so after seeing
    * the number. Reset on every reload, so the decision is about this cut.
    */
@@ -199,6 +199,8 @@ export function TimelineScreen({
    * the slider under their hands. The parse happens once, on save.
    */
   const [musicForm, setMusicForm] = useState<{ gain: string; fadeIn: string; fadeOut: string } | null>(null)
+  /** The composer's own progress line, so a long render is not a blank spinner. */
+  const [renderStep, setRenderStep] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [result, setResult] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [at, setAt] = useState(0)
@@ -695,48 +697,64 @@ export function TimelineScreen({
    * goes to the model like every other generation — and the panel watches the
    * report for the result.
    */
+  /**
+   * Render the film, here, without asking the agent.
+   *
+   * The last step of the pipeline has nothing left to decide: the cut, the
+   * pauses, the subtitle style and the music were all settled on this screen.
+   * Sending them to a model as prose was a round trip that could only lose
+   * something — and did: the message named the selected version and
+   * `studio_compose` had no parameter to put it in, so every render was of the
+   * plan. The tool keeps its place for unattended runs; both go through the
+   * same host function.
+   */
   async function compose(): Promise<void> {
     if (phase !== null || busy !== null) return
     setResult(null)
-    setPhase('sending')
-    const before = JSON.stringify(state.artifacts.render_report ?? null)
+    setPhase('generating')
+    setRenderStep('准备中')
     try {
-      await onSend([
-        '请合成成片。',
-        '',
-        '用 `studio_compose`，项目 `' + state.project.id + '`'
-        + (cut === undefined ? '。' : '，剪辑版本 `' + cut.id + '`（' + cut.name + '）。'),
-        ...(forceRender
-          ? ['幻灯片风险分我已经看过了，就这么出——调 `studio_compose` 时带上 `force: true`。']
-          : []),
-        burnSubtitles === 'off'
-          ? '这一版**不要**烧录字幕（`burn_subtitles: false`），字幕留成旁挂 .srt。'
-          : '这一版**烧录字幕**：`burn_subtitles: true`，`subtitle_background: "'
-            + burnSubtitles + '"`。',
-        '合成完把它返回的 render_report **整个对象原样**交给 `studio_stage`'
-        + '（stage 是 compose，status 是 completed）——照搬，不要重新拼、不要补字段、不要改路径和时长。',
-        '记录成功后用 `studio_show` 把成片带进对话，我在这边和聊天里都能看。',
-      ].join(NEWLINE))
-      setPhase('generating')
-      for (let attempt = 0; attempt < 360; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 2500))
-        const next = await api.state(state.project.id, cutId).catch(() => undefined)
-        if (next !== undefined && JSON.stringify(next.artifacts.render_report ?? null) !== before) {
-          await onReload()
-          setPhase(null)
-          // A fresh render is what you asked for, so it is what you get shown.
-          handover.current = null
-          setMode('film')
-          say('ok', '成片好了，看一遍。改哪儿都行——点「编辑」回来接着调。')
-          return
-        }
-      }
-      setPhase(null)
-      say('error', '等了十五分钟没等到成片。去对话里看看 Agent 卡在哪。')
+      await api.startCompose({
+        project: state.project.id,
+        ...(cut === undefined ? {} : { cut: cut.id }),
+        ...(forceRender ? { force: true } : {}),
+        burn_subtitles: burnSubtitles !== 'off',
+        ...(burnSubtitles === 'off' ? {} : { subtitle_background: burnSubtitles }),
+      })
     } catch (error) {
       setPhase(null)
+      setRenderStep(null)
       say('error', (error as Error).message)
+      return
     }
+
+    // Poll rather than hold a request open for the whole encode: a multi-minute
+    // fetch shows nothing while it runs and is at the mercy of an idle timeout.
+    for (let attempt = 0; attempt < 720; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const status = await api.composeStatus(state.project.id).catch(() => undefined)
+      if (status === undefined) continue
+      if (status.progress !== undefined) setRenderStep(status.progress)
+      if (status.state === 'running') continue
+
+      setPhase(null)
+      setRenderStep(null)
+      if (status.state === 'failed') {
+        say('error', status.error ?? '合成失败')
+        return
+      }
+      await onReload()
+      // A fresh render is what you asked for, so it is what you get shown.
+      handover.current = null
+      setMode('film')
+      const warnings = status.result?.warnings ?? []
+      say('ok', '成片好了，看一遍。改哪儿都行——点「编辑」回来接着调。'
+        + (warnings.length === 0 ? '' : NEWLINE + warnings.join(NEWLINE)))
+      return
+    }
+    setPhase(null)
+    setRenderStep(null)
+    say('error', '等了二十四分钟还没结束。合成还在后台跑，刷新页面能看到进度。')
   }
 
   /* ------------------------------------------------------------- 配乐 */
@@ -1345,6 +1363,13 @@ export function TimelineScreen({
           <BusyLabel phase={phase} idle={filmUrl === undefined ? '合成' : '重新合成'} />
         </button>
       </div>
+
+      {/* The composer's own progress line. A render is minutes long and used to
+          show a spinner and nothing else, which is indistinguishable from a
+          stuck one. */}
+      {renderStep === null ? null : (
+        <p className="dcs-note dcs-render-step">正在合成 · {renderStep}</p>
+      )}
 
       {/* Same shell the shots screen uses. It used to render only on a
           revise/fail verdict, so a clean film showed nothing at all — and

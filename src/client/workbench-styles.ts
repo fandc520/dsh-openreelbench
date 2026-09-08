@@ -619,6 +619,7 @@ const CSS = `
 .dcs-music-form > .dcs-input { flex: 1 1 220px; min-width: 0; }
 .dcs-input-small { width: 190px; }
 .dcs-input-tiny { width: 58px; }
+.dcs-render-step { font-variant-numeric: tabular-nums; opacity: .85; }
 /* Unsaved is stated in words as well as colour: the marker has to survive a
    reader who cannot tell the accent from the resting state. */
 .dcs-music-dirty { color: #f4d58d; }

@@ -15,11 +15,9 @@ import { basename, extname, isAbsolute } from 'node:path'
 import { promises as fs } from 'node:fs'
 
 import { type Config, bindingWorkflows } from './config.js'
-import type { ArtifactName, AssetManifest, Brief, ScenePlan, Script } from './schema.js'
+import type { ArtifactName, ScenePlan, Script } from './schema.js'
 import { type ProjectLayout, ensureDir, pathExists, resolveInProject, toProjectRelative } from './project.js'
-import { planSections, renderProject } from './compose.js'
-import { resolveVideoProfile } from './media-profile.js'
-import { scoreSlideshowRisk } from './slideshow.js'
+import { composeProject } from './render-job.js'
 import { checkSceneVariation } from './variation.js'
 import { mediaKindOf, mediaUrl } from './http.js'
 import { AssetError, IMPORT_KINDS, type ImportKind, type ImportRequest, importAssets, musicPatchOf } from './assets.js'
@@ -692,6 +690,12 @@ function composeDefinition(runtime: StudioRuntime): ToolDefinition {
             'Render even when the slideshow risk score is 4.0 or higher. Only pass this when '
             + 'the USER has seen the score and asked for the render anyway - never on your own judgement.',
         },
+        cut: {
+          type: 'string',
+          description:
+            'Which saved edit version to render, by id. Omit to render the plan. '
+            + 'Version ids come from the saved cuts; the compose screen names them.',
+        },
       },
       required: ['project'],
     },
@@ -746,136 +750,19 @@ function composeDefinition(runtime: StudioRuntime): ToolDefinition {
     },
     timeoutMs: 3_600_000,
     async execute(args, exec) {
-      const projectId = requireString(args, 'project')
-      const machine = runtime.machine
-      const config = runtime.getConfig()
-      const { layout } = await machine.requireProject(projectId)
-
-      for (const stage of ['assets_audio', 'assets_shots'] as const) {
-        const checkpoint = await machine.readCheckpoint(layout, stage)
-        if (checkpoint === undefined || checkpoint.status !== 'completed') {
-          throw new StateViolationError(
-            'PREREQUISITE_VIOLATION',
-            "PREREQUISITE VIOLATION: cannot compose; stage '" + stage + "' is "
-            + (checkpoint === undefined ? 'never started' : checkpoint.status)
-            + '. Generate those assets and record them with studio_stage first.',
-          )
-        }
-      }
-
-      const script = await machine.readArtifact<Script>(layout, 'script')
-      const audio = await machine.readArtifact<AssetManifest>(layout, 'asset_manifest_audio')
-      const video = await machine.readArtifact<AssetManifest>(layout, 'asset_manifest_shots')
-      if (script === undefined) throw new StateViolationError('PREREQUISITE_VIOLATION', 'no script artifact on disk')
-      if (audio === undefined) throw new StateViolationError('PREREQUISITE_VIOLATION', 'no asset_manifest_audio artifact on disk')
-      if (video === undefined) throw new StateViolationError('PREREQUISITE_VIOLATION', 'no asset_manifest_shots artifact on disk')
-
-      // The composer does not care which stage produced what — it needs one
-      // narration and one visual per section — so the two stage manifests are
-      // merged back into the single view it reads.
-      const manifest: AssetManifest = {
-        ...audio,
-        assets: [...audio.assets, ...video.assets],
-      }
-
-      const { marker } = await machine.requireProject(projectId)
-      const { playbook, resolved, fallback } = resolvePlaybook(marker.style, config.playbooks)
-
-      // The frame comes off the brief. A project declared for a vertical
-      // platform used to render landscape anyway, because target_platform was
-      // validated and then never read again.
-      // The marker first: it is what the project screen edits, so it is the
-      // one the user can see and change. The brief is the fallback for
-      // projects whose platform only ever went through the model.
-      // Slideshow risk, scored against the timeline that is about to be cut.
-      //
-      // The refusal is aimed at the model. A person who has watched the thing
-      // and wants it anyway passes force and gets it - governance nobody can
-      // overrule is a wall, not governance.
-      const scenePlan = await machine.readArtifact<ScenePlan>(layout, 'scene_plan')
-      const subjects = new Map<string, string>()
-      for (const section of script.sections) {
-        const visual = section.visual
-        if (visual?.prompt !== undefined && visual.prompt.trim() !== '') {
-          subjects.set(section.id, visual.prompt.trim())
-        }
-      }
-      const planned = planSections(script, manifest, playbook)
-      const risk = scenePlan === undefined
-        ? undefined
-        : scoreSlideshowRisk(scenePlan.shots, planned, playbook, subjects)
-      if (risk?.blocking === true && args.force !== true) {
-        throw new StateViolationError(
-          'QUALITY_VIOLATION',
-          'QUALITY VIOLATION: 幻灯片风险 ' + risk.average.toFixed(2) + '/5（' + risk.verdict + '），'
-          + '这样出片基本就是配了旁白的幻灯片。' + String.fromCharCode(10)
-          + Object.entries(risk.dimensions)
-            .filter(([, entry]) => entry.score >= 2)
-            .map(([name, entry]) => '  - ' + name + ' ' + entry.score + '：' + entry.reason)
-            .join(String.fromCharCode(10)) + String.fromCharCode(10)
-          + '先回 scene_plan 改：补镜头语言、把重复的画面换掉、标一个高光镜。'
-          + '**如果用户看过分数仍然要出**，再带 force: true 重跑。',
-        )
-      }
-
-      const brief = await machine.readArtifact<Brief>(layout, 'brief')
-      const platform = marker.target_platform ?? brief?.target_platform
-      const profile = resolveVideoProfile(config.video, platform)
-
+      // Everything this used to do inline now lives in `composeProject`, which
+      // the compose screen's own render also calls. One function, so the
+      // prerequisites and the slideshow refusal cannot hold for the model and
+      // be skipped for the panel.
       const background = optionalString(args, 'subtitle_background')
-      const result = await renderProject({
-        layout,
-        script,
-        manifest,
-        config,
-        playbook,
+      return composeProject(runtime, {
+        projectId: requireString(args, 'project'),
         ...(typeof args.burn_subtitles === 'boolean' ? { burnSubtitles: args.burn_subtitles } : {}),
         ...(background === 'outline' || background === 'box' ? { subtitleBackground: background } : {}),
-        ...(platform === undefined ? {} : { targetPlatform: platform }),
-        // Read off the project, never taken as a tool argument: the bed is a
-        // property of the film, and letting a render name a different one would
-        // make two exports of the same cut differ in a way nothing recorded.
-        ...(marker.music?.path === undefined || marker.music.path === ''
-          ? {} : {
-              musicPath: marker.music.path,
-              musicSettings: {
-                gainDb: marker.music.gain_db,
-                fadeInSeconds: marker.music.fade_in,
-                fadeOutSeconds: marker.music.fade_out,
-              },
-            }),
+        ...(args.force === true ? { force: true } : {}),
+        ...(typeof args.cut === 'string' && args.cut !== '' ? { cutId: args.cut } : {}),
         signal: exec.signal,
       })
-      // Said out loud, always: a frame that silently differs from the settings
-      // is the failure this fix exists to prevent, and silence would reproduce
-      // it one layer up.
-      if (risk !== undefined) {
-        result.warnings.push('幻灯片风险 ' + risk.average.toFixed(2) + '/5（' + risk.verdict + '）'
-          + (args.force === true && risk.blocking ? '　⚠️ 用户要求强制出片' : ''))
-      }
-      result.warnings.push(
-        profile.source === 'platform'
-          ? '画幅按 target_platform=' + platform + ' 出片：' + profile.label
-          : '画幅用设置里的默认值：' + profile.width + 'x' + profile.height,
-      )
-      if (fallback) {
-        result.warnings.push(
-          'project style "' + marker.style + '" is not defined; rendered with "' + resolved + '" instead',
-        )
-      }
-
-      return {
-        project: projectId,
-        report: result.report,
-        timeline: result.timeline.map((timing) => ({
-          sectionId: timing.sectionId,
-          label: timing.label,
-          start: Number(timing.start.toFixed(3)),
-          duration: Number(timing.duration.toFixed(3)),
-        })),
-        subtitlePath: result.subtitlePath ?? null,
-        warnings: result.warnings,
-      }
     },
   }
 }

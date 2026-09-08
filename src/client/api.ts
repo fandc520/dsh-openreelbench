@@ -391,6 +391,25 @@ export const api = {
   catalog: (): Promise<Catalog> => request('/studio/catalog'),
 
   /** Whether a `/name` gesture would actually load this skill. */
+  /** Start a render. Returns as soon as it is running; poll `composeStatus`. */
+  startCompose: (body: {
+    project: string
+    cut?: string
+    burn_subtitles?: boolean
+    subtitle_background?: 'outline' | 'box'
+    force?: boolean
+  }): Promise<{ started: boolean }> =>
+    request('/studio/compose', { method: 'POST', body: JSON.stringify(body) }),
+
+  composeStatus: (project: string): Promise<{
+    running: boolean
+    state: 'idle' | 'running' | 'done' | 'failed'
+    progress?: string
+    result?: { warnings: string[]; cut: string | null }
+    error?: string
+    code?: string
+  }> => request('/studio/compose?project=' + encodeURIComponent(project)),
+
   skill: (name: string): Promise<{
     name: string
     registry: boolean
