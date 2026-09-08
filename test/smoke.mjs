@@ -1204,6 +1204,26 @@ async function main() {
       ok('dropping the bed from the film keeps the workflow for the next one')
     else bad('music clear', JSON.stringify(afterClear))
 
+    // The mix settings clamp at the route too, so a hand-written request cannot
+    // store a level the render would then have to defend against.
+    const loud = await callRoute(routes, '/studio/project', '/studio/project', {
+      method: 'POST', body: { project: 'smoke', music: { gain_db: 99, fade_in: -5, fade_out: 500 } },
+    })
+    const stored = loud.json().project?.music
+    if (stored?.gain_db === -6 && stored?.fade_in === 0 && stored?.fade_out === 20)
+      ok('out-of-range mix settings are clamped before they are stored')
+    else bad('route clamp', JSON.stringify(stored))
+    // And a partial save leaves the others alone -- the save button sends only
+    // the fields that parsed, so a cleared box must not mean zero.
+    const partial = await callRoute(routes, '/studio/project', '/studio/project', {
+      method: 'POST', body: { project: 'smoke', music: { gain_db: -18 } },
+    })
+    const afterPartial = partial.json().project?.music
+    if (afterPartial?.gain_db === -18 && afterPartial?.fade_out === 20
+      && afterPartial?.workflow === 'Alpha-Music')
+      ok('saving one mix field keeps the others and the workflow name')
+    else bad('partial music save', JSON.stringify(afterPartial))
+
     // A stored path is a path compose will resolve inside the project. An
     // absolute one or a `..` segment reaching the marker would be an escape
     // route saved to disk, and compose would report it as a missing file
@@ -2847,14 +2867,28 @@ async function main() {
       { sectionId: 's1', start: 0, duration: 3, speechSeconds: 2, lead: 1, trimStart: 0, narrationPath: 'assets/audio/01-s1.wav' },
       { sectionId: 's2', start: 3, duration: 3, speechSeconds: 0, lead: 0, trimStart: 0 },
     ]
-    const build = (musicPath) => {
+    // Resolved by the caller, as the screen does -- Preview takes numbers, not
+    // stored settings, so that it stays importable without host code.
+    const { DUCK_DB, MIX_BOUNDS, gainToVolume, resolveMusicSettings } =
+      await import('../lib/audio-mix.js')
+    const bedFor = (path, overrides = {}) => {
+      const mix = resolveMusicSettings(overrides)
+      return {
+        path,
+        gain: gainToVolume(mix.gainDb),
+        ducked: gainToVolume(mix.gainDb + DUCK_DB),
+        fadeInSeconds: mix.fadeInSeconds,
+        fadeOutSeconds: mix.fadeOutSeconds,
+      }
+    }
+    const build = (musicPath, overrides) => {
       made.length = 0
       let now = 0
       globalThis.performance = { now: () => now * 1000 }
       const preview = new Preview({
         projectId: 'smoke',
         sections,
-        ...(musicPath === undefined ? {} : { musicPath }),
+        ...(musicPath === undefined ? {} : { music: bedFor(musicPath, overrides) }),
         onTick: () => {},
         onEnd: () => {},
       })
@@ -2910,24 +2944,79 @@ async function main() {
     // Section s2 has no narration file. It is still speech time in the
     // timeline when it has any, and a duck keyed off "is a clip playing"
     // rather than "is this speech" would miss exactly that case.
+    // Long enough that the test point sits clear of both fades, so this
+    // measures the duck and only the duck.
     const gapless = [
-      { sectionId: 'g1', start: 0, duration: 3, speechSeconds: 2, lead: 0, trimStart: 0 },
+      { sectionId: 'g1', start: 0, duration: 10, speechSeconds: 6, lead: 0, trimStart: 0 },
     ]
     made.length = 0
     let clock = 0
     globalThis.performance = { now: () => clock * 1000 }
     const orphan = new Preview({
-      projectId: 'smoke', sections: gapless, musicPath: 'assets/audio/music.wav',
+      projectId: 'smoke', sections: gapless, music: bedFor('assets/audio/music.wav'),
       onTick: () => {}, onEnd: () => {},
     })
     const orphanBed = made[made.length - 1]
     clock = 100
-    orphan.play(0.5)
+    orphan.play(3)
     for (let index = 0; index < 120; index += 1) { clock = 100; if (frame !== undefined) frame() }
     if (Math.abs(orphanBed.volume - 0.04) < 0.005)
       ok('a section whose narration is missing still ducks the bed')
     else bad('duck missed', String(orphanBed.volume))
     orphan.dispose()
+
+    // ---- the fades, which are settings now ------------------------------
+
+    // The render fades the bed at both ends with afade. A preview that ignored
+    // that would let someone set an eight-second swell and hear nothing of it
+    // until the export -- the one moment the setting is impossible to judge.
+    const swell = build('assets/audio/music.wav', { fadeInSeconds: 2, fadeOutSeconds: 2 })
+    const swellBed = swell.bed()
+    const levelAt = (seconds) => {
+      swell.at(100)
+      swell.preview.play(seconds)
+      for (let index = 0; index < 300; index += 1) {
+        swell.at(100)
+        if (frame !== undefined) frame()
+      }
+      return swellBed.volume
+    }
+    // EXACT levels, not just "lower than the middle". The duck glides toward
+    // its target frame by frame, and an implementation that read the already-
+    // enveloped volume back off the element would feed the fade into that
+    // glide -- the two would settle somewhere neither asked for, still lower
+    // in a fade than out of one, so an ordering check would pass a mix that is
+    // several times too quiet. The film is 6s; speech runs 1.0-3.0.
+    const bedGain = gainToVolume(MIX_BOUNDS.gainDb.default)
+    const close = (actual, expected) => Math.abs(actual - expected) < 0.002
+    if (close(levelAt(0.8), bedGain * 0.4)) ok('the bed fades in on the project curve, at the right level')
+    else bad('fade-in level', levelAt(0.8) + ' want ' + bedGain * 0.4)
+    if (close(levelAt(3.5), bedGain)) ok('and sits at full level clear of both fades')
+    else bad('mid level', levelAt(3.5) + ' want ' + bedGain)
+    if (close(levelAt(5.5), bedGain * 0.25)) ok('and fades out into the last seconds')
+    else bad('fade-out level', levelAt(5.5) + ' want ' + bedGain * 0.25)
+
+    // Zero means no fade, not a divide by zero.
+    const abrupt = build('assets/audio/music.wav', { fadeInSeconds: 0, fadeOutSeconds: 0 })
+    const abruptBed = abrupt.bed()
+    abrupt.at(100)
+    abrupt.preview.play(0)
+    for (let index = 0; index < 200; index += 1) { abrupt.at(100); if (frame !== undefined) frame() }
+    if (Number.isFinite(abruptBed.volume) && abruptBed.volume > 0.05)
+      ok('a zero fade starts at full level rather than at NaN')
+    else bad('zero fade', String(abruptBed.volume))
+    abrupt.preview.dispose()
+    swell.preview.dispose()
+
+    // Out-of-range values are clamped by the same function the render uses, so
+    // the loudest a bed can be here is the loudest it can be in the file.
+    const shouted = resolveMusicSettings({ gainDb: 40, fadeInSeconds: -3 })
+    if (shouted.gainDb === MIX_BOUNDS.gainDb.max && shouted.fadeInSeconds === 0)
+      ok('out-of-range mix settings clamp rather than pass through')
+    else bad('no clamp', JSON.stringify(shouted))
+    if (resolveMusicSettings(undefined).gainDb === -20)
+      ok('an untouched project still gets the spec level')
+    else bad('default drifted', String(resolveMusicSettings(undefined).gainDb))
 
     // Pausing the film must stop the bed too, or the music plays on over a
     // frozen picture.
@@ -2956,8 +3045,12 @@ async function main() {
 
     // A filename is not a preview. The bed has to be playable in place, the
     // same rule the media card and the reference slots follow.
+    // Bounded by the section's own end rather than a character count: the panel
+    // grew past the old window and the check reported a missing preview that
+    // was there all along.
     const panelAt = screen.indexOf('dcs-panel dcs-music')
-    if (panelAt !== -1 && screen.slice(panelAt, panelAt + 3000).includes('<audio'))
+    const panelEnd = screen.indexOf('</section>', panelAt)
+    if (panelAt !== -1 && screen.slice(panelAt, panelEnd).includes('<audio'))
       ok('the bed can be played on the page, not just named')
     else bad('no preview', 'the panel only shows a filename')
 
@@ -2993,6 +3086,17 @@ async function main() {
     // import instruction cannot drift from what the tests check.
     if (screen.includes('buildMusicJob(')) ok('the panel sends the built request, not a second copy of it')
     else bad('inline message', 'the timeline screen composes its own music request')
+
+    // Saving is explicit. It used to happen on blur, which gave no sign it had
+    // -- the only way to find out was to reload the page. Three more fields
+    // saving that way would have been three more things to doubt.
+    const panelSlice = panelAt === -1 ? '' : screen.slice(panelAt, panelEnd)
+    if (panelSlice.includes('commitMusic()') && !panelSlice.includes('onBlur'))
+      ok('the music form saves on a button, not silently on blur')
+    else bad('blur save', 'the form still persists without saying so')
+    if (screen.includes('musicDirty') && screen.includes('未保存'))
+      ok('and says so while anything is unsaved')
+    else bad('no dirty marker', 'nothing shows that the form has unsaved changes')
   }
   console.log('\n== 技能是否真的会加载 ==')
   {
@@ -3250,6 +3354,33 @@ async function main() {
     // as "the music is fine and I cannot hear the words".
     if (graph.includes('[bed][key]sidechaincompress')) ok('the bed is what gets ducked, not the voice')
     else bad('sidechain order', graph)
+
+    // The three overridable numbers actually reach the graph. A control that
+    // saves but does not change the filter is the worst kind: the file sounds
+    // the same and the setting looks accepted.
+    const custom = musicMixFilter({
+      totalSeconds: 60, loudness: loudnessFor('youtube'), voiceInput: 0, musicInput: 1,
+      settings: { gainDb: -12, fadeInSeconds: 4, fadeOutSeconds: 6 },
+    })
+    if (custom.includes('volume=-12dB')) ok('the project bed level reaches the filter')
+    else bad('gain ignored', custom)
+    if (custom.includes('afade=t=in:st=0:d=4')) ok('so does the fade-in')
+    else bad('fade-in ignored', custom)
+    // The fade-out start is derived, not stored: 60 - 6.
+    if (custom.includes('afade=t=out:st=54.000:d=6')) ok('and the fade-out, placed from the film length')
+    else bad('fade-out ignored', custom)
+    // A fade longer than the film would start before zero, and ffmpeg reads a
+    // negative st as garbage rather than as an error.
+    const stubby = musicMixFilter({
+      totalSeconds: 3, loudness: loudnessFor('youtube'), voiceInput: 0, musicInput: 1,
+      settings: { fadeOutSeconds: 20 },
+    })
+    if (stubby.includes('afade=t=out:st=0.000:')) ok('a fade longer than the film starts at zero, not before it')
+    else bad('negative fade start', stubby)
+    // The untouched graph still carries the spec values.
+    if (graph.includes('volume=-20dB') && graph.includes('afade=t=in:st=0:d=1.5'))
+      ok('a project that sets nothing still renders the spec mix')
+    else bad('defaults drifted', graph)
 
     // ---- loudness --------------------------------------------------------
 

@@ -281,7 +281,10 @@ export class StateMachine {
     loraStrength?: number
     references?: string[]
     voiceReferences?: string[]
-    music?: { path?: string; workflow?: string; prompt?: string }
+    music?: {
+      path?: string; workflow?: string; prompt?: string
+      gain_db?: number; fade_in?: number; fade_out?: number
+    }
     targetPlatform?: string
     /** @deprecated storage moved to the scene_plan artifact; read-only legacy. */
     shotPlan?: Record<string, Array<{ prompt?: string; weight?: number }>>

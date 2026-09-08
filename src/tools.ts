@@ -836,7 +836,14 @@ function composeDefinition(runtime: StudioRuntime): ToolDefinition {
         // property of the film, and letting a render name a different one would
         // make two exports of the same cut differ in a way nothing recorded.
         ...(marker.music?.path === undefined || marker.music.path === ''
-          ? {} : { musicPath: marker.music.path }),
+          ? {} : {
+              musicPath: marker.music.path,
+              musicSettings: {
+                gainDb: marker.music.gain_db,
+                fadeInSeconds: marker.music.fade_in,
+                fadeOutSeconds: marker.music.fade_out,
+              },
+            }),
         signal: exec.signal,
       })
       // Said out loud, always: a frame that silently differs from the settings

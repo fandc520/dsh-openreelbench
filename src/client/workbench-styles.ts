@@ -618,6 +618,11 @@ const CSS = `
 .dcs-music-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .dcs-music-form > .dcs-input { flex: 1 1 220px; min-width: 0; }
 .dcs-input-small { width: 190px; }
+.dcs-input-tiny { width: 58px; }
+/* Unsaved is stated in words as well as colour: the marker has to survive a
+   reader who cannot tell the accent from the resting state. */
+.dcs-music-dirty { color: #f4d58d; }
+.dcs-btn-accent { border-color: rgba(244, 213, 141, .45); color: #f4d58d; }
 
 /* Info area: what the one-line lanes had to leave out. */
 .dcs-info { gap: 10px; }

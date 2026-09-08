@@ -43,6 +43,7 @@ import { buildScenePrompts } from './prompt.js'
 import { checkSceneVariation } from './variation.js'
 import { scoreSlideshowRisk } from './slideshow.js'
 import { AssetError, IMPORT_KINDS, type ImportKind, type ImportRequest, importAssets, musicPatchOf, trimAudioAsset } from './assets.js'
+import { MIX_BOUNDS } from './audio-mix.js'
 import { listPipelines, resolvePipeline } from './pipelines.js'
 import { planSections } from './compose.js'
 import { CutError, type Cut, deleteCut, listCuts, parseCut, readCut, writeCut } from './cuts.js'
@@ -546,7 +547,10 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
           loraStrength?: number
           references?: string[]
           voiceReferences?: string[]
-          music?: { path?: string; workflow?: string; prompt?: string }
+          music?: {
+            path?: string; workflow?: string; prompt?: string
+            gain_db?: number; fade_in?: number; fade_out?: number
+          }
           targetPlatform?: string
           shotPlan?: Record<string, Array<{ prompt?: string; weight?: number }>>
         } = {}
@@ -589,7 +593,10 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
         }
         if (input.music !== null && typeof input.music === 'object' && !Array.isArray(input.music)) {
           const music = input.music as Record<string, unknown>
-          const patchMusic: { path?: string; workflow?: string; prompt?: string } = {}
+          const patchMusic: {
+            path?: string; workflow?: string; prompt?: string
+            gain_db?: number; fade_in?: number; fade_out?: number
+          } = {}
           // Only the keys that were sent. An absent key means "leave it", which
           // is what lets the panel save a workflow name and the agent save a
           // path without either erasing the other.
@@ -606,6 +613,19 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
             }
             patchMusic.path = relative
           }
+          // Clamped through the same function the render and the preview use, so
+          // an out-of-range value cannot mean one thing on the page and another
+          // in the file.
+          const bounded = (value: unknown, bound: { min: number; max: number }): number | undefined =>
+            typeof value === 'number' && Number.isFinite(value)
+              ? Math.min(bound.max, Math.max(bound.min, value))
+              : undefined
+          const gain = bounded(music.gain_db, MIX_BOUNDS.gainDb)
+          if (gain !== undefined) patchMusic.gain_db = gain
+          const fadeIn = bounded(music.fade_in, MIX_BOUNDS.fadeInSeconds)
+          if (fadeIn !== undefined) patchMusic.fade_in = fadeIn
+          const fadeOut = bounded(music.fade_out, MIX_BOUNDS.fadeOutSeconds)
+          if (fadeOut !== undefined) patchMusic.fade_out = fadeOut
           if (Object.keys(patchMusic).length > 0) patch.music = patchMusic
         }
         if (typeof input.lora_strength === 'number' && Number.isFinite(input.lora_strength)) {

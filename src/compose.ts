@@ -29,7 +29,10 @@ import type { AssetManifest, AssetRecord, RenderOutput, RenderReport, Script, Sc
 import type { Playbook } from './playbooks.js'
 import type { Cut, CutSection } from './cuts.js'
 import { resolveVideoProfile } from './media-profile.js'
-import { loudnessFor, loudnormAnalyseArgs, loudnormFilter, musicMixFilter, parseLoudnorm } from './audio-mix.js'
+import {
+  type MusicSettings,
+  loudnessFor, loudnormAnalyseArgs, loudnormFilter, musicMixFilter, parseLoudnorm,
+} from './audio-mix.js'
 import { type SubtitleBackground, renderAss } from './subtitle-style.js'
 import { type ProjectLayout, ensureDir, pathExists, resolveInProject, toProjectRelative } from './project.js'
 import { type SubtitleCue, cuesForSection, renderSrt } from './subtitle.js'
@@ -542,6 +545,8 @@ export interface ComposeOptions {
    * one. Looped and cut to the film's length, ducked under the narration.
    */
   musicPath?: string | undefined
+  /** The project's level and fade overrides. Absent fields take the spec. */
+  musicSettings?: MusicSettings | undefined
   /** The editor's version, when one is being rendered. */
   cut?: Cut | undefined
   signal: AbortSignal
@@ -755,6 +760,7 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
         // serve both without a second copy that drifts.
         voiceInput: 0,
         musicInput: 1,
+        ...(options.musicSettings === undefined ? {} : { settings: options.musicSettings }),
       }),
       '-map', '[out]',
       '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le',

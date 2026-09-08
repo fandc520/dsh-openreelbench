@@ -27,11 +27,32 @@ export interface PreviewSection {
   narrationPath?: string
 }
 
+/**
+ * The bed, with every number already decided.
+ *
+ * Resolved by the caller rather than here, and deliberately: `audio-mix.ts` is
+ * host code, and importing it would put this module back out of reach of the
+ * test run — Node's type stripping does not rewrite a relative `.js` specifier
+ * onto a `.ts` file. The caller lives in the bundle, where that import is free.
+ * So the clamping still happens in exactly one place; it just happens one level
+ * up, and this module stays a thing that can be driven directly.
+ */
+export interface PreviewMusic {
+  /** Project-relative path. */
+  path: string
+  /** Linear gain when nobody is talking. */
+  gain: number
+  /** Linear gain while someone is. */
+  ducked: number
+  fadeInSeconds: number
+  fadeOutSeconds: number
+}
+
 export interface PreviewOptions {
   projectId: string
   sections: readonly PreviewSection[]
-  /** Project-relative music bed. Looped under the whole film, ducked under speech. */
-  musicPath?: string | undefined
+  /** The music bed, already resolved. Absent means the project has none. */
+  music?: PreviewMusic | undefined
   /** Called on every animation frame with the current position. */
   onTick: (seconds: number) => void
   onEnd: () => void
@@ -40,23 +61,6 @@ export interface PreviewOptions {
 /** Drift beyond this and the clip is nudged back onto the clock. */
 const SYNC_TOLERANCE = 0.25
 
-/**
- * The bed's two levels, as linear gain rather than decibels because that is
- * what `HTMLMediaElement.volume` takes.
- *
- * These are the render's own numbers converted: MIX.bedDb is -20 dB, which is
- * 10^(-20/20) = 0.1, and the sidechain takes it about 8 dB further down during
- * speech, 10^(-28/20) = 0.04. The preview exists to judge whether a pause works
- * and whether a cut lands, and it cannot answer that if the music sits at a
- * level the render will never produce.
- *
- * The duck is done by switching this element's gain rather than with a real
- * compressor: the preview already knows exactly which frames have speech in
- * them — it schedules them — so the one thing a sidechain would have to detect
- * is here for free, and a WebAudio graph would buy nothing but latency.
- */
-const BED_GAIN = 0.1
-const BED_GAIN_DUCKED = 0.04
 /** Per-frame approach toward the target gain, so the duck is not a click. */
 const DUCK_GLIDE = 0.12
 
@@ -72,6 +76,21 @@ export class Preview {
 
   /** The bed, when the project has one. One element for the whole film. */
   private readonly music: HTMLAudioElement | undefined
+  /** Resolved once: the render resolves the same stored values the same way. */
+  private readonly bedGain: number
+  private readonly bedDucked: number
+  private readonly fadeIn: number
+  private readonly fadeOut: number
+  /**
+   * The ducked level BEFORE the fade envelope, held here rather than read back
+   * off the element.
+   *
+   * `bed.volume` is the product of the two. Gliding from it would feed the
+   * envelope back into the duck: during a fade-in the glide would chase a
+   * value the envelope had already lowered, and the two would settle somewhere
+   * neither asked for. One state per thing that has its own reason to change.
+   */
+  private bedLevel: number
 
   /**
    * Written out rather than declared as a constructor parameter property.
@@ -96,14 +115,21 @@ export class Preview {
       this.audio.set(section.sectionId, element)
     }
 
-    if (options.musicPath !== undefined && options.musicPath !== '') {
-      const bed = new Audio(mediaUrl(options.musicPath))
+    const settings = options.music
+    this.bedGain = settings?.gain ?? 0
+    this.bedLevel = this.bedGain
+    this.bedDucked = settings?.ducked ?? 0
+    this.fadeIn = settings?.fadeInSeconds ?? 0
+    this.fadeOut = settings?.fadeOutSeconds ?? 0
+
+    if (settings !== undefined && settings.path !== '') {
+      const bed = new Audio(mediaUrl(settings.path))
       bed.preload = 'auto'
       // The render loops a short bed to fill the film, so the preview must too
       // — otherwise a two-minute cut goes silent halfway through a check the
       // finished file would pass.
       bed.loop = true
-      bed.volume = BED_GAIN
+      bed.volume = this.bedGain
       this.music = bed
     }
   }
@@ -173,15 +199,32 @@ export class Preview {
     if (this.music !== undefined) this.music.src = ''
   }
 
+  /**
+   * The fade envelope at one position, as a multiplier.
+   *
+   * The render does this with `afade` at both ends; here it multiplies the
+   * ducked level. Without it, dragging the fade-in to eight seconds would
+   * change the exported film and nothing you could hear while deciding.
+   */
+  private envelope(at: number, total: number): number {
+    const rising = this.fadeIn <= 0 ? 1 : Math.min(1, at / this.fadeIn)
+    const falling = this.fadeOut <= 0 ? 1 : Math.min(1, (total - at) / this.fadeOut)
+    return Math.max(0, Math.min(rising, falling))
+  }
+
   /** Glide the bed toward the level this frame calls for. */
-  private duck(speaking: boolean): void {
+  private duck(speaking: boolean, at: number, total: number): void {
     const bed = this.music
     if (bed === undefined) return
-    const target = speaking ? BED_GAIN_DUCKED : BED_GAIN
-    const next = bed.volume + (target - bed.volume) * DUCK_GLIDE
+    // The duck glides; the fade does not. One is a reaction to speech and
+    // wants smoothing, the other is already a ramp and smoothing it twice
+    // would just make it start late.
+    const target = speaking ? this.bedDucked : this.bedGain
+    const next = this.bedLevel + (target - this.bedLevel) * DUCK_GLIDE
     // Snapping the last sliver avoids an asymptote that never arrives and
     // keeps writing to the element on every frame forever.
-    bed.volume = Math.abs(next - target) < 0.002 ? target : Math.min(1, Math.max(0, next))
+    this.bedLevel = Math.abs(next - target) < 0.002 ? target : next
+    bed.volume = Math.min(1, Math.max(0, this.bedLevel * this.envelope(at, total)))
   }
 
   private tick = (): void => {
@@ -240,7 +283,7 @@ export class Preview {
       }
     }
 
-    this.duck(speaking)
+    this.duck(speaking, now, total)
 
     this.options.onTick(now)
     this.raf = requestAnimationFrame(this.tick)

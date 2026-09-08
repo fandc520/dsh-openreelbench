@@ -27,7 +27,11 @@ export interface ProjectMarker {
   /** Reference AUDIO names in the same directory — voice cloning, project-wide. */
   voice_references?: string[]
   /** The background music bed: which workflow scored it, and where it landed. */
-  music?: { path?: string; workflow?: string; prompt?: string }
+  music?: {
+    path?: string; workflow?: string; prompt?: string
+    /** Absent means the spec default; see resolveMusicSettings. */
+    gain_db?: number; fade_in?: number; fade_out?: number
+  }
   /**
    * How many shots each section is cut into, and what each is meant to show.
    *
@@ -423,7 +427,10 @@ export const api = {
     lora_strength?: number
     references?: string[]
     voice_references?: string[]
-    music?: { path?: string; workflow?: string; prompt?: string }
+    music?: {
+      path?: string; workflow?: string; prompt?: string
+      gain_db?: number; fade_in?: number; fade_out?: number
+    }
   }): Promise<{ project: ProjectMarker }> =>
     request('/studio/project', { method: 'POST', body: JSON.stringify(body) }),
 

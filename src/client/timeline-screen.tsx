@@ -28,6 +28,7 @@ import { AdvicePanel } from './advice-panel.tsx'
 import { Strip } from './strip.tsx'
 import { Preview } from './preview.ts'
 import { MUSIC_SKILL, buildMusicJob } from '../music-job.js'
+import { DUCK_DB, MIX_BOUNDS, gainToVolume, resolveMusicSettings } from '../audio-mix.js'
 
 export interface TimelineScreenProps {
   state: StudioState
@@ -190,6 +191,14 @@ export function TimelineScreen({
    */
   const [musicWorkflow, setMusicWorkflow] = useState(state.project.music?.workflow ?? '')
   const [musicNote, setMusicNote] = useState('')
+  /**
+   * The mix fields as typed, before they are saved.
+   *
+   * Strings rather than numbers: a spin box the user is halfway through
+   * clearing holds '' for a keystroke, and coercing that to 0 mid-edit moves
+   * the slider under their hands. The parse happens once, on save.
+   */
+  const [musicForm, setMusicForm] = useState<{ gain: string; fadeIn: string; fadeOut: string } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [result, setResult] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [at, setAt] = useState(0)
@@ -466,6 +475,39 @@ export function TimelineScreen({
     [state.timeline],
   )
 
+  const musicPath = state.project.music?.path
+
+  /**
+   * The stored mix settings, resolved once for both the preview and the form.
+   *
+   * `resolveMusicSettings` is the render's own clamp, so an untouched project
+   * shows the spec defaults rather than blanks, and an out-of-range stored
+   * value reads the same here as it will sound in the file.
+   */
+  const musicMix = useMemo(
+    () => resolveMusicSettings({
+      gainDb: state.project.music?.gain_db,
+      fadeInSeconds: state.project.music?.fade_in,
+      fadeOutSeconds: state.project.music?.fade_out,
+    }),
+    [state.project.music?.gain_db, state.project.music?.fade_in, state.project.music?.fade_out],
+  )
+
+  const previewMusic = useMemo(
+    () => musicPath === undefined || musicPath === ''
+      ? undefined
+      : {
+          path: musicPath,
+          gain: gainToVolume(musicMix.gainDb),
+          ducked: gainToVolume(musicMix.gainDb + DUCK_DB),
+          fadeInSeconds: musicMix.fadeInSeconds,
+          fadeOutSeconds: musicMix.fadeOutSeconds,
+        },
+    [musicPath, musicMix],
+  )
+  /** Rebuild the preview when any of it changes, not only when the file does. */
+  const musicKey = previewMusic === undefined ? '' : JSON.stringify(previewMusic)
+
   useEffect(() => {
     // Carry the position across a rebuild: the edit that changed the timing was
     // made while listening at a particular moment, and being thrown back to the
@@ -484,8 +526,9 @@ export function TimelineScreen({
         trimStart: timing.trimStart,
         ...(timing.narrationPath === undefined ? {} : { narrationPath: timing.narrationPath }),
       })),
-      ...(state.project.music?.path === undefined || state.project.music.path === ''
-        ? {} : { musicPath: state.project.music.path }),
+      // Resolved here, through the same clamp the render uses, so the preview
+      // cannot land on a different level than the export from one stored value.
+      ...(previewMusic === undefined ? {} : { music: previewMusic }),
       onTick: setAt,
       onEnd: () => setPreviewing(false),
     })
@@ -500,7 +543,7 @@ export function TimelineScreen({
     // built, or the edit loop stays silent until something unrelated happens to
     // rebuild it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timelineKey, state.project.id, state.project.music?.path])
+  }, [timelineKey, state.project.id, musicKey])
 
   /**
    * What Space does right now, kept fresh on every render.
@@ -698,19 +741,71 @@ export function TimelineScreen({
 
   /* ------------------------------------------------------------- 配乐 */
 
-  const musicPath = state.project.music?.path
   const musicUrl = musicPath === undefined || musicPath === ''
     ? undefined
     : '/studio/media?project=' + encodeURIComponent(state.project.id)
       + '&path=' + encodeURIComponent(musicPath)
 
   /** Remember the workflow name on the project, so the next film starts there. */
-  async function saveMusic(patch: { workflow?: string; path?: string }): Promise<void> {
+  async function saveMusic(patch: {
+    workflow?: string; path?: string
+    gain_db?: number; fade_in?: number; fade_out?: number
+  }): Promise<void> {
     try {
       await api.updateProject({ project: state.project.id, music: patch })
       await onReload()
     } catch (error) {
       say('error', (error as Error).message)
+    }
+  }
+
+  /** What the form shows: the draft while editing, the stored values otherwise. */
+  const musicFields = musicForm ?? {
+    gain: String(musicMix.gainDb),
+    fadeIn: String(musicMix.fadeInSeconds),
+    fadeOut: String(musicMix.fadeOutSeconds),
+  }
+  const musicDirty = musicForm !== null
+    || musicWorkflow.trim() !== (state.project.music?.workflow ?? '')
+
+  function editMusic(patch: Partial<typeof musicFields>): void {
+    setMusicForm({ ...musicFields, ...patch })
+  }
+
+  /**
+   * Save the whole music form at once.
+   *
+   * Explicit rather than on blur, which is how this started: a field that saves
+   * when it loses focus gives no sign it did, and the only way to find out was
+   * to reload the page. Three fields that each silently persisted would be
+   * worse. One button, one confirmation, and a marker while anything is unsaved.
+   */
+  async function commitMusic(): Promise<void> {
+    if (busy !== null || phase !== null) return
+    // An empty or unparseable box means "leave this one alone" rather than
+    // zero: clearing a field to retype it must not be a way to set 0 dB.
+    const num = (text: string): number | undefined => {
+      const value = Number(text.trim())
+      return text.trim() === '' || !Number.isFinite(value) ? undefined : value
+    }
+    const gain = num(musicFields.gain)
+    const fadeIn = num(musicFields.fadeIn)
+    const fadeOut = num(musicFields.fadeOut)
+    setBusy('music')
+    try {
+      await saveMusic({
+        workflow: musicWorkflow.trim(),
+        ...(gain === undefined ? {} : { gain_db: gain }),
+        ...(fadeIn === undefined ? {} : { fade_in: fadeIn }),
+        ...(fadeOut === undefined ? {} : { fade_out: fadeOut }),
+      })
+      // Dropping the draft is what makes the inputs snap to the CLAMPED values
+      // the host stored, so an out-of-range entry corrects itself in place
+      // instead of sitting there looking accepted.
+      setMusicForm(null)
+      say('ok', '配乐设置已保存。合成和这里的试听都会按这个来。')
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -1438,11 +1533,6 @@ export function TimelineScreen({
               placeholder="ComfyUI 里的配乐工作流名称"
               disabled={phase !== null}
               onChange={(event) => setMusicWorkflow(event.target.value)}
-              onBlur={() => {
-                if (musicWorkflow.trim() !== (state.project.music?.workflow ?? '')) {
-                  void saveMusic({ workflow: musicWorkflow.trim() })
-                }
-              }}
             />
           </label>
           <input
@@ -1464,6 +1554,66 @@ export function TimelineScreen({
               idle={musicPath === undefined || musicPath === '' ? '添加音乐' : '换一首'}
             />
           </button>
+        </div>
+
+        {/* The three numbers a person can judge by listening. Everything else in
+            the mix — the carve, the duck ratio, the loudness target — answers a
+            question listening does not ask, and stays fixed. */}
+        <div className="dcs-music-form">
+          <label className="dcs-inline-pick" title={
+            '音乐床相对解说的音量。规范值 ' + MIX_BOUNDS.gainDb.default
+            + ' dB（W3C：音乐要比人声低 20dB）。解说一响还会再自动压低 ' + (-DUCK_DB) + ' dB'
+          }>
+            <span className="dcs-hint">音量</span>
+            <input
+              className="dcs-input dcs-input-tiny"
+              type="number"
+              step={1}
+              min={MIX_BOUNDS.gainDb.min}
+              max={MIX_BOUNDS.gainDb.max}
+              value={musicFields.gain}
+              disabled={phase !== null}
+              onChange={(event) => editMusic({ gain: event.target.value })}
+            />
+            <span className="dcs-hint">dB</span>
+          </label>
+          <label className="dcs-inline-pick" title="开头music淡入的秒数">
+            <span className="dcs-hint">淡入</span>
+            <input
+              className="dcs-input dcs-input-tiny"
+              type="number"
+              step={0.5}
+              min={MIX_BOUNDS.fadeInSeconds.min}
+              max={MIX_BOUNDS.fadeInSeconds.max}
+              value={musicFields.fadeIn}
+              disabled={phase !== null}
+              onChange={(event) => editMusic({ fadeIn: event.target.value })}
+            />
+            <span className="dcs-hint">s</span>
+          </label>
+          <label className="dcs-inline-pick" title="结尾淡出的秒数">
+            <span className="dcs-hint">淡出</span>
+            <input
+              className="dcs-input dcs-input-tiny"
+              type="number"
+              step={0.5}
+              min={MIX_BOUNDS.fadeOutSeconds.min}
+              max={MIX_BOUNDS.fadeOutSeconds.max}
+              value={musicFields.fadeOut}
+              disabled={phase !== null}
+              onChange={(event) => editMusic({ fadeOut: event.target.value })}
+            />
+            <span className="dcs-hint">s</span>
+          </label>
+          <span className="dcs-spacer" />
+          {musicDirty ? <span className="dcs-hint dcs-music-dirty">未保存</span> : null}
+          <button
+            type="button"
+            className={'dcs-btn dcs-btn-small' + (musicDirty ? ' dcs-btn-accent' : '')}
+            disabled={phase !== null || busy !== null || !musicDirty}
+            title="保存工作流名称和这三项设置。合成与试听都按保存后的值走"
+            onClick={() => void commitMusic()}
+          >{busy === 'music' ? '保存中…' : '保存'}</button>
         </div>
 
         {/* The bed itself, playable. A filename is not a preview. */}

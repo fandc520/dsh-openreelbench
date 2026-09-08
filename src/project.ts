@@ -113,6 +113,13 @@ export interface ProjectMarker {
     workflow?: string
     /** What the model asked the workflow for. Shown back, never re-parsed. */
     prompt?: string
+    /**
+     * The three the compose screen can change. Absent means the spec default,
+     * which is the point: an untouched project still gets the W3C figure.
+     */
+    gain_db?: number
+    fade_in?: number
+    fade_out?: number
   }
   /**
    * The shot plan: how many pictures each section is cut into, and what each

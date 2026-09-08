@@ -72,6 +72,70 @@ export const MIX = {
 } as const
 
 /**
+ * The three numbers a project may override, and their bounds.
+ *
+ * Everything else in `MIX` stays fixed. These three are the ones a person can
+ * actually judge by listening — is the music too loud for this narration, does
+ * this opening want a longer swell — and the rest (the carve frequency, the
+ * duck ratio, the loudness target) are answers to questions listening does not
+ * ask.
+ *
+ * The DEFAULT gain is the spec's own -20 dB, so a project that never touches
+ * the control still gets the W3C figure. Overriding it is a decision, not a
+ * drift.
+ */
+export const MIX_BOUNDS = {
+  /** Quieter than -40 is inaudible; louder than -6 buries the words. */
+  gainDb: { min: -40, max: -6, default: MIX.bedDb },
+  fadeInSeconds: { min: 0, max: 20, default: MIX.fadeInSeconds },
+  fadeOutSeconds: { min: 0, max: 20, default: MIX.fadeOutSeconds },
+} as const
+
+/** What a project chose, if anything. Absent fields take the default. */
+export interface MusicSettings {
+  gainDb?: number | undefined
+  fadeInSeconds?: number | undefined
+  fadeOutSeconds?: number | undefined
+}
+
+/**
+ * One clamp, used by the route, the render and the preview.
+ *
+ * Kept here rather than at the edge that happens to receive the number: the
+ * preview has to reach the same answer as the render from the same stored
+ * value, and two clamps would eventually disagree about an out-of-range one.
+ */
+export function resolveMusicSettings(settings: MusicSettings | undefined): {
+  gainDb: number
+  fadeInSeconds: number
+  fadeOutSeconds: number
+} {
+  const pick = (value: number | undefined, bound: { min: number; max: number; default: number }): number =>
+    value === undefined || !Number.isFinite(value)
+      ? bound.default
+      : Math.min(bound.max, Math.max(bound.min, value))
+  return {
+    gainDb: pick(settings?.gainDb, MIX_BOUNDS.gainDb),
+    fadeInSeconds: pick(settings?.fadeInSeconds, MIX_BOUNDS.fadeInSeconds),
+    fadeOutSeconds: pick(settings?.fadeOutSeconds, MIX_BOUNDS.fadeOutSeconds),
+  }
+}
+
+/**
+ * How far the sidechain pulls the bed down while someone is talking.
+ *
+ * Measured, not calculated — see the note on `duckRatio`. The preview reads it
+ * from here so that changing the ratio cannot leave the edit loop and the
+ * export describing different mixes.
+ */
+export const DUCK_DB = -8
+
+/** Decibels to the linear gain `HTMLMediaElement.volume` takes. */
+export function gainToVolume(db: number): number {
+  return Math.min(1, Math.max(0, Math.pow(10, db / 20)))
+}
+
+/**
  * Integrated loudness and true peak, per platform.
  *
  * The same `target_platform` that already decides the frame. Every platform
@@ -112,6 +176,8 @@ export interface MusicMixOptions {
   voiceInput: number
   /** ffmpeg input index of the music. */
   musicInput: number
+  /** The project's overrides. Absent fields take the spec defaults. */
+  settings?: MusicSettings | undefined
 }
 
 /**
@@ -128,9 +194,12 @@ export interface MusicMixOptions {
  */
 export function musicMixFilter(options: MusicMixOptions): string {
   const { totalSeconds, loudness, voiceInput, musicInput } = options
+  const { gainDb, fadeInSeconds, fadeOutSeconds } = resolveMusicSettings(options.settings)
   const v = '[' + voiceInput + ':a]'
   const m = '[' + musicInput + ':a]'
-  const fadeOutStart = Math.max(0, totalSeconds - MIX.fadeOutSeconds)
+  // A fade-out longer than the film would start before zero, and ffmpeg reads a
+  // negative `st` as garbage rather than as an error.
+  const fadeOutStart = Math.max(0, totalSeconds - fadeOutSeconds)
 
   return [
     // The bed: shaped, levelled, cut to length, faded at both ends. `atrim`
@@ -139,11 +208,11 @@ export function musicMixFilter(options: MusicMixOptions): string {
     m + 'aresample=48000,'
       + 'highpass=f=' + MIX.highpassHz + ','
       + 'equalizer=f=' + MIX.carveHz + ':t=q:w=' + MIX.carveQ + ':g=' + MIX.carveDb + ','
-      + 'volume=' + MIX.bedDb + 'dB,'
+      + 'volume=' + gainDb + 'dB,'
       + 'atrim=0:' + totalSeconds.toFixed(3) + ','
       + 'asetpts=PTS-STARTPTS,'
-      + 'afade=t=in:st=0:d=' + MIX.fadeInSeconds + ','
-      + 'afade=t=out:st=' + fadeOutStart.toFixed(3) + ':d=' + MIX.fadeOutSeconds
+      + 'afade=t=in:st=0:d=' + fadeInSeconds + ','
+      + 'afade=t=out:st=' + fadeOutStart.toFixed(3) + ':d=' + fadeOutSeconds
       + '[bed]',
 
     // The narration is used twice: once as the thing you hear, once as the key
