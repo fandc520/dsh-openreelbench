@@ -2812,6 +2812,132 @@ async function main() {
   }
 
 
+  console.log('\n== 编辑模式的配乐播放 ==')
+  {
+    // The preview is a plain class -- no React, no DOM past two audio elements
+    // -- so it is driven directly here rather than asserted about as source
+    // text. Both of the bugs this covers looked completely fine on the page.
+    const made = []
+    globalThis.Audio = class FakeAudio {
+      constructor(src) {
+        this.src = src
+        this.volume = 1
+        this.currentTime = 0
+        this.duration = NaN
+        this.loop = false
+        this.preload = ''
+        this.paused = true
+        this.seeking = false
+        this.readyState = 4
+        made.push(this)
+      }
+
+      play() { this.paused = false; return Promise.resolve() }
+      pause() { this.paused = true }
+    }
+    // The clock is driven by hand: a real rAF would make every assertion a race.
+    let frame
+    globalThis.requestAnimationFrame = (fn) => { frame = fn; return 1 }
+    globalThis.cancelAnimationFrame = () => { frame = undefined }
+
+    const { Preview } = await import('../src/client/preview.ts')
+
+    // Two sections: speech from 1.0 to 3.0, then silence to 6.0.
+    const sections = [
+      { sectionId: 's1', start: 0, duration: 3, speechSeconds: 2, lead: 1, trimStart: 0, narrationPath: 'assets/audio/01-s1.wav' },
+      { sectionId: 's2', start: 3, duration: 3, speechSeconds: 0, lead: 0, trimStart: 0 },
+    ]
+    const build = (musicPath) => {
+      made.length = 0
+      let now = 0
+      globalThis.performance = { now: () => now * 1000 }
+      const preview = new Preview({
+        projectId: 'smoke',
+        sections,
+        ...(musicPath === undefined ? {} : { musicPath }),
+        onTick: () => {},
+        onEnd: () => {},
+      })
+      return { preview, at: (seconds) => { now = seconds }, bed: () => made[made.length - 1] }
+    }
+
+    // No bed on the project means no element at all.
+    const silent = build(undefined)
+    if (made.length === 1) ok('a project with no bed builds only its narration clips')
+    else bad('spurious element', made.length + ' audio elements')
+    silent.preview.dispose()
+
+    const run = build('assets/audio/music.wav')
+    const bed = run.bed()
+    if (bed.src.includes('music.wav')) ok('the bed is loaded from the project path')
+    else bad('bed src', bed.src)
+    // The render loops a short bed to fill the film; a preview that stops
+    // halfway is judging a different cut than the one being exported.
+    if (bed.loop === true) ok('the bed loops, as the render does')
+    else bad('no loop', 'a short bed would go silent mid-film')
+
+    // Starting mid-film must aim the bed at the same point the render's
+    // -stream_loop would be at, not restart it from zero.
+    bed.duration = 4
+    run.at(100)
+    run.preview.play(5)
+    if (!bed.paused && Math.abs(bed.currentTime - 1) < 0.001)
+      ok('starting at 5s into a 4s bed lands at 1s, where the loop actually is')
+    else bad('bed not aimed', 'paused=' + bed.paused + ' currentTime=' + bed.currentTime)
+
+    // The duck. Levels are the render's own, converted to linear gain.
+    // The clock is pinned BEFORE play, because `origin` is computed there: move
+    // it afterwards and every tick reads a position neither the test nor the
+    // player intended. Holding it still is what makes a frame loop mean
+    // "the same instant, repeatedly".
+    const settle = (seconds, frames) => {
+      run.at(100)
+      run.preview.play(seconds)
+      for (let index = 0; index < frames; index += 1) {
+        run.at(100)
+        if (frame !== undefined) frame()
+      }
+    }
+    settle(4.0, 120)
+    const quiet = bed.volume
+    settle(2.0, 120)
+    const ducked = bed.volume
+    if (Math.abs(quiet - 0.1) < 0.005) ok('between sentences the bed sits at the -20 dB it renders at')
+    else bad('bed level', String(quiet))
+    if (Math.abs(ducked - 0.04) < 0.005) ok('under speech it ducks to -28 dB, as the sidechain does')
+    else bad('no duck in preview', String(ducked))
+
+    // Section s2 has no narration file. It is still speech time in the
+    // timeline when it has any, and a duck keyed off "is a clip playing"
+    // rather than "is this speech" would miss exactly that case.
+    const gapless = [
+      { sectionId: 'g1', start: 0, duration: 3, speechSeconds: 2, lead: 0, trimStart: 0 },
+    ]
+    made.length = 0
+    let clock = 0
+    globalThis.performance = { now: () => clock * 1000 }
+    const orphan = new Preview({
+      projectId: 'smoke', sections: gapless, musicPath: 'assets/audio/music.wav',
+      onTick: () => {}, onEnd: () => {},
+    })
+    const orphanBed = made[made.length - 1]
+    clock = 100
+    orphan.play(0.5)
+    for (let index = 0; index < 120; index += 1) { clock = 100; if (frame !== undefined) frame() }
+    if (Math.abs(orphanBed.volume - 0.04) < 0.005)
+      ok('a section whose narration is missing still ducks the bed')
+    else bad('duck missed', String(orphanBed.volume))
+    orphan.dispose()
+
+    // Pausing the film must stop the bed too, or the music plays on over a
+    // frozen picture.
+    run.preview.pause()
+    if (bed.paused) ok('pausing the preview pauses the bed')
+    else bad('bed kept playing', 'the music runs over a stopped picture')
+    run.preview.dispose()
+    if (bed.src === '') ok('disposing releases the bed')
+    else bad('bed leaked', bed.src)
+  }
   console.log('\n== 配乐面板 ==')
   {
     const fs = await import('node:fs')
@@ -2840,6 +2966,28 @@ async function main() {
     if (screen.includes('dcs-music-block') && screen.includes("dcs-lane-label-plain\">配乐"))
       ok('the bed shows as its own lane over the shared time axis')
     else bad('no lane', 'the timeline has no music track')
+
+    // ...IN the lane, not floating over the ruler. dcs-lane-blocks is an
+    // unpositioned flex row, so an absolutely-positioned child resolves against
+    // whatever is positioned further up the tree and lands at the top of the
+    // track. The cue lane is the exception and pays for it with its own
+    // position: relative; the bed spans the whole lane and needs neither.
+    const sheet = (await import('node:fs')).readFileSync('src/client/workbench-styles.ts', 'utf-8')
+    const ruleOf = (selector) => {
+      const at = sheet.indexOf(selector + ' {')
+      return at === -1 ? '' : sheet.slice(at, sheet.indexOf('}', at))
+    }
+    const laneRow = ruleOf('.dcs-lane-blocks')
+    const block = ruleOf('.dcs-music-block')
+    if (block !== '' && !block.includes('position: absolute'))
+      ok('the bed block is laid out by the lane, not positioned over it')
+    else bad('bed escapes its lane', block.trim())
+    // The reason the rule above matters, asserted rather than assumed: if the
+    // lane ever gains position: relative the constraint can be relaxed, and
+    // this says so out loud instead of leaving a rule nobody can re-derive.
+    if (!laneRow.includes('position:'))
+      ok('...and the lane it sits in is still unpositioned, which is why')
+    else bad('lane now positioned', laneRow.trim())
 
     // The message goes through the shared builder, so the skill gesture and the
     // import instruction cannot drift from what the tests check.

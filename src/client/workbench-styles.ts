@@ -593,9 +593,17 @@ const CSS = `
 
 /* The music bed: one block the length of the film, because that is literally
    what it is after looping and trimming. Deliberately flatter than a shot or a
-   take -- it is the thing everything else sits on top of, not a peer. */
+   take -- it is the thing everything else sits on top of, not a peer.
+
+   NOT absolutely positioned. dcs-lane-blocks is an unpositioned flex row, so an
+   absolute child resolves against whatever is positioned further up and lands
+   over the ruler at the top of the track -- which is exactly what it did. The
+   cue lane gets away with absolute positioning because it adds its own
+   position: relative (dcs-lane-cues); it needs to, since cues sit at their own
+   offsets. The bed is one block spanning the whole lane, so it can just be a
+   flex child that fills it. */
 .dcs-music-block {
-  position: absolute; top: 0; height: 20px; overflow: hidden;
+  flex: 1 1 auto; width: 100%; height: 20px; overflow: hidden;
   padding: 0 6px; cursor: pointer; font: inherit; font-size: 10px;
   display: flex; align-items: center; text-align: left;
   border-radius: 3px; white-space: nowrap;

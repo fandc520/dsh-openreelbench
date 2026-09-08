@@ -484,6 +484,8 @@ export function TimelineScreen({
         trimStart: timing.trimStart,
         ...(timing.narrationPath === undefined ? {} : { narrationPath: timing.narrationPath }),
       })),
+      ...(state.project.music?.path === undefined || state.project.music.path === ''
+        ? {} : { musicPath: state.project.music.path }),
       onTick: setAt,
       onEnd: () => setPreviewing(false),
     })
@@ -494,8 +496,11 @@ export function TimelineScreen({
       preview.current = null
     }
     // `at` is deliberately not a dependency: it changes every frame.
+    // The bed IS one: importing music has to reach a preview that is already
+    // built, or the edit loop stays silent until something unrelated happens to
+    // rebuild it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timelineKey, state.project.id])
+  }, [timelineKey, state.project.id, state.project.music?.path])
 
   /**
    * What Space does right now, kept fresh on every render.
@@ -1387,7 +1392,6 @@ export function TimelineScreen({
                   <button
                     type="button"
                     className="dcs-music-block"
-                    style={{ left: px(0), width: px(total) }}
                     title={fileNameOf(musicPath) + '　整片铺满，合成时压在解说下面'}
                     onClick={() => seek(0)}
                   >
