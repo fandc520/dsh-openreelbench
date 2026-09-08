@@ -849,6 +849,66 @@ async function main() {
   // Last on purpose: the route block ends with a panel submit to `brief`,
   // which invalidates every later stage. Anything asserting on downstream
   // state has to have run already.
+  console.log('\n== 人机同步：直接执行的动作也要有 Agent 通路 ==')
+  {
+    const read = (await import('node:fs')).readFileSync
+    const routesSource = read('src/routes.ts', 'utf-8')
+    const toolsSource = read('src/tools.ts', 'utf-8')
+
+    // CONVENTIONS 8.2. A panel button that advances the pipeline must reach the
+    // same host function the agent's tool reaches -- not a second copy of it.
+    // Two copies means the governance holds on one path and is skipped on the
+    // other, silently: the render still produces a film, the write still
+    // produces a checkpoint, and nothing says which checks were missed.
+    //
+    // A full-auto run has no button to press, so every one of these needs the
+    // tool side to exist at all. Add a row when a new direct action lands.
+    const shared = [
+      { action: '合成', call: 'composeProject(runtime', tool: 'studio_compose' },
+      { action: '过闸 / 提交产物', call: 'machine.write({', tool: 'studio_stage' },
+      { action: '导入素材', call: 'importAssets(layout', tool: 'studio_project' },
+    ]
+    const broken = []
+    for (const entry of shared) {
+      // The CALL, not the name: an aliased import leaves the name in the file
+      // and satisfies a bare search while the two paths have already parted.
+      if (!routesSource.includes(entry.call)) broken.push(entry.action + ': the route no longer calls ' + entry.call)
+      if (!toolsSource.includes(entry.call)) broken.push(entry.action + ': the tool no longer calls ' + entry.call)
+      if (!toolsSource.includes("'" + entry.tool + "'")) broken.push(entry.action + ': ' + entry.tool + ' is gone')
+    }
+    // And the route must not be able to reach the underlying renderer at all.
+    // Sharing the function is the point; a second call site next to it would
+    // be a second implementation with none of the checks.
+    if (routesSource.includes('renderProject(')) {
+      broken.push('合成: the route reaches renderProject directly, past every check in composeProject')
+    }
+    if (broken.length === 0)
+      ok('all ' + shared.length + ' direct actions share one function with their tool')
+    else bad('panel and agent diverged', broken.join('; '))
+
+    // The other half of the same rule: a step that needs the model to JUDGE or
+    // GENERATE goes to the agent, and the craft knowledge rides a skill gesture
+    // rather than being inlined. Inlined, it would either be resident context
+    // forever or quietly drift from the skill it was copied out of.
+    const withSkill = [
+      { screen: 'script-screen', skill: 'dsh-creative-studio-storytelling' },
+      { screen: 'audio-screen', skill: 'dsh-creative-studio-cinematography' },
+      { screen: 'timeline-screen', skill: 'dsh-creative-studio-sound-design', constant: 'MUSIC_SKILL' },
+    ]
+    const missing = withSkill.filter((entry) => {
+      const source = read('src/client/' + entry.screen + '.tsx', 'utf-8')
+      // The QUOTED gesture, not the bare name: every one of these screens also
+      // names its skill in a comment explaining why the gesture is there, and a
+      // whole-file search would call a deleted gesture present.
+      const sent = source.includes("'/" + entry.skill + "'")
+      // ...or the constant a job builder exports for the same string.
+      const viaConstant = entry.constant !== undefined && source.includes(entry.constant)
+      return !sent && !viaConstant
+    })
+    if (missing.length === 0)
+      ok('every generative handoff loads its craft skill instead of inlining it')
+    else bad('handoff without a skill', missing.map((entry) => entry.screen).join(', '))
+  }
   console.log('\n== 后台合成（不经过 Agent） ==')
   {
     const { apply: applyRender, Config: RenderConfig } = await import('../lib/index.js')

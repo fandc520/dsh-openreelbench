@@ -23,6 +23,42 @@ import type { TrashEntry } from './api.ts'
 
 const PLACEHOLDER = '说一句你想做的片子，例如：做一条讲月球起源的解说片，30 秒，画风冷静一点'
 
+/**
+ * Poster backdrop geometry, in the art's 720×240 viewBox space.
+ *
+ * Fixed coordinates rather than random ones: the backdrop is identical on
+ * every load, so it reads as a poster instead of as noise reshuffling.
+ */
+const STARS: ReadonlyArray<{ x: number; y: number; r: number; delay: number; dur: number }> = [
+  { x: 36, y: 30, r: 1.2, delay: 0, dur: 3.8 },
+  { x: 74, y: 96, r: 0.9, delay: 1.2, dur: 4.6 },
+  { x: 112, y: 24, r: 1.6, delay: 2.1, dur: 3.2 },
+  { x: 148, y: 140, r: 1.0, delay: 0.6, dur: 5.2 },
+  { x: 186, y: 58, r: 1.3, delay: 1.8, dur: 4.1 },
+  { x: 222, y: 22, r: 0.8, delay: 2.9, dur: 3.6 },
+  { x: 258, y: 110, r: 1.5, delay: 0.3, dur: 4.9 },
+  { x: 296, y: 48, r: 0.9, delay: 3.4, dur: 3.9 },
+  { x: 330, y: 16, r: 1.2, delay: 1.5, dur: 4.4 },
+  { x: 368, y: 128, r: 1.0, delay: 2.4, dur: 5.0 },
+  { x: 402, y: 34, r: 1.7, delay: 0.9, dur: 3.3 },
+  { x: 438, y: 88, r: 0.8, delay: 3.1, dur: 4.7 },
+  { x: 476, y: 20, r: 1.3, delay: 1.1, dur: 3.7 },
+  { x: 512, y: 132, r: 1.1, delay: 2.7, dur: 4.3 },
+  { x: 548, y: 56, r: 0.9, delay: 0.4, dur: 5.4 },
+  { x: 584, y: 104, r: 1.4, delay: 1.9, dur: 3.5 },
+  { x: 620, y: 26, r: 1.0, delay: 3.6, dur: 4.8 },
+  { x: 656, y: 84, r: 1.5, delay: 0.7, dur: 3.9 },
+  { x: 688, y: 36, r: 0.9, delay: 2.2, dur: 4.2 },
+  { x: 668, y: 156, r: 1.2, delay: 1.4, dur: 5.1 },
+  { x: 96, y: 170, r: 1.1, delay: 2.8, dur: 4.5 },
+  { x: 300, y: 168, r: 0.8, delay: 0.2, dur: 3.4 },
+  { x: 470, y: 172, r: 1.0, delay: 3.3, dur: 5.3 },
+  { x: 590, y: 60, r: 0.7, delay: 1.7, dur: 4.0 },
+]
+
+/** Film-strip sprocket holes: 14 of them, 16px margins, evenly spaced. */
+const STRIP_HOLES: ReadonlyArray<number> = Array.from({ length: 14 }, (_, index) => 16 + index * 52)
+
 export interface WelcomeProps {
   catalog: Catalog | undefined
   projects: readonly LibraryProject[]
@@ -94,9 +130,77 @@ export function Welcome({
   return (
     <div className="dcs-welcome">
       <header className="dcs-hero">
-        <h1 className="dcs-hero-title">ComfyUI 创意工作室</h1>
-        <p className="dcs-hero-sub">ComfyUI Creative Studio</p>
-        <p className="dcs-hero-line">一句需求到一条成片。生成走 ComfyUI，合成走 FFmpeg，每一步都停下来等你点头。</p>
+        <div className="dcs-poster">
+          <svg
+            className="dcs-poster-art"
+            viewBox="0 0 720 240"
+            preserveAspectRatio="xMidYMid slice"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <defs>
+              <linearGradient id="dcs-poster-bg" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#111537" />
+                <stop offset="100%" stopColor="#05060f" />
+              </linearGradient>
+              <radialGradient id="dcs-glow-violet">
+                <stop offset="0%" stopColor="#7c5cff" stopOpacity="0.5" />
+                <stop offset="100%" stopColor="#7c5cff" stopOpacity="0" />
+              </radialGradient>
+              <radialGradient id="dcs-glow-teal">
+                <stop offset="0%" stopColor="#2dd4bf" stopOpacity="0.42" />
+                <stop offset="100%" stopColor="#2dd4bf" stopOpacity="0" />
+              </radialGradient>
+              <radialGradient id="dcs-glow-indigo">
+                <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.46" />
+                <stop offset="100%" stopColor="#4f46e5" stopOpacity="0" />
+              </radialGradient>
+              <radialGradient id="dcs-poster-vignette">
+                <stop offset="55%" stopColor="#05060f" stopOpacity="0" />
+                <stop offset="100%" stopColor="#05060f" stopOpacity="0.5" />
+              </radialGradient>
+              <filter id="dcs-poster-blur" x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur stdDeviation="42" />
+              </filter>
+            </defs>
+
+            <rect width="720" height="240" fill="url(#dcs-poster-bg)" />
+
+            <g filter="url(#dcs-poster-blur)">
+              <ellipse className="dcs-poster-drift-a" cx="150" cy="64" rx="240" ry="110" fill="url(#dcs-glow-violet)" />
+              <ellipse className="dcs-poster-drift-b" cx="568" cy="46" rx="230" ry="100" fill="url(#dcs-glow-teal)" />
+              <ellipse className="dcs-poster-drift-c" cx="368" cy="196" rx="280" ry="110" fill="url(#dcs-glow-indigo)" />
+            </g>
+
+            <g>
+              {STARS.map((star, index) => (
+                <circle
+                  key={index}
+                  className="dcs-poster-star"
+                  cx={star.x}
+                  cy={star.y}
+                  r={star.r}
+                  fill="#dfe3ff"
+                  style={{ animationDelay: star.delay + 's', animationDuration: star.dur + 's' }}
+                />
+              ))}
+            </g>
+
+            <rect width="720" height="240" fill="url(#dcs-poster-vignette)" />
+
+            <g>
+              <rect x="0" y="206" width="720" height="34" fill="#04050c" opacity="0.72" />
+              <rect x="0" y="206" width="720" height="1" fill="#8f9bff" opacity="0.22" />
+              {STRIP_HOLES.map((x) => (
+                <rect key={x} x={x} y="216" width="12" height="14" rx="2.5" fill="#111537" opacity="0.9" />
+              ))}
+            </g>
+          </svg>
+          <div className="dcs-poster-body">
+            <span className="dcs-hero-sub">ComfyUI Creative Studio</span>
+            <h1 className="dcs-hero-title">ComfyUI 创意工作室</h1>
+          </div>
+        </div>
       </header>
 
       <div className="dcs-composer">

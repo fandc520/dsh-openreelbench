@@ -75,18 +75,60 @@ const CSS = `
   display: flex; flex-direction: column; gap: 26px;
   max-width: 780px; margin: 0 auto; width: 100%;
 }
-.dcs-hero { text-align: center; padding-top: 26px; display: flex; flex-direction: column; gap: 6px; }
-.dcs-hero-title { margin: 0; font-size: 27px; font-weight: 650; letter-spacing: -.01em; }
-.dcs-hero-sub {
-  margin: 0; font-size: 12px; letter-spacing: .16em; text-transform: uppercase;
-  color: var(--dsw-alias-label-tertiary);
+/* The poster hero: a dark screening-room band behind the title. It keeps its
+   own palette on purpose — a screen reads as a screen in both app themes —
+   while everything below it stays on the theme's tokens. */
+.dcs-hero { text-align: center; padding-top: 0; display: flex; flex-direction: column; }
+.dcs-poster {
+  position: relative; overflow: hidden; border-radius: 18px;
+  min-height: clamp(190px, 26vw, 252px);
+  border: 1px solid rgba(126, 130, 255, 0.16);
+  box-shadow: 0 18px 48px -22px rgba(6, 8, 24, 0.55);
 }
-.dcs-hero-line { margin: 8px 0 0; font-size: 13px; color: var(--dsw-alias-label-secondary); }
+.dcs-poster-art { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.dcs-poster-drift-a, .dcs-poster-drift-b, .dcs-poster-drift-c {
+  transform-box: fill-box; transform-origin: center;
+}
+.dcs-poster-drift-a { animation: dcs-poster-drift 26s ease-in-out infinite; }
+.dcs-poster-drift-b { animation: dcs-poster-drift 34s ease-in-out infinite reverse; }
+.dcs-poster-drift-c { animation: dcs-poster-drift 22s ease-in-out infinite; animation-delay: -8s; }
+.dcs-poster-star { opacity: 0.2; animation: dcs-poster-twinkle 4s ease-in-out infinite; }
+.dcs-poster-body {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 13px; padding: 24px 24px 46px; text-align: center;
+}
+.dcs-hero-title {
+  margin: 0; font-size: clamp(26px, 5vw, 42px); font-weight: 700; letter-spacing: .015em;
+  color: #f4f5ff;
+  text-shadow: 0 2px 28px rgba(124, 92, 255, 0.5), 0 1px 2px rgba(4, 5, 12, 0.8);
+}
+.dcs-hero-sub {
+  margin: 0; font-size: 11px; letter-spacing: .38em; text-transform: uppercase;
+  color: rgba(226, 230, 255, 0.62);
+}
 
+@keyframes dcs-poster-drift {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  50% { transform: translate(34px, 12px) rotate(5deg); }
+}
+@keyframes dcs-poster-twinkle {
+  0%, 100% { opacity: 0.12; }
+  50% { opacity: 0.85; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dcs-poster-drift-a, .dcs-poster-drift-b, .dcs-poster-drift-c, .dcs-poster-star { animation: none; }
+  .dcs-poster-star { opacity: 0.45; }
+}
+
+/* The composer rides up over the poster's bottom edge — one card on the art. */
 .dcs-composer {
+  position: relative; z-index: 1;
   display: flex; flex-direction: column; gap: 8px; padding: 12px;
+  margin-top: -26px;
   border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px;
   background: var(--dsw-alias-bg-layer-2);
+  box-shadow: 0 14px 36px -18px rgba(6, 8, 24, 0.4);
 }
 .dcs-composer:focus-within { border-color: var(--dsw-alias-brand-primary); }
 .dcs-composer-input {
