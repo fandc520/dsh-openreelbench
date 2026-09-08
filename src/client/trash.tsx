@@ -15,6 +15,7 @@
 import { useState } from 'react'
 
 import { type TrashEntry, api } from './api.ts'
+import { IconTrash } from './icons.tsx'
 
 export interface TrashSectionProps {
   entries: readonly TrashEntry[]
@@ -72,6 +73,7 @@ export function TrashSection({ entries, onChanged, onNotice, onError }: TrashSec
         onClick={() => setOpen((value) => !value)}
       >
         <span className="dcs-disclosure-caret">{open ? '▾' : '▸'}</span>
+        <IconTrash className="dcs-section-icon" />
         回收站
         <span className="dcs-count">{entries.length}</span>
       </button>

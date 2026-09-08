@@ -19,6 +19,14 @@ const CSS = `
   display: flex; flex-direction: column; gap: 16px;
   height: 100%; overflow-y: auto; padding: 20px 24px 40px;
   box-sizing: border-box; color: var(--dsw-alias-label-primary);
+
+  /* Panel palette, extracted from the welcome poster so the page ornaments
+     with the same two hues the hero paints with. Violet leads, teal is the
+     rare second read; both stay on edges, icons and small marks — fills keep
+     the theme's layers so the panel still looks native in both app themes. */
+  --dcs-accent: #7c5cff;
+  --dcs-accent-2: #2dd4bf;
+  --dcs-accent-soft: rgba(124, 92, 255, 0.16);
 }
 .dcs-centered { align-items: center; justify-content: center; }
 .dcs-empty { display: flex; flex-direction: column; gap: 12px; align-items: center; }
@@ -107,6 +115,10 @@ const CSS = `
   margin: 0; font-size: 11px; letter-spacing: .38em; text-transform: uppercase;
   color: rgba(226, 230, 255, 0.62);
 }
+.dcs-hero-tagline {
+  margin: 2px 0 0; font-size: 12px; line-height: 1.8; letter-spacing: .05em;
+  color: rgba(210, 215, 255, 0.6);
+}
 
 @keyframes dcs-poster-drift {
   0%, 100% { transform: translate(0, 0) rotate(0deg); }
@@ -130,7 +142,7 @@ const CSS = `
   background: var(--dsw-alias-bg-layer-2);
   box-shadow: 0 14px 36px -18px rgba(6, 8, 24, 0.4);
 }
-.dcs-composer:focus-within { border-color: var(--dsw-alias-brand-primary); }
+.dcs-composer:focus-within { border-color: var(--dcs-accent); }
 .dcs-composer-input {
   font: inherit; font-size: 14px; line-height: 1.6; resize: vertical;
   border: none; outline: none; background: transparent;
@@ -140,39 +152,48 @@ const CSS = `
 .dcs-composer-foot { display: flex; align-items: center; gap: 10px; }
 
 .dcs-section { display: flex; flex-direction: column; gap: 8px; }
-.dcs-section-title { margin: 0; font-size: 13px; font-weight: 600; }
+.dcs-section-title { margin: 0; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+/* Section marks lead with the accent; the text itself stays on theme labels. */
+.dcs-section-icon { flex: none; color: var(--dcs-accent); }
+.dcs-disclosure .dcs-section-icon { color: var(--dcs-accent); }
 .dcs-section-hint { margin: 0; font-size: 12px; color: var(--dsw-alias-label-tertiary); }
 
-/* Cards size to their own text and wrap, so one media type does not stretch
-   into a banner and several sit side by side. */
-.dcs-pipelines { display: flex; flex-wrap: wrap; gap: 10px; }
+/* Pipeline tags are slim pills: name and glyph on the face, the whole
+   explanation in the hover tooltip. Hover moves the border to the accent and
+   tints glyph+text — a fill change would be the third thing lighting up. */
+.dcs-pipelines { display: flex; flex-wrap: wrap; gap: 8px; }
 .dcs-pipeline {
-  display: flex; flex-direction: column; gap: 3px; text-align: left; cursor: pointer;
-  font: inherit; padding: 10px 14px; border-radius: 10px; width: auto; flex: 0 0 auto;
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  font: inherit; padding: 7px 15px; border-radius: 999px; width: auto; flex: 0 0 auto;
   border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
+  transition: border-color .14s ease, color .14s ease;
 }
 .dcs-pipeline:hover:not(:disabled) {
-  border-color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-interactive-bg-hover);
+  border-color: var(--dcs-accent); color: var(--dcs-accent);
 }
 .dcs-pipeline:disabled { opacity: .5; cursor: default; }
-.dcs-pipeline-name { font-size: 14px; font-weight: 600; white-space: nowrap; }
-.dcs-pipeline-desc { font-size: 11px; color: var(--dsw-alias-label-tertiary); white-space: nowrap; }
+.dcs-pipeline-icon { flex: none; }
+.dcs-pipeline-name { font-size: 13px; font-weight: 550; white-space: nowrap; }
 
-.dcs-projects { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* History is a responsive grid: cards keep a readable floor width and the
+   column count follows the panel, instead of locking to two. */
+.dcs-projects { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(225px, 1fr)); }
 .dcs-project {
   position: relative; display: flex; align-items: stretch; gap: 4px;
   padding: 0; border-radius: 10px;
   border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
+  transition: border-color .14s ease, box-shadow .14s ease;
 }
-.dcs-project:hover { border-color: var(--dsw-alias-brand-primary); }
+/* Border lights only. A fill change on the inner button half-lights the card
+   (the kebab side stays dark), which read as two mismatched containers. */
+.dcs-project:hover { border-color: var(--dcs-accent); box-shadow: 0 0 14px -6px var(--dcs-accent); }
 .dcs-project-body {
   flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;
   text-align: left; cursor: pointer; font: inherit; padding: 11px 4px 11px 13px;
   background: transparent; border: none; color: inherit; border-radius: 9px;
 }
-.dcs-project-body:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
 .dcs-project-body:disabled { cursor: default; opacity: .6; }
 .dcs-project-editing {
   flex-direction: column; gap: 7px; padding: 11px 13px;
@@ -1020,7 +1041,10 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
   background: var(--dsw-alias-state-error-primary);
   color: var(--dsw-alias-label-primary-foreground);
 }
-.dcs-project-title { font-size: 13px; font-weight: 550; }
+.dcs-project-title {
+  font-size: 13px; font-weight: 550;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .dcs-project-meta { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
 
 /* ------------------------------------------------------------- screens */

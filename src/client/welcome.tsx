@@ -13,10 +13,11 @@
  * panel moved on". The wait is bounded — a run that never produces a project
  * leaves the user back at the box rather than spinning forever.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ComponentType } from 'react'
 
 import { type AgentPhase, BusyLabel } from './busy.tsx'
 import { type Catalog, type LibraryProject, api } from './api.ts'
+import { IconClapper, IconHistory, IconSpark } from './icons.tsx'
 import { ProjectCard } from './project-card.tsx'
 import { TrashSection } from './trash.tsx'
 import type { TrashEntry } from './api.ts'
@@ -59,6 +60,15 @@ const STARS: ReadonlyArray<{ x: number; y: number; r: number; delay: number; dur
 /** Film-strip sprocket holes: 14 of them, 16px margins, evenly spaced. */
 const STRIP_HOLES: ReadonlyArray<number> = Array.from({ length: 14 }, (_, index) => 16 + index * 52)
 
+/**
+ * One glyph per pipeline, looked up by the pipeline's stable id. A pipeline
+ * without an entry falls back to the generic spark — adding a pipeline must
+ * not wait on this file, and an unadorned tag still reads fine.
+ */
+const PIPELINE_ICONS: Record<string, ComponentType> = {
+  'explainer-stills': IconClapper,
+}
+
 export interface WelcomeProps {
   catalog: Catalog | undefined
   projects: readonly LibraryProject[]
@@ -77,6 +87,10 @@ export function Welcome({
   const [phase, setPhase] = useState<AgentPhase | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // History collapses but starts open: on the screen a run starts from, the
+  // list is the fastest way back into work, and hiding it by default would
+  // trade one scroll line for one extra click every visit.
+  const [historyOpen, setHistoryOpen] = useState(true)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const cancelled = useRef(false)
 
@@ -199,6 +213,9 @@ export function Welcome({
           <div className="dcs-poster-body">
             <span className="dcs-hero-sub">ComfyUI Creative Studio</span>
             <h1 className="dcs-hero-title">ComfyUI 创意工作室</h1>
+            <p className="dcs-hero-tagline">
+              基于 ComfyUI 与 DSH 开源生态的内容创作平台 —— 专业创作管线 · 原生 AI 人机协同
+            </p>
           </div>
         </div>
       </header>
@@ -238,47 +255,65 @@ export function Welcome({
       {notice !== null ? <p className="dcs-note">{notice}</p> : null}
 
       <section className="dcs-section">
-        <h2 className="dcs-section-title">创作媒体类型</h2>
+        <h2 className="dcs-section-title">
+          <IconClapper className="dcs-section-icon" />
+          创作媒体类型
+        </h2>
         <div className="dcs-pipelines">
-          {(catalog?.pipelines ?? []).map((pipeline) => (
-            <button
-              key={pipeline.id}
-              type="button"
-              className="dcs-pipeline"
-              disabled={busy}
-              title={pipeline.description}
-              onClick={() => pickPipeline(pipeline.command)}
-            >
-              <span className="dcs-pipeline-name">{pipeline.name}</span>
-              <span className="dcs-pipeline-desc">{pipeline.best_for}</span>
-            </button>
-          ))}
+          {(catalog?.pipelines ?? []).map((pipeline) => {
+            const Icon = PIPELINE_ICONS[pipeline.id] ?? IconSpark
+            return (
+              <button
+                key={pipeline.id}
+                type="button"
+                className="dcs-pipeline"
+                disabled={busy}
+                title={pipeline.description + '（' + pipeline.best_for + '）'}
+                onClick={() => pickPipeline(pipeline.command)}
+              >
+                <Icon className="dcs-pipeline-icon" />
+                <span className="dcs-pipeline-name">{pipeline.name}</span>
+              </button>
+            )
+          })}
         </div>
       </section>
 
       {projects.length > 0 ? (
         <section className="dcs-section">
-          <h2 className="dcs-section-title">继续之前的项目</h2>
-          <div className="dcs-projects">
-            {projects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                disabled={busy}
-                onOpen={onOpenProject}
-                onRename={async (id, title) => {
-                  await api.updateProject({ project: id, title })
-                  await onRefresh()
-                }}
-                onRemove={async (id) => {
-                  await api.removeProject(id)
-                  await onRefresh()
-                  await onRefreshTrash()
-                  setNotice('已移到回收站，可以在下方还原。')
-                }}
-              />
-            ))}
-          </div>
+          <button
+            type="button"
+            className="dcs-disclosure"
+            aria-expanded={historyOpen}
+            onClick={() => setHistoryOpen((value) => !value)}
+          >
+            <span className="dcs-disclosure-caret">{historyOpen ? '▾' : '▸'}</span>
+            <IconHistory className="dcs-section-icon" />
+            历史项目
+            <span className="dcs-count">{projects.length}</span>
+          </button>
+          {historyOpen ? (
+            <div className="dcs-projects">
+              {projects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  disabled={busy}
+                  onOpen={onOpenProject}
+                  onRename={async (id, title) => {
+                    await api.updateProject({ project: id, title })
+                    await onRefresh()
+                  }}
+                  onRemove={async (id) => {
+                    await api.removeProject(id)
+                    await onRefresh()
+                    await onRefreshTrash()
+                    setNotice('已移到回收站，可以在下方还原。')
+                  }}
+                />
+              ))}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
