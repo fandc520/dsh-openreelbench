@@ -1065,7 +1065,15 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
    when the view is too narrow for two readable halves. */
 .dcs-triangle { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* A panel that owns its own row: slots wrap, so half a row is half the slots. */
-.dcs-triangle-wide { grid-column: 1 / -1; }
+
+/* A divider inside a panel, for a second subject that belongs to the same
+   question rather than to a container of its own. */
+.dcs-subhead {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-top: 4px; padding-top: 9px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+.dcs-subhead-label { font-size: 12px; font-weight: 600; color: var(--dsw-alias-text-l1); }
 @media (max-width: 720px) { .dcs-triangle { grid-template-columns: 1fr; } }
 
 .dcs-panel {

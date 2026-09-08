@@ -230,6 +230,14 @@ function fakeHost() {
             skills.set(key, skill)
             return () => skills.delete(key)
           },
+          // Mirrors the host: an omitted invocation policy defaults to both
+          // true, which is what makes a `/name` gesture load a runtime skill.
+          async list() {
+            return [...skills.values()].map((skill) => ({
+              name: skill.name,
+              invocation: skill.invocation ?? { modelInvocable: true, userInvocable: true },
+            }))
+          },
         }
       }
       if (name === 'webServer') return webServer
@@ -2837,6 +2845,87 @@ async function main() {
     // import instruction cannot drift from what the tests check.
     if (screen.includes('buildMusicJob(')) ok('the panel sends the built request, not a second copy of it')
     else bad('inline message', 'the timeline screen composes its own music request')
+  }
+  console.log('\n== 技能是否真的会加载 ==')
+  {
+    const { apply: applySkills, Config: SkillConfig } = await import('../lib/index.js')
+    const host = fakeHost()
+    applySkills(host.ctx, SkillConfig({ workspaceRoot: WS }))
+    const { MUSIC_SKILL } = await import('../lib/music-job.js')
+
+    // The gesture is the host's own injection path: ctx.skills.register
+    // publishes the body, and a `/name` on a user message makes the host splice
+    // it in before the step. The panel is not asking the model to go read
+    // something -- but the whole thing is silent when the name does not
+    // resolve, so the panel has to be able to ask.
+    const good = (await callRoute(host.routes, '/studio/skill',
+      '/studio/skill?name=' + MUSIC_SKILL, {})).json()
+    if (good.known && good.loadable && good.registry)
+      ok('the skill the music request invokes is registered and user-invocable')
+    else bad('skill not loadable', JSON.stringify(good))
+
+    // Registered but not user-invocable is a DIFFERENT failure from absent, and
+    // the panel says something different about each -- one is a restart, the
+    // other is a policy.
+    const missing = (await callRoute(host.routes, '/studio/skill',
+      '/studio/skill?name=dsh-creative-studio-not-a-skill', {})).json()
+    if (missing.registry && !missing.known && !missing.loadable)
+      ok('an unregistered name reports absent rather than merely unloadable')
+    else bad('unknown skill', JSON.stringify(missing))
+
+    // Registered is not the same as loadable. Other providers' skills can carry
+    // a policy that excludes user invocation, and the gesture honours it -- so
+    // a route answering "it exists" would tell the panel to send a request
+    // whose skill still would not load.
+    host.skills.set('policy#0', {
+      name: 'dsh-creative-studio-locked',
+      invocation: { modelInvocable: true, userInvocable: false },
+    })
+    const locked = (await callRoute(host.routes, '/studio/skill',
+      '/studio/skill?name=dsh-creative-studio-locked', {})).json()
+    if (locked.known && !locked.loadable)
+      ok('a registered but non-user-invocable skill reports known and unloadable')
+    else bad('policy ignored', JSON.stringify(locked))
+    host.skills.delete('policy#0')
+
+    const blank = await callRoute(host.routes, '/studio/skill', '/studio/skill', {})
+    if (blank.statusCode === 400) ok('the route needs a name')
+    else bad('blank name', String(blank.statusCode))
+
+    // Every runtime skill this plugin registers has to pass the same check the
+    // gesture applies, or a panel that invokes it degrades to plain prose.
+    const names = [...host.skills.values()].map((skill) => skill.name)
+    const unloadable = []
+    for (const name of names) {
+      const answer = (await callRoute(host.routes, '/studio/skill',
+        '/studio/skill?name=' + encodeURIComponent(name), {})).json()
+      if (!answer.loadable) unloadable.push(name)
+    }
+    if (unloadable.length === 0) ok('all ' + names.length + ' registered skills would load from a gesture')
+    else bad('skills that cannot be invoked', unloadable.join(', '))
+
+    // A host with no skill registry at all must NOT read as "the skill is
+    // missing" -- that would send the user looking for the wrong thing.
+    const bare = fakeHost()
+    const withSkills = bare.ctx.get
+    bare.ctx.get = (name) => (name === 'skills' ? undefined : withSkills(name))
+    applySkills(bare.ctx, SkillConfig({ workspaceRoot: WS }))
+    const none = (await callRoute(bare.routes, '/studio/skill',
+      '/studio/skill?name=' + MUSIC_SKILL, {})).json()
+    if (none.registry === false && none.loadable === false)
+      ok('no skill registry reports itself as such, not as a missing skill')
+    else bad('bare host', JSON.stringify(none))
+    bare.disposeAll()
+    host.disposeAll()
+  }
+
+  // The panel gates on that answer instead of sending a request whose guidance
+  // would silently not arrive.
+  {
+    const screen = (await import('node:fs')).readFileSync('src/client/timeline-screen.tsx', 'utf-8')
+    if (screen.includes('api.skill(MUSIC_SKILL)') && screen.includes('这里不发'))
+      ok('the music panel refuses to send when its skill would not load')
+    else bad('no gate', 'the panel sends regardless of whether the skill loads')
   }
   console.log('\n== 配乐技能 ==')
   {

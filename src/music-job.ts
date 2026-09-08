@@ -41,7 +41,9 @@ export interface MusicJobInput {
 }
 
 const NEWLINE = String.fromCharCode(10)
-const SKILL = 'dsh-creative-studio-sound-design'
+/** The skill the request opens with. Exported so the panel can check it loads. */
+export const MUSIC_SKILL = 'dsh-creative-studio-sound-design'
+const SKILL = MUSIC_SKILL
 
 export function buildMusicJob(input: MusicJobInput): string {
   const band = BPM_BY_PACING[input.pacingProfile]

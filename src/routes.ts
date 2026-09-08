@@ -319,12 +319,62 @@ async function libraryEntry(layout: ProjectLayout, title: string, createdAt: str
 
 /* --------------------------------------------------------------- mounting */
 
+/** Just the part of the host's skill registry this file asks about. */
+interface SkillCatalog {
+  list?: (options: Record<string, unknown>) => Promise<Array<{
+    name: string
+    invocation?: { userInvocable?: boolean }
+  }>>
+}
+
 export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => void) | undefined {
   const webServer = ctx.get('webServer') as WebServer | undefined
   if (webServer === undefined) return undefined
 
   const disposers: Array<() => void> = []
   const { machine } = runtime
+
+  // ---- GET /studio/skill?name= -------------------------------------------
+  //
+  // Whether the host's skill registry resolves one name, and whether a `/name`
+  // gesture would load it.
+  //
+  // A panel that opens its request with `/some-skill` is depending on the host
+  // to splice that body in before the step. When the name does not resolve the
+  // host leaves it as ordinary prose — no error anywhere — and the model
+  // proceeds with none of the guidance the request was built around. It still
+  // answers, so the failure looks like a bad answer rather than a missing
+  // skill. This route is how a panel refuses to send instead.
+  disposers.push(webServer.register({
+    kind: 'exact',
+    path: '/studio/skill',
+    handler: async (request, response) => {
+      try {
+        const name = query(request).get('name') ?? ''
+        if (name === '') {
+          sendJson(response, 400, { error: 'name is required' })
+          return
+        }
+        const skills = ctx.get('skills') as SkillCatalog | undefined
+        if (skills?.list === undefined) {
+          // No registry at all is not the same as a missing skill, and saying
+          // "unavailable" would send the panel down the wrong explanation.
+          sendJson(response, 200, { name, known: false, loadable: false, registry: false })
+          return
+        }
+        const found = (await skills.list({})).find((entry) => entry.name === name)
+        sendJson(response, 200, {
+          name,
+          registry: true,
+          known: found !== undefined,
+          // The gesture checks exactly this, so this route must too.
+          loadable: found?.invocation?.userInvocable === true,
+        })
+      } catch (error) {
+        fail(response, error)
+      }
+    },
+  }))
 
   // ---- GET /studio/state -------------------------------------------------
   disposers.push(webServer.register({

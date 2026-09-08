@@ -386,6 +386,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   catalog: (): Promise<Catalog> => request('/studio/catalog'),
 
+  /** Whether a `/name` gesture would actually load this skill. */
+  skill: (name: string): Promise<{
+    name: string
+    registry: boolean
+    known: boolean
+    loadable: boolean
+  }> => request('/studio/skill?name=' + encodeURIComponent(name)),
+
   state: (project: string, cut?: string): Promise<StudioState> =>
     request('/studio/state?project=' + encodeURIComponent(project)
       + (cut === undefined || cut === '' ? '' : '&cut=' + encodeURIComponent(cut))),

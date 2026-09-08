@@ -682,6 +682,69 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
           </div>
           {auditionUrl !== undefined ? <audio className="dcs-audio" src={auditionUrl} controls autoPlay /> : null}
 
+          {/* Reference audio lives here rather than in a panel of its own.
+              It is not a separate subject: picking a library voice and cloning
+              one from a sample are two answers to the same question, and a
+              third container made them look like two unrelated features. */}
+          <div className="dcs-subhead">
+            <span className="dcs-subhead-label">参考音频</span>
+            <span className="dcs-hint">
+              {voiceReferences.length === 0
+                ? '声音克隆用，整个项目共用'
+                : '整个项目共用 · ' + voiceReferences.length + ' 段'}
+            </span>
+          </div>
+
+          {/* Slots, like the reference images on the shots screen: position
+              matters, because a workflow's loaders take them in order. */}
+          <div className="dcs-slots">
+            {voiceReferences.map((name, index) => (
+              <div className="dcs-slot" key={name + index}>
+                <span className="dcs-slot-index">{index + 1}</span>
+                <button
+                  type="button"
+                  className={'dcs-slot-media dcs-slot-audio'
+                    + (playingRef === name ? ' dcs-slot-audio-on' : '')}
+                  title={playingRef === name ? '停止' : '试听这一段'}
+                  onClick={() => setPlayingRef(playingRef === name ? null : name)}
+                >{playingRef === name ? '■' : '▶'}</button>
+                {playingRef === name ? (
+                  <audio
+                    src={referenceUrl(name)}
+                    autoPlay
+                    onEnded={() => setPlayingRef(null)}
+                    onError={() => {
+                      setPlayingRef(null)
+                      say('error', '播放不了 ' + name + '。它可能已经不在 ComfyUI 的输入目录里了。')
+                    }}
+                    hidden
+                  />
+                ) : null}
+                <span className="dcs-slot-name" title={name}>{name}</span>
+                <button
+                  type="button"
+                  className="dcs-slot-x"
+                  aria-label="移除这一槽"
+                  disabled={working !== null}
+                  onClick={() => void removeVoiceReference(name)}
+                >×</button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="dcs-slot dcs-slot-empty"
+              disabled={working !== null}
+              title="从 ComfyUI 的素材里指定一段；浏览器里也可以上传新的"
+              onClick={() => setPickerOpen(true)}
+            >
+              <span className="dcs-slot-index">{voiceReferences.length + 1}</span>
+              <span className="dcs-slot-add">＋ 指定参考音频</span>
+            </button>
+          </div>
+
+                    <p className="dcs-hint">
+            槽位按顺序对应工作流的加载参数，顺序有意义。记的是 ComfyUI 里的文件名。
+          </p>
         </section>
 
         <section className="dcs-panel">
@@ -744,69 +807,6 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
           >创建音色</button>
         </section>
 
-        <section className="dcs-panel dcs-triangle-wide">
-          <div className="dcs-group-head">
-            <h3 className="dcs-group-title">参考音频</h3>
-            <span className="dcs-hint">
-              {voiceReferences.length === 0
-                ? '整个项目共用，还没有添加'
-                : '整个项目共用 · ' + voiceReferences.length + ' 段'}
-            </span>
-          </div>
-
-          {/* Slots, like the reference images on the shots screen: position
-              matters, because a workflow's loaders take them in order. */}
-          <div className="dcs-slots">
-            {voiceReferences.map((name, index) => (
-              <div className="dcs-slot" key={name + index}>
-                <span className="dcs-slot-index">{index + 1}</span>
-                <button
-                  type="button"
-                  className={'dcs-slot-media dcs-slot-audio'
-                    + (playingRef === name ? ' dcs-slot-audio-on' : '')}
-                  title={playingRef === name ? '停止' : '试听这一段'}
-                  onClick={() => setPlayingRef(playingRef === name ? null : name)}
-                >{playingRef === name ? '■' : '▶'}</button>
-                {playingRef === name ? (
-                  <audio
-                    src={referenceUrl(name)}
-                    autoPlay
-                    onEnded={() => setPlayingRef(null)}
-                    onError={() => {
-                      setPlayingRef(null)
-                      say('error', '播放不了 ' + name + '。它可能已经不在 ComfyUI 的输入目录里了。')
-                    }}
-                    hidden
-                  />
-                ) : null}
-                <span className="dcs-slot-name" title={name}>{name}</span>
-                <button
-                  type="button"
-                  className="dcs-slot-x"
-                  aria-label="移除这一槽"
-                  disabled={working !== null}
-                  onClick={() => void removeVoiceReference(name)}
-                >×</button>
-              </div>
-            ))}
-            <button
-              type="button"
-              className="dcs-slot dcs-slot-empty"
-              disabled={working !== null}
-              title="从 ComfyUI 的素材里指定一段；浏览器里也可以上传新的"
-              onClick={() => setPickerOpen(true)}
-            >
-              <span className="dcs-slot-index">{voiceReferences.length + 1}</span>
-              <span className="dcs-slot-add">＋ 指定参考音频</span>
-            </button>
-          </div>
-
-          <p className="dcs-hint">
-            为声音克隆（参考音频）流程提供指定接口，数量请根据您的工作流决定。
-            槽位按顺序对应工作流的加载参数，所以顺序有意义。
-            这里记的是 ComfyUI 里的文件名，生成时把名称交给 Agent。
-          </p>
-        </section>
       </div>
 
       {pickerOpen ? (

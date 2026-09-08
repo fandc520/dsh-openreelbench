@@ -27,7 +27,7 @@ import { type AgentPhase, BusyLabel } from './busy.tsx'
 import { AdvicePanel } from './advice-panel.tsx'
 import { Strip } from './strip.tsx'
 import { Preview } from './preview.ts'
-import { buildMusicJob } from '../music-job.js'
+import { MUSIC_SKILL, buildMusicJob } from '../music-job.js'
 
 export interface TimelineScreenProps {
   state: StudioState
@@ -728,6 +728,20 @@ export function TimelineScreen({
       say('error', '时间轴还是空的，先把配音和分镜做完——曲子要多长是按全片时长算的。')
       return
     }
+    // The request opens with a skill gesture, and the guidance it depends on
+    // lives in that skill rather than in the message. If the host cannot
+    // resolve the name it leaves the line as ordinary prose and the model picks
+    // a track with nothing to go on -- it still answers, so the failure reads
+    // as a bad choice rather than a missing skill. Refusing to send is the only
+    // way that stays visible.
+    const ready = await api.skill(MUSIC_SKILL).catch(() => undefined)
+    if (ready !== undefined && ready.registry && !ready.loadable) {
+      say('error', '配乐技能 ' + MUSIC_SKILL + ' 在这个会话里加载不了'
+        + (ready.known ? '（已注册但不允许用户调用）' : '（没注册——插件更新后需要重启 DSH）')
+        + '。不先读技能就选曲等于瞎挑，所以这里不发。')
+      return
+    }
+
     setResult(null)
     setPhase('sending')
     const before = state.project.music?.path ?? ''
