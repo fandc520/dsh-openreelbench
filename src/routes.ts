@@ -326,6 +326,11 @@ interface RenderJob {
   state: 'running' | 'done' | 'failed'
   /** The composer's own progress line, shown verbatim on the page. */
   progress: string
+  /** 0..1 through the render. See PHASE_SPAN for how honest that is. */
+  fraction: number
+  phase: string
+  /** When the render started, so the page can show how long it has been. */
+  startedAt: number
   controller: AbortController
   result?: ComposeResultPayload
   error?: string
@@ -1096,6 +1101,9 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
                 running: job.state === 'running',
                 state: job.state,
                 progress: job.progress,
+                fraction: job.fraction,
+                phase: job.phase,
+                elapsed_seconds: Number(((Date.now() - job.startedAt) / 1000).toFixed(1)),
                 ...(job.result === undefined ? {} : { result: job.result }),
                 ...(job.error === undefined ? {} : { error: job.error, code: job.code }),
               })
@@ -1130,7 +1138,10 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
 
         const background = input.subtitle_background
         const controller = new AbortController()
-        const job: RenderJob = { state: 'running', progress: '准备中', controller }
+        const job: RenderJob = {
+          state: 'running', progress: '准备中', fraction: 0, phase: 'probing',
+          startedAt: Date.now(), controller,
+        }
         renders.set(project, job)
 
         // Deliberately not awaited: the response goes out now and the page
@@ -1146,13 +1157,21 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
               ...(input.force === true ? { force: true } : {}),
               ...(typeof input.cut === 'string' && input.cut !== '' ? { cutId: input.cut } : {}),
               signal: controller.signal,
-              onProgress: (message) => { job.progress = message },
+              onProgress: (update) => {
+                job.progress = update.label
+                job.phase = update.phase
+                // Never backwards. A bar that retreats reads as a fault even
+                // when the estimate behind it genuinely improved.
+                job.fraction = Math.max(job.fraction, update.fraction)
+              },
             })
             // Recorded through the state machine, the same call studio_stage
             // makes. The panel may advance the pipeline; it may not reach past
             // the schema and asset checks while doing it, and writing the
             // checkpoint here directly is exactly the shortcut that would.
             job.progress = '记录成片'
+            job.phase = 'recording'
+            job.fraction = 1
             await machine.write({
               projectId: project,
               stage: 'compose',
@@ -1163,6 +1182,7 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
             job.result = result
             job.state = 'done'
             job.progress = '完成'
+            job.phase = 'done'
           } catch (error) {
             job.state = 'failed'
             job.error = errorMessage(error)

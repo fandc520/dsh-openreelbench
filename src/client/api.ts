@@ -405,6 +405,10 @@ export const api = {
     running: boolean
     state: 'idle' | 'running' | 'done' | 'failed'
     progress?: string
+    /** 0..1. An estimate that never goes backwards, not a true percentage. */
+    fraction?: number
+    phase?: string
+    elapsed_seconds?: number
     result?: { warnings: string[]; cut: string | null }
     error?: string
     code?: string

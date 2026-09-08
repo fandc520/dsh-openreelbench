@@ -15,7 +15,7 @@
  * slideshow refusal, the frame resolution and the warnings all live here.
  */
 import type { AssetManifest, Brief, RenderReport, ScenePlan, Script } from './schema.js'
-import { type SectionTiming, planSections, renderProject } from './compose.js'
+import { type RenderProgress, type SectionTiming, planSections, renderProject } from './compose.js'
 import { resolveVideoProfile } from './media-profile.js'
 import { scoreSlideshowRisk } from './slideshow.js'
 import { resolvePlaybook } from './playbooks.js'
@@ -46,7 +46,7 @@ export interface ComposeRequest {
    */
   cutId?: string | undefined
   signal: AbortSignal
-  onProgress?: ((message: string) => void) | undefined
+  onProgress?: ((update: RenderProgress) => void) | undefined
 }
 
 export interface ComposeResultPayload {

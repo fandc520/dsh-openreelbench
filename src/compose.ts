@@ -550,7 +550,40 @@ export interface ComposeOptions {
   /** The editor's version, when one is being rendered. */
   cut?: Cut | undefined
   signal: AbortSignal
-  onProgress?(message: string): void
+  onProgress?(update: RenderProgress): void
+}
+
+export type RenderPhase =
+  | 'probing' | 'narration' | 'shots' | 'joining' | 'music' | 'loudness' | 'muxing' | 'done'
+
+export interface RenderProgress {
+  phase: RenderPhase
+  /** 0..1 through the whole render. Monotonic. */
+  fraction: number
+  /** One line for a person, already in their language. */
+  label: string
+}
+
+/**
+ * How much of the wall clock each phase gets on the bar.
+ *
+ * ONLY THE SHOTS PHASE IS REALLY MEASURED — it reports i/n and that is where
+ * most of the time goes. The rest are fixed spans taken from watching real
+ * renders, so the bar is an estimate that never goes backwards rather than a
+ * true percentage. Burning subtitles re-encodes the whole video in the mux,
+ * which is the one case that makes the tail longer than its span suggests; the
+ * label says what is happening, which is what a person actually needs when a
+ * bar sits still.
+ */
+const PHASE_SPAN: Record<RenderPhase, { from: number; to: number }> = {
+  probing: { from: 0, to: 0.04 },
+  narration: { from: 0.04, to: 0.10 },
+  shots: { from: 0.10, to: 0.70 },
+  joining: { from: 0.70, to: 0.78 },
+  music: { from: 0.78, to: 0.86 },
+  loudness: { from: 0.86, to: 0.90 },
+  muxing: { from: 0.90, to: 1 },
+  done: { from: 1, to: 1 },
 }
 
 export interface ComposeResult {
@@ -575,7 +608,22 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
   }
   const startedAt = Date.now()
   const warnings: string[] = []
-  const notify = options.onProgress ?? ((): void => {})
+  const emit = options.onProgress ?? ((): void => {})
+  /**
+   * Emit one progress update.
+   *
+   * @param phase - which stage of the render this is.
+   * @param label - the line a person reads, already in their language.
+   * @param within - 0..1 through this phase, when the phase can say.
+   */
+  const notify = (phase: RenderPhase, label: string, within = 0): void => {
+    const span = PHASE_SPAN[phase]
+    emit({
+      phase,
+      label,
+      fraction: Math.min(1, Math.max(0, span.from + (span.to - span.from) * Math.min(1, Math.max(0, within)))),
+    })
+  }
   const { ffmpegPath, ffprobePath } = config
   const stepTimeout = config.renderTimeoutMs
 
@@ -590,7 +638,7 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
   const stem = cut === undefined ? layout.id : layout.id + '-' + cut.id
 
   // 1. Measure.
-  notify('probing narration')
+  notify('probing', '测量配音时长')
   const durations = new Map<string, number>()
   for (const asset of manifest.assets) {
     if (asset.type !== 'narration' && asset.type !== 'audio') continue
@@ -602,7 +650,7 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
 
   const timeline = buildTimeline(layout, script, manifest, durations, playbook, cut)
   const totalDuration = timeline.reduce((sum, timing) => sum + timing.duration, 0)
-  notify(timeline.length + ' sections, ' + totalDuration.toFixed(1) + 's total')
+  notify('probing', timeline.length + ' 段 · 共 ' + totalDuration.toFixed(1) + ' 秒', 1)
 
   // 2. Pad each narration clip to its section length.
   const audioSegments: string[] = []
@@ -626,7 +674,7 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
   }
 
   // 3. One narration bed.
-  notify('building the narration bed')
+  notify('narration', '拼接配音轨')
   const narrationBed = join(layout.workDir, 'narration.wav')
   await concatSegments(ffmpegPath, layout.workDir, 'audio-list.txt', audioSegments, narrationBed, signal, stepTimeout)
 
@@ -637,7 +685,8 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
   const allShots = timeline.flatMap((timing) => timing.shots.map((shot) => ({ shot, timing })))
   for (const [index, { shot, timing }] of allShots.entries()) {
     const within = timing.shots.length > 1 ? ' 分镜 ' + (shot.index + 1) + '/' + timing.shots.length : ''
-    notify('rendering ' + (index + 1) + '/' + allShots.length + ' (' + timing.label + within + ')')
+    notify('shots', '渲染分镜 ' + (index + 1) + '/' + allShots.length + '　' + timing.label + within,
+      index / allShots.length)
     const target = join(layout.workDir, 'video-' + String(index).padStart(3, '0') + '.mp4')
     const frames = Math.max(1, Math.round(shot.duration * config.video.fps))
     const args = ['-y', '-nostdin']
@@ -665,7 +714,7 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
     videoSegments.push(target)
   }
 
-  notify('joining sections')
+  notify('joining', '拼接画面')
   const videoTrack = join(layout.workDir, 'video.mp4')
   await concatSegments(ffmpegPath, layout.workDir, 'video-list.txt', videoSegments, videoTrack, signal, stepTimeout)
 
@@ -746,7 +795,7 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
   let audioTrack = narrationBed
   let audioFilter: string | undefined
   if (musicAbsolute !== undefined) {
-    notify('mixing the music bed')
+    notify('music', '混入配乐')
     const mixed = join(layout.workDir, 'mix.wav')
     await run(ffmpegPath, [
       '-y', '-nostdin',
@@ -768,7 +817,7 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
     ], signal, stepTimeout)
     audioTrack = mixed
 
-    notify('measuring loudness')
+    notify('loudness', '测量响度')
     const analysis = await run(ffmpegPath, loudnormAnalyseArgs(mixed, loudness), signal, stepTimeout)
     const measured = parseLoudnorm(analysis.stderr)
     if (measured === undefined) {
@@ -781,7 +830,7 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
   }
 
   // 8. Mux. Stream-copy the video unless subtitles have to be burned in.
-  notify('muxing')
+  notify('muxing', burning ? '封装并烧录字幕（要重新编码，这一步最久）' : '封装成片')
   const outputAbsolute = join(layout.outputDir, stem + '.mp4')
   const muxArgs = ['-y', '-nostdin', '-i', videoTrack, '-i', audioTrack]
   // Per render, not per install: whether this cut needs subtitles baked in is a

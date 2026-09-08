@@ -23,7 +23,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 
 import { type Cut, type CutSection, type StudioState, api } from './api.ts'
-import { type AgentPhase, BusyLabel } from './busy.tsx'
+import { type AgentPhase, BusyLabel, Spinner } from './busy.tsx'
 import { AdvicePanel } from './advice-panel.tsx'
 import { Strip } from './strip.tsx'
 import { Preview } from './preview.ts'
@@ -199,8 +199,15 @@ export function TimelineScreen({
    * the slider under their hands. The parse happens once, on save.
    */
   const [musicForm, setMusicForm] = useState<{ gain: string; fadeIn: string; fadeOut: string } | null>(null)
-  /** The composer's own progress line, so a long render is not a blank spinner. */
-  const [renderStep, setRenderStep] = useState<string | null>(null)
+  /**
+   * Where the render is, so minutes of encoding are not a blank spinner.
+   *
+   * Null when nothing is rendering. The bar is an estimate — only the shot
+   * phase reports a real count — so the LABEL is the load-bearing part and the
+   * bar is there to say the thing is alive.
+   */
+  const [render, setRender] = useState<
+    { label: string; fraction: number; elapsed: number } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [result, setResult] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [at, setAt] = useState(0)
@@ -712,7 +719,7 @@ export function TimelineScreen({
     if (phase !== null || busy !== null) return
     setResult(null)
     setPhase('generating')
-    setRenderStep('准备中')
+    setRender({ label: '准备中', fraction: 0, elapsed: 0 })
     try {
       await api.startCompose({
         project: state.project.id,
@@ -723,7 +730,7 @@ export function TimelineScreen({
       })
     } catch (error) {
       setPhase(null)
-      setRenderStep(null)
+      setRender(null)
       say('error', (error as Error).message)
       return
     }
@@ -734,11 +741,17 @@ export function TimelineScreen({
       await new Promise((resolve) => setTimeout(resolve, 2000))
       const status = await api.composeStatus(state.project.id).catch(() => undefined)
       if (status === undefined) continue
-      if (status.progress !== undefined) setRenderStep(status.progress)
-      if (status.state === 'running') continue
+      if (status.state === 'running') {
+        setRender({
+          label: status.progress ?? '合成中',
+          fraction: status.fraction ?? 0,
+          elapsed: status.elapsed_seconds ?? 0,
+        })
+        continue
+      }
 
       setPhase(null)
-      setRenderStep(null)
+      setRender(null)
       if (status.state === 'failed') {
         say('error', status.error ?? '合成失败')
         return
@@ -753,7 +766,7 @@ export function TimelineScreen({
       return
     }
     setPhase(null)
-    setRenderStep(null)
+    setRender(null)
     say('error', '等了二十四分钟还没结束。合成还在后台跑，刷新页面能看到进度。')
   }
 
@@ -1364,11 +1377,30 @@ export function TimelineScreen({
         </button>
       </div>
 
-      {/* The composer's own progress line. A render is minutes long and used to
-          show a spinner and nothing else, which is indistinguishable from a
-          stuck one. */}
-      {renderStep === null ? null : (
-        <p className="dcs-note dcs-render-step">正在合成 · {renderStep}</p>
+      {/* A render is minutes long and used to show a spinner and nothing else,
+          which is indistinguishable from a stuck one. The label says what is
+          happening; the bar says it is still happening. */}
+      {render === null ? null : (
+        <div className="dcs-render">
+          <div className="dcs-render-head">
+            <Spinner />
+            <span className="dcs-render-label">{render.label}</span>
+            <span className="dcs-spacer" />
+            <span className="dcs-hint dcs-render-clock">
+              {Math.round(render.fraction * 100)}%　已用 {formatClock(render.elapsed)}
+            </span>
+          </div>
+          <div
+            className="dcs-render-bar"
+            role="progressbar"
+            aria-valuenow={Math.round(render.fraction * 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="合成进度"
+          >
+            <div className="dcs-render-fill" style={{ width: (render.fraction * 100).toFixed(1) + '%' }} />
+          </div>
+        </div>
       )}
 
       {/* Same shell the shots screen uses. It used to render only on a

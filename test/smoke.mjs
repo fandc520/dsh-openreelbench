@@ -526,6 +526,7 @@ async function main() {
     machine.write({ projectId: 'smoke', stage: 'assets_shots', status: 'completed', artifacts: { asset_manifest_shots: videoManifest() }, humanApproved: true }))
 
   console.log('\n== compose ==')
+  const progressLog = []
   const result = await expectOk('render', async () => renderProject({
     layout,
     script: await machine.readArtifact(layout, 'script'),
@@ -541,7 +542,10 @@ async function main() {
     config,
     playbook,
     signal: new AbortController().signal,
-    onProgress: (message) => console.log('        . ' + message),
+    onProgress: (update) => {
+      progressLog.push(update)
+      console.log('        . ' + String(Math.round(update.fraction * 100)).padStart(3) + '%  ' + update.label)
+    },
   }))
 
   if (result) {
@@ -578,6 +582,30 @@ async function main() {
     })
     if (tiled) ok('every section is tiled exactly by its shots')
     else bad('shot tiling', JSON.stringify(result.timeline.map((t) => t.shots.length)))
+
+    // ---- what the progress bar is drawn from ---------------------------
+
+    // A bar that goes backwards reads as a fault even when the estimate behind
+    // it genuinely improved, so the sequence has to be monotonic at the source
+    // rather than only clamped in the route.
+    const fractions = progressLog.map((entry) => entry.fraction)
+    const slipped = fractions.findIndex((value, index) => index > 0 && value < fractions[index - 1])
+    if (slipped === -1) ok('render progress never goes backwards (' + fractions.length + ' updates)')
+    else bad('progress slipped', 'at ' + slipped + ': ' + fractions.slice(Math.max(0, slipped - 1), slipped + 1))
+    if ((fractions[fractions.length - 1] ?? 0) >= 0.9) ok('and reaches the end of the bar')
+    else bad('progress stops short', String(fractions[fractions.length - 1]))
+    // Only the shot phase can report a real count; the rest are fixed spans.
+    // If that one stopped reporting i/n the bar would be pure guesswork through
+    // the longest part of the render.
+    const shots = progressLog.filter((entry) => entry.phase === 'shots')
+    if (shots.length >= 3 && new Set(shots.map((entry) => entry.fraction)).size === shots.length)
+      ok('the shot phase advances the bar per shot, which is where the time goes')
+    else bad('shots do not advance', JSON.stringify(shots.map((entry) => entry.fraction)))
+    // These labels go straight onto the page. The old ones were the developer's
+    // English internals -- 'muxing', 'probing narration' -- shown to the user.
+    const english = progressLog.filter((entry) => !/[\u4e00-\u9fa5]/.test(entry.label))
+    if (english.length === 0) ok('every progress label is written for the reader, not the log')
+    else bad('untranslated progress', english.map((entry) => entry.label).join(' | '))
 
     const srt = await fs.readFile(join(layout.dir, result.subtitlePath), 'utf-8').catch(() => undefined)
     if (srt && srt.includes('-->')) ok('wrote ' + result.subtitlePath + ' (' + srt.split('\n\n').filter(Boolean).length + ' cues)')
@@ -881,9 +909,35 @@ async function main() {
     if (accepted.statusCode === 202) ok('POST returns as soon as the render is running')
     else bad('compose start', accepted.statusCode + ' ' + accepted.text().slice(0, 200))
 
-    const done = await poll()
+    // Poll while it runs, so the page has something to draw. Captured here
+    // because by the time the job says 'done' the progress is over.
+    const seen = []
+    const done = await (async () => {
+      for (let attempt = 0; attempt < 400; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 60))
+        const status = (await callRoute(routes, '/studio/compose',
+          '/studio/compose?project=' + id, {})).json()
+        if (status.state === 'running') seen.push(status)
+        else return status
+      }
+      return { state: 'timeout' }
+    })()
     if (done.state === 'done') ok('the render finished with no agent involved')
     else bad('render failed', JSON.stringify(done).slice(0, 300))
+
+    // What the bar is drawn from has to survive the trip through the route,
+    // not just exist inside the composer.
+    const withBar = seen.filter((status) => typeof status.fraction === 'number')
+    if (withBar.length > 0 && withBar.some((status) => status.fraction > 0))
+      ok('the route reports a moving progress fraction while it runs')
+    else bad('no progress over the wire', JSON.stringify(seen.slice(0, 3)))
+    if (seen.some((status) => typeof status.elapsed_seconds === 'number'))
+      ok('and how long it has been going')
+    else bad('no elapsed time', JSON.stringify(seen[0]))
+    const labels = seen.map((status) => status.progress).filter(Boolean)
+    if (labels.length > 0 && labels.every((label) => /[一-龥]/.test(label)))
+      ok('the labels reaching the page are the readable ones')
+    else bad('raw labels over the wire', labels.join(' | '))
 
     if (done.state === 'done') {
       const checkpoint = await machine.readCheckpoint(layout, 'compose')
@@ -963,6 +1017,13 @@ async function main() {
     })
     if (blank.statusCode === 400) ok('the route needs a project')
     else bad('blank project', String(blank.statusCode))
+
+    // The page draws a bar, not just a spinner: minutes of silence and a
+    // spinning circle are indistinguishable from a stuck render.
+    const timelineSource = (await import('node:fs')).readFileSync('src/client/timeline-screen.tsx', 'utf-8')
+    if (timelineSource.includes('dcs-render-fill') && timelineSource.includes("role=\"progressbar\""))
+      ok('the compose screen draws a progress bar while rendering')
+    else bad('no bar', 'a long render shows only a spinner')
 
     // The panel drives this route rather than composing a message about it.
     const screen = (await import('node:fs')).readFileSync('src/client/timeline-screen.tsx', 'utf-8')

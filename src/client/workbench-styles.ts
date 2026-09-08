@@ -619,7 +619,29 @@ const CSS = `
 .dcs-music-form > .dcs-input { flex: 1 1 220px; min-width: 0; }
 .dcs-input-small { width: 190px; }
 .dcs-input-tiny { width: 58px; }
-.dcs-render-step { font-variant-numeric: tabular-nums; opacity: .85; }
+/* Render progress. The label carries the meaning; the bar exists so a long
+   silent phase still looks alive. */
+.dcs-render {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 9px 12px; margin: 8px 0;
+  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-l2, rgba(255, 255, 255, .03));
+}
+.dcs-render-head { display: flex; align-items: center; gap: 8px; }
+.dcs-render-label { font-size: 12px; }
+/* Tabular figures so the percentage and clock do not jiggle as they tick. */
+.dcs-render-clock { font-variant-numeric: tabular-nums; }
+.dcs-render-bar {
+  height: 4px; border-radius: 2px; overflow: hidden;
+  background: rgba(255, 255, 255, .08);
+}
+.dcs-render-fill {
+  height: 100%; background: #f4d58d;
+  /* Eased, because the bar advances in jumps between poll responses and an
+     unanimated step reads as a stall followed by a glitch. */
+  transition: width .4s ease-out;
+}
 /* Unsaved is stated in words as well as colour: the marker has to survive a
    reader who cannot tell the accent from the resting state. */
 .dcs-music-dirty { color: #f4d58d; }
