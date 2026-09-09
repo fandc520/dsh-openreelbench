@@ -280,7 +280,7 @@ async function testApply() {
   apply(host.ctx, entry)
 
   const toolNames = [...host.tools.keys()].sort().join(',')
-  if (toolNames === 'studio_compose,studio_project,studio_show,studio_stage') ok('apply registers the four tools')
+  if (toolNames === 'studio_compose,studio_edit,studio_project,studio_show,studio_stage') ok('apply registers the five tools')
   else bad('tool registration', toolNames)
 
   const skillNames = [...host.skills.values()].map((s) => s.name).sort()
@@ -3468,6 +3468,184 @@ async function main() {
       ok('the music panel refuses to send when its skill would not load')
     else bad('no gate', 'the panel sends regardless of whether the skill loads')
   }
+
+  console.log('\n== studio_edit：剪辑版本与裁剪 ==')
+  {
+    const { registerStudioTools: regEdit } = await import('../lib/tools.js')
+    const editTools = new Map()
+    regEdit(
+      { tools: { register: (definition) => { editTools.set(definition.name, definition); return () => {} } } },
+      { machine, getConfig: () => config },
+    )
+    const tool = editTools.get('studio_edit')
+    const call = async (args) => tool.execute(args, { signal: new AbortController().signal })
+
+    // ---- cuts round-trip -------------------------------------------------
+
+    const empty = await call({ action: 'cuts', project: 'smoke' })
+    if (empty.cuts.length === 0) ok('a project with no cuts lists none rather than failing')
+    else bad('cuts baseline', JSON.stringify(empty.cuts.map((c) => c.id)))
+
+    const saved = await call({
+      action: 'save_cut',
+      project: 'smoke',
+      cut: {
+        id: 'agent-cut',
+        name: '代理剪辑',
+        note: '试试更短的开头',
+        sections: [{ id: 's1', lead: 0.4, tail: 0.2, cues: [{ text: '第一句' }, { text: '第二句', weight: 2 }] }],
+      },
+    })
+    if (saved.cut.id === 'agent-cut' && saved.replaced === false) ok('the agent can save a cut')
+    else bad('save_cut', JSON.stringify(saved))
+    // Weights and pads have to survive the round trip, or the cut the agent
+    // saved is not the cut that renders.
+    const section = saved.cut.sections[0]
+    if (section?.lead === 0.4 && section?.cues?.[1]?.weight === 2)
+      ok('pads and cue weights survive the round trip')
+    else bad('cut fields dropped', JSON.stringify(section))
+
+    // The SAME parser the panel route uses, so a value the panel could never
+    // produce cannot arrive down this path either.
+    const clamped = await call({
+      action: 'save_cut',
+      project: 'smoke',
+      cut: { id: 'agent-cut', name: '代理剪辑', sections: [{ id: 's1', lead: 999, tail: -3 }] },
+    })
+    const bounded = clamped.cut.sections[0]
+    if (bounded.lead === 10 && bounded.tail === undefined)
+      ok('the agent path clamps exactly like the panel path')
+    else bad('clamping', JSON.stringify(bounded))
+    if (clamped.replaced === true) ok('saving a known id says it replaced rather than added')
+    else bad('replace not reported', JSON.stringify(clamped.replaced))
+
+    const listed = await call({ action: 'cuts', project: 'smoke' })
+    if (listed.cuts.length === 1 && listed.cuts[0].id === 'agent-cut')
+      ok('the saved cut comes back in the listing')
+    else bad('listing', JSON.stringify(listed.cuts.map((c) => c.id)))
+
+    // A cut id names a file, so it is held to the same shape as a project id.
+    let badId
+    await call({ action: 'save_cut', project: 'smoke', cut: { id: '../escape', name: 'x' } })
+      .catch((error) => { badId = String(error.message ?? error) })
+    if (badId !== undefined && badId.includes('cut id')) ok('a cut id that would escape the directory is refused')
+    else bad('cut id escape', badId ?? 'accepted')
+
+    let missing
+    await call({ action: 'delete_cut', project: 'smoke', id: 'never-existed' })
+      .catch((error) => { missing = String(error.message ?? error) })
+    if (missing !== undefined && missing.includes('no cut')) ok('deleting a cut that is not there says so')
+    else bad('delete missing', missing ?? 'reported success')
+
+    const removed = await call({ action: 'delete_cut', project: 'smoke', id: 'agent-cut' })
+    const after = await call({ action: 'cuts', project: 'smoke' })
+    if (removed.deleted === 'agent-cut' && after.cuts.length === 0) ok('the agent can delete a cut')
+    else bad('delete_cut', JSON.stringify(after.cuts.map((c) => c.id)))
+
+    // ---- trim ------------------------------------------------------------
+
+    const clip = 'assets/audio/s1.wav'
+    const before = (await fs.stat(join(layout.dir, clip))).size
+    const trimmed = await call({ action: 'trim_audio', project: 'smoke', path: clip, start: 0.5, end: 1.5 })
+    const now = (await fs.stat(join(layout.dir, clip))).size
+    if (now < before && trimmed.bytes === now) ok('the agent can trim a take (' + before + ' -> ' + now + ' bytes)')
+    else bad('trim_audio', before + ' -> ' + now)
+    // ffprobe is the honest check: a file can shrink for reasons other than
+    // being shorter.
+    const probed = await run('ffprobe', [
+      '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', join(layout.dir, clip),
+    ])
+    const seconds = Number(probed.stdout.trim())
+    if (Math.abs(seconds - 1.0) < 0.1) ok('the trimmed clip really is one second long')
+    else bad('trim duration', seconds + 's, expected ~1.0')
+
+    let escaped
+    await call({ action: 'trim_audio', project: 'smoke', path: '../../secrets.wav', start: 0 })
+      .catch((error) => { escaped = String(error.message ?? error) })
+    if (escaped !== undefined) ok('a trim path climbing out of the project is refused')
+    else bad('trim escape', 'reached the filesystem')
+
+    let backwards
+    await call({ action: 'trim_audio', project: 'smoke', path: clip, start: 2, end: 1 })
+      .catch((error) => { backwards = String(error.message ?? error) })
+    if (backwards !== undefined && backwards.includes('greater than start'))
+      ok('an end before the start is refused rather than producing an empty file')
+    else bad('backwards trim', backwards ?? 'accepted')
+  }
+
+  console.log('\n== 目标平台：agent 也能改 ==')
+  {
+    const { registerStudioTools: regPlat } = await import('../lib/tools.js')
+    const platTools = new Map()
+    regPlat(
+      { tools: { register: (definition) => { platTools.set(definition.name, definition); return () => {} } } },
+      { machine, getConfig: () => config },
+    )
+    const projectTool = platTools.get('studio_project')
+    const callProject = async (args) => projectTool.execute(args, { signal: new AbortController().signal })
+
+    const set = await callProject({ action: 'set_platform', project: 'smoke', target_platform: 'douyin' })
+    // The frame is REPORTED, not left implied -- the whole reason the field
+    // exists is that a declaration nothing acts on reads like a decision.
+    if (set.profile.width === 1080 && set.profile.height === 1920 && set.profile.source === 'platform')
+      ok('setting 抖音 reports the portrait frame it implies')
+    else bad('set_platform frame', JSON.stringify(set.profile))
+    if (set.project.target_platform === 'douyin') ok('the platform is stored on the project')
+    else bad('platform not stored', JSON.stringify(set.project.target_platform))
+
+    const generic = await callProject({ action: 'set_platform', project: 'smoke', target_platform: 'generic' })
+    if (generic.profile.source === 'settings') ok("'generic' hands the frame back to the settings")
+    else bad('generic frame', JSON.stringify(generic.profile))
+
+    let rejected
+    await callProject({ action: 'set_platform', project: 'smoke', target_platform: 'myspace' })
+      .catch((error) => { rejected = String(error.message ?? error) })
+    if (rejected !== undefined && rejected.includes('must be one of'))
+      ok('an unknown platform is refused with the list')
+    else bad('platform validation', rejected ?? 'accepted')
+  }
+
+  console.log('\n== 人机同径：面板能做的 agent 也要能做 ==')
+  {
+    // CONVENTIONS §8. Every one of these is something the panel does with a
+    // button; an unattended run has no panel, so each needs a way in. This is
+    // the list, checked rather than remembered -- the failure it guards against
+    // is adding a seventh panel-only button and noticing a release later.
+    const { registerStudioTools: regAll } = await import('../lib/tools.js')
+    const allTools = new Map()
+    regAll(
+      { tools: { register: (definition) => { allTools.set(definition.name, definition); return () => {} } } },
+      { machine, getConfig: () => config },
+    )
+
+    // Reachability is read off the ACTION ENUM and the declared parameters,
+    // never off the serialized schema as text. Searching the JSON for the word
+    // matched the action names in their own `path`/`start` descriptions, so
+    // deleting trim_audio from the enum left this passing -- the check said
+    // "the schema mentions it" when it meant "the model can call it".
+    const actionsOf = (tool) => allTools.get(tool)?.parameters?.properties?.action?.enum ?? []
+    const paramsOf = (tool) => Object.keys(allTools.get(tool)?.parameters?.properties ?? {})
+
+    const reachable = [
+      ['保存剪辑版本', 'studio_edit', 'action', 'save_cut'],
+      ['删除剪辑版本', 'studio_edit', 'action', 'delete_cut'],
+      ['列出剪辑版本', 'studio_edit', 'action', 'cuts'],
+      ['裁剪音频', 'studio_edit', 'action', 'trim_audio'],
+      ['目标平台', 'studio_project', 'action', 'set_platform'],
+      ['导入素材', 'studio_project', 'action', 'import'],
+      ['音色', 'studio_project', 'action', 'set_voice'],
+      ['风格', 'studio_project', 'action', 'style'],
+      // Compose takes no action enum; what the panel can choose per render is
+      // what has to be reachable here.
+      ['合成指定版本', 'studio_compose', 'param', 'cut'],
+      ['烧录字幕', 'studio_compose', 'param', 'burn_subtitles'],
+    ]
+    const unreachable = reachable.filter(([, tool, kind, name]) =>
+      !(kind === 'action' ? actionsOf(tool) : paramsOf(tool)).includes(name))
+    if (unreachable.length === 0) ok('every panel action the agent needs has a tool path (' + reachable.length + ')')
+    else bad('panel-only action', unreachable.map(([label]) => label).join(', '))
+  }
+
   console.log('\n== 配乐技能 ==')
   {
     const { STUDIO_SOUND_DESIGN_SKILL } = await import('../lib/skill-sound-design.js')

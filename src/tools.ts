@@ -15,7 +15,7 @@ import { basename, extname, isAbsolute } from 'node:path'
 import { promises as fs } from 'node:fs'
 
 import { type Config, bindingWorkflows } from './config.js'
-import type { ArtifactName, ScenePlan, Script } from './schema.js'
+import { type ArtifactName, type ScenePlan, type Script, PLATFORMS } from './schema.js'
 import { type ProjectLayout, ensureDir, pathExists, resolveInProject, toProjectRelative } from './project.js'
 import { composeProject } from './render-job.js'
 import { checkSceneVariation } from './variation.js'
@@ -23,6 +23,8 @@ import { mediaKindOf, mediaUrl } from './http.js'
 import { AssetError, IMPORT_KINDS, type ImportKind, type ImportRequest, importAssets, musicPatchOf } from './assets.js'
 import { type Playbook, listPlaybooks, renderVisualContract, resolvePlaybook } from './playbooks.js'
 import { resolvePipeline } from './pipelines.js'
+import { editDefinition } from './tool-edit.js'
+import { resolveVideoProfile } from './media-profile.js'
 import {
   type Stage,
   STAGES,
@@ -35,7 +37,7 @@ import {
 } from './state.js'
 
 /** A minimal ToolDefinition for ctx.tools.register. */
-interface ToolDefinition {
+export interface ToolDefinition {
   name: string
   description: string
   parameters: Record<string, unknown>
@@ -63,11 +65,11 @@ export interface StudioRuntime {
   readonly machine: StateMachine
 }
 
-function text(body: string): unknown[] {
+export function text(body: string): unknown[] {
   return [{ type: 'text', text: body }]
 }
 
-function requireString(args: Record<string, unknown>, key: string): string {
+export function requireString(args: Record<string, unknown>, key: string): string {
   const value = args[key]
   if (typeof value !== 'string' || value.trim() === '') {
     throw new StateViolationError('BAD_REQUEST', key + ' is required and must be a non-empty string')
@@ -83,7 +85,7 @@ function optionalString(args: Record<string, unknown>, key: string): string | un
   return trimmed === '' ? undefined : trimmed
 }
 
-function optionalRecord(args: Record<string, unknown>, key: string): Record<string, unknown> | undefined {
+export function optionalRecord(args: Record<string, unknown>, key: string): Record<string, unknown> | undefined {
   const value = args[key]
   if (value === undefined || value === null) return undefined
   if (typeof value !== 'object' || Array.isArray(value)) {
@@ -122,7 +124,7 @@ function projectDefinition(runtime: StudioRuntime): ToolDefinition {
       properties: {
         action: {
           type: 'string',
-          enum: ['init', 'status', 'list', 'get', 'import', 'bindings', 'set_voice', 'style'],
+          enum: ['init', 'status', 'list', 'get', 'import', 'bindings', 'set_voice', 'set_platform', 'style'],
           description: 'What to do.',
         },
         project: { type: 'string', description: 'Project id. Required for status, get, import and set_voice.' },
@@ -142,6 +144,15 @@ function projectDefinition(runtime: StudioRuntime): ToolDefinition {
             'init / set_voice: the narration voice, named exactly as the TTS workflow names it '
             + '(take it from that workflow\'s voice parameter options in `comfyui_workflow action: list`). '
             + 'Designing a new voice is a preparation step the user does in the ComfyUI panel, not part of this pipeline.',
+        },
+        target_platform: {
+          type: 'string',
+          enum: [...PLATFORMS],
+          description:
+            'set_platform: where the film is going. A named platform FIXES THE OUTPUT FRAME '
+            + '(抖音/微信 1080x1920, 小红书 1080x1440, YouTube/B 站 1920x1080) and the loudness '
+            + "target the mix is normalised to. 'generic' hands both back to the settings. "
+            + 'The brief also carries this — use the action to change it afterwards without rewriting one.',
         },
         voice_design_name: {
           type: 'string',
@@ -246,6 +257,22 @@ function projectDefinition(runtime: StudioRuntime): ToolDefinition {
       }
 
       const projectId = requireString(args, 'project')
+
+      if (action === 'set_platform') {
+        const platform = requireString(args, 'target_platform')
+        if (!(PLATFORMS as readonly string[]).includes(platform)) {
+          throw new StateViolationError(
+            'BAD_REQUEST',
+            'target_platform must be one of ' + PLATFORMS.join(' | ') + ', got ' + JSON.stringify(platform),
+          )
+        }
+        const marker = await machine.updateProject(projectId, { targetPlatform: platform })
+        // The resulting frame is reported rather than left implied: the whole
+        // reason this field exists is that a declaration nothing acts on reads
+        // like a decision that was made.
+        const profile = resolveVideoProfile(runtime.getConfig().video, platform)
+        return { action, project: marker, profile }
+      }
 
       if (action === 'set_voice') {
         // Also the way a voice-design suggestion reaches the panel: the panel
@@ -385,6 +412,15 @@ function renderProjectResult(value: Record<string, unknown>): string {
       ...playbook.quality_rules.map((rule) => '- ' + rule),
     )
     return lines.join('\n')
+  }
+
+  if (action === 'set_platform') {
+    const project = value.project as { id: string; target_platform?: string }
+    const profile = value.profile as { width: number; height: number; label: string; source: string }
+    return 'Project ' + project.id + ' targets ' + project.target_platform + '.'
+      + String.fromCharCode(10) + 'Renders at ' + profile.width + 'x' + profile.height
+      + '  (' + profile.label + ')'
+      + (profile.source === 'settings' ? '  — from settings, not the platform' : '')
   }
 
   if (action === 'set_voice') {
@@ -861,5 +897,6 @@ export function registerStudioTools(ctx: unknown, runtime: StudioRuntime): Array
     tools.register(stageDefinition(runtime)),
     tools.register(composeDefinition(runtime)),
     tools.register(showDefinition(runtime)),
+    tools.register(editDefinition(runtime)),
   ]
 }
