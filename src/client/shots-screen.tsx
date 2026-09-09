@@ -23,6 +23,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { SHOT_LANGUAGE_FIELDS, type StudioState, api, bindingWorkflows } from './api.ts'
 import { type AgentPhase, BusyLabel } from './busy.tsx'
+import { IconImage, IconPlay, IconSliders } from './icons.tsx'
 import { type AssetFile, AssetPicker, inputAssetUrl, useAssetUrls } from './asset-picker.tsx'
 import { AdvicePanel } from './advice-panel.tsx'
 import { Strip } from './strip.tsx'
@@ -666,12 +667,8 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
   return (
     <div className="dcs-screen">
       <header className="dcs-screen-head">
-        <div>
-          <h2 className="dcs-screen-title">分镜</h2>
-          <p className="dcs-screen-sub">
-            {shots.length} 镜 · 已生成 {done} · 全片 {total.toFixed(1)} 秒 · 风格「{playbook.name}」
-          </p>
-        </div>
+        <h2 className="dcs-screen-title">分镜</h2>
+        <span className="dcs-spacer" />
         <span className={'dcs-pill ' + (approved ? 'dcs-pill-ok' : '')}>
           {approved ? '已审核' : stage?.status === 'in_progress' ? '进行中' : '待确认'}
         </span>
@@ -681,9 +678,14 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
         <p className={'dcs-note ' + (result.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{result.text}</p>
       ) : null}
 
-      <section className="dcs-panel">
-        <div className="dcs-group-head">
-          <h3 className="dcs-group-title">分镜生成</h3>
+      <section className="dcs-card">
+        <div className="dcs-card-head">
+          <IconImage className="dcs-section-icon" />
+          <h3 className="dcs-card-title">分镜生成</h3>
+          <span className="dcs-card-meta">
+            <span><b>{done}</b>/{shots.length} 镜已生成 · 全片 {total.toFixed(1)} 秒</span>
+          </span>
+          <span className="dcs-spacer" />
           {imageChoices.length > 1 ? (
             <label className="dcs-inline-pick">
               <span className="dcs-hint">工作流</span>
@@ -726,12 +728,10 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
             <BusyLabel phase={phase} idle="全部生成" />
           </button>
         </div>
-
-        {/* One dark panel, two rows, always present.
-            Collapsed when both pass and open when either does not: a clean run
-        {/* One shell for both quality checks, shared with the compose screen.
-            Always rendered: an empty screen cannot tell you that anything was
-            checked, so a pass costs one collapsed line and a finding opens. */}
+        <div className="dcs-card-body">
+          {/* One shell for both quality checks, shared with the compose screen.
+              Always rendered: an empty screen cannot tell you that anything was
+              checked, so a pass costs one collapsed line and a finding opens. */}
         {variation === null ? null : (
           <AdvicePanel
             title="创作建议"
@@ -766,154 +766,152 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
 
 
         {active !== undefined ? (
-          <div className="dcs-shot-detail">
-            <div className="dcs-shot-image">
-              {imageSrc === undefined
-                ? <div className="dcs-shot-empty">这一镜还没生成</div>
-                : <img src={imageSrc} alt={active.sectionLabel} />}
-            </div>
+          <>
+            <div className="dcs-shot-detail">
+              <div className="dcs-shot-side">
+                <div className="dcs-shot-image">
+                  {imageSrc === undefined
+                    ? <div className="dcs-shot-empty">这一镜还没生成</div>
+                    : <img src={imageSrc} alt={active.sectionLabel} />}
+                </div>
 
-            <div className="dcs-shot-meta">
-              <div className="dcs-shot-head">
-                <span className="dcs-shot-where">
-                  {active.sectionLabel} · 第 {active.index + 1} 镜 / {sectionShots(active.sectionId).length}
-                </span>
-                <span className="dcs-hint">{active.duration.toFixed(1)} 秒</span>
-              </div>
+                <div className="dcs-shot-head">
+                  <span className="dcs-shot-where">
+                    {active.sectionLabel} · 第 {active.index + 1} 镜 / {sectionShots(active.sectionId).length}
+                  </span>
+                  <span className="dcs-hint">{active.duration.toFixed(1)} 秒</span>
+                </div>
 
-              {/* Prose, not a field. The narration is the one thing here
-                  nobody edits — it is context for the four decisions below, and
-                  a titled block gave it the same weight as the things that are
-                  actually being chosen. */}
-              <p className="dcs-shot-text" title="这一段要念出来的字，分镜跟着它走">
-                <span className="dcs-shot-text-label">台词：</span>
-                {active.text || '（这一段没有台词）'}
-              </p>
+                {/* Prose, not a field. The narration is the one thing here
+                    nobody edits — it is context for the four decisions below, and
+                    a titled block gave it the same weight as the things that are
+                    actually being chosen. */}
+                <p className="dcs-shot-text" title="这一段要念出来的字，分镜跟着它走">
+                  <span className="dcs-shot-text-label">台词：</span>
+                  {active.text || '（这一段没有台词）'}
+                </p>
 
-              <div className="dcs-shot-block">
-                <span
-                  className="dcs-shot-block-title"
-                  title="这一镜拍什么，只写主体。相机 / 镜头 / 光线 / 风格由下面的镜头语言和 playbook 分层拼上——下方「最终提示词」就是拼好的结果。"
-                >画面</span>
-                <textarea
-                  className="dcs-input dcs-textarea"
-                  rows={3}
-                  value={prompt}
-                  placeholder="英文提示词：只写画面主体"
-                  spellCheck={false}
-                  disabled={busy !== null}
-                  onChange={(event) => setDraftPrompt(event.target.value)}
-                />
-              </div>
-
-              <div className="dcs-shot-block dcs-shot-block-lang">
-                <span className="dcs-shot-block-title" title="这四层逐镜变化，是让十张图真的不一样的地方">
-                  镜头语言
-                </span>
-                <div className="dcs-lang-grid">
-                  {SHOT_LANGUAGE_FIELDS.map((field) => {
-                    const own = languageOf(active)[field.key]
-                    const inherited = styleDefaults[field.key]
-                    return (
-                      <label className="dcs-lang-cell" key={field.key}>
-                        <span className="dcs-lang-name" title={field.hint}>{field.label}</span>
-                        <select
-                          className={'dcs-select dcs-lang-select'
-                            + (own === undefined && inherited !== undefined ? ' dcs-select-inherited' : '')}
-                          value={own === undefined ? '' : String(own)}
-                          disabled={busy !== null}
-                          onChange={(event) => void setLanguage(field.key, event.target.value)}
-                        >
-                          {/* Named rather than blank: an empty row reads as
-                              broken, and what it actually means is that the
-                              style decides — worth saying out loud. */}
-                          <option value="">
-                            {inherited === undefined
-                              ? '不指定'
-                              : '跟风格（' + (field.options.find((o) => o.id === String(inherited))?.label
-                                ?? String(inherited)) + '）'}
-                          </option>
-                          {field.options.map((option) => (
-                            <option key={option.id} value={option.id}>{option.label}</option>
-                          ))}
-                        </select>
-                      </label>
-                    )
-                  })}
+                <div className="dcs-shot-block">
+                  <span
+                    className="dcs-shot-block-title"
+                    title="这一镜拍什么，只写主体。相机 / 镜头 / 光线 / 风格由右边的镜头语言和 playbook 分层拼上——右下「最终提示词」就是拼好的结果。"
+                  >画面</span>
+                  <textarea
+                    className="dcs-input dcs-textarea"
+                    rows={3}
+                    value={prompt}
+                    placeholder="英文提示词：只写画面主体"
+                    spellCheck={false}
+                    disabled={busy !== null}
+                    onChange={(event) => setDraftPrompt(event.target.value)}
+                  />
                 </div>
               </div>
 
-              {builtPrompt === undefined ? null : (
-                <div className="dcs-shot-block">
-                  <span className="dcs-shot-block-title" title="插件拼好的整条，生成时原样使用">
-                    最终提示词
+              <div className="dcs-shot-meta">
+                <div className="dcs-shot-block dcs-shot-block-lang">
+                  <span className="dcs-shot-block-title" title="这四层逐镜变化，是让十张图真的不一样的地方">
+                    镜头语言
                   </span>
-                  <div className="dcs-built">
-                    {builtPrompt.layers.map((entry) => (
-                      <span
-                        key={entry.layer}
-                        className={'dcs-built-layer' + (entry.fromDefaults ? ' dcs-built-inherited' : '')}
-                        title={'第 ' + entry.layer + ' 层 · ' + entry.name
-                          + (entry.fromDefaults ? '（来自风格默认）' : '')}
-                      >{entry.text}</span>
-                    ))}
+                  <div className="dcs-lang-grid">
+                    {SHOT_LANGUAGE_FIELDS.map((field) => {
+                      const own = languageOf(active)[field.key]
+                      const inherited = styleDefaults[field.key]
+                      return (
+                        <label className="dcs-lang-cell" key={field.key}>
+                          <span className="dcs-lang-name" title={field.hint}>{field.label}</span>
+                          <select
+                            className={'dcs-select dcs-lang-select'
+                              + (own === undefined && inherited !== undefined ? ' dcs-select-inherited' : '')}
+                            value={own === undefined ? '' : String(own)}
+                            disabled={busy !== null}
+                            onChange={(event) => void setLanguage(field.key, event.target.value)}
+                          >
+                            {/* Named rather than blank: an empty row reads as
+                                broken, and what it actually means is that the
+                                style decides — worth saying out loud. */}
+                            <option value="">
+                              {inherited === undefined
+                                ? '不指定'
+                                : '跟风格（' + (field.options.find((o) => o.id === String(inherited))?.label
+                                  ?? String(inherited)) + '）'}
+                            </option>
+                            {field.options.map((option) => (
+                              <option key={option.id} value={option.id}>{option.label}</option>
+                            ))}
+                          </select>
+                        </label>
+                      )
+                    })}
                   </div>
                 </div>
-              )}
 
-              <div className="dcs-shot-actions">
-                <label className="dcs-inline-pick">
-                  <span className="dcs-hint">段落占比</span>
-                  {isLastShot ? (
-                    <span className="dcs-derived" title="最后一镜自动补齐剩下的时间，改前面几镜即可">
-                      {shareOf(active).toFixed(2)}　自动
+                {builtPrompt === undefined ? null : (
+                  <div className="dcs-shot-block">
+                    <span className="dcs-shot-block-title" title="插件拼好的整条，生成时原样使用">
+                      最终提示词
                     </span>
-                  ) : (
-                    <input
-                      key={active.key + ':' + active.weight}
-                      className="dcs-input dcs-input-seconds"
-                      inputMode="decimal"
-                      defaultValue={shareOf(active).toFixed(2)}
-                      disabled={busy !== null}
-                      title="这一镜占本段时间的比例，0 到 1 之间。两镜均分就是 0.5，最后一镜自动补齐。"
-                      onBlur={(event) => {
-                        const value = Number(event.target.value)
-                        if (Number.isFinite(value) && Math.abs(value - shareOf(active)) > 0.005) void setShare(value)
-                      }}
-                    />
-                  )}
-                </label>
-                <button
-                  type="button"
-                  className={'dcs-btn dcs-btn-small' + (isHero ? ' dcs-btn-hero' : '')}
-                  disabled={busy !== null}
-                  onClick={() => void toggleHero()}
-                  title="全片的画面顶点。标了之后前后两镜的镜别要和它不一样，否则顶不起来。"
-                >{isHero ? '★ 高光' : '☆ 高光'}</button>
-                <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
-                  onClick={() => void move(-1)} title="在本段内前移">←</button>
-                <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
-                  onClick={() => void move(1)} title="在本段内后移">→</button>
-                <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
-                  onClick={() => void addShot()} title="给这一段再加一镜，时长从本段切分">+ 加一镜</button>
-                <button type="button" className="dcs-btn dcs-btn-small dcs-btn-quiet-danger" disabled={busy !== null}
-                  onClick={() => void removeShot()}>删除</button>
-                <span className="dcs-spacer" />
-                {draftPrompt !== null ? (
-                  <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
-                    onClick={() => void savePrompt()}>保存提示词</button>
-                ) : null}
-                <button
-                  type="button"
-                  className="dcs-btn dcs-btn-small dcs-btn-primary"
-                  disabled={phase !== null || busy !== null}
-                  onClick={() => void generate([active])}
-                >
-                  {phase === null ? (active.path === undefined ? '生成这一镜' : '重新生成') : <BusyLabel phase={phase} idle="" />}
-                </button>
+                    <div className="dcs-built">
+                      {builtPrompt.layers.map((entry) => (
+                        <span
+                          key={entry.layer}
+                          className={'dcs-built-layer' + (entry.fromDefaults ? ' dcs-built-inherited' : '')}
+                          title={'第 ' + entry.layer + ' 层 · ' + entry.name
+                            + (entry.fromDefaults ? '（来自风格默认）' : '')}
+                        >{entry.text}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+
+            {/* The strip's toolbar: one row of shot-level commands, parked right
+                above the timeline they act on. */}
+            <div className="dcs-shot-tools">
+              <label className="dcs-inline-pick">
+                <span className="dcs-hint">段落占比</span>
+                {isLastShot ? (
+                  <span className="dcs-derived" title="最后一镜自动补齐剩下的时间，改前面几镜即可">
+                    {shareOf(active).toFixed(2)}　自动
+                  </span>
+                ) : (
+                  <input
+                    key={active.key + ':' + active.weight}
+                    className="dcs-input dcs-input-seconds"
+                    inputMode="decimal"
+                    defaultValue={shareOf(active).toFixed(2)}
+                    disabled={busy !== null}
+                    title="这一镜占本段时间的比例，0 到 1 之间。两镜均分就是 0.5，最后一镜自动补齐。"
+                    onBlur={(event) => {
+                      const value = Number(event.target.value)
+                      if (Number.isFinite(value) && Math.abs(value - shareOf(active)) > 0.005) void setShare(value)
+                    }}
+                  />
+                )}
+              </label>
+              <button
+                type="button"
+                className={'dcs-btn dcs-btn-small' + (isHero ? ' dcs-btn-hero' : '')}
+                disabled={busy !== null}
+                onClick={() => void toggleHero()}
+                title="全片的画面顶点。标了之后前后两镜的镜别要和它不一样，否则顶不起来。"
+              >{isHero ? '★ 高光' : '☆ 高光'}</button>
+              <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
+                onClick={() => void move(-1)} title="在本段内前移">←</button>
+              <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
+                onClick={() => void move(1)} title="在本段内后移">→</button>
+              <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
+                onClick={() => void addShot()} title="给这一段再加一镜，时长从本段切分">+ 加一镜</button>
+              <button type="button" className="dcs-btn dcs-btn-small dcs-btn-quiet-danger" disabled={busy !== null}
+                onClick={() => void removeShot()}>删除</button>
+              <span className="dcs-spacer" />
+              {draftPrompt !== null ? (
+                <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
+                  onClick={() => void savePrompt()}>保存提示词</button>
+              ) : null}
+            </div>
+          </>
         ) : (
           <p className="dcs-note">脚本还没有段落，先回上一步。</p>
         )}
@@ -966,106 +964,120 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
           </div>
           <div className="dcs-film-perf" aria-hidden="true" />
         </div>
-      </section>
-      <div className="dcs-bottom">
-        <section className="dcs-panel dcs-bottom-left">
-          <div className="dcs-group-head">
-            <h3 className="dcs-group-title">生成参数</h3>
-          </div>
-          <div className="dcs-row dcs-row-tight">
-            <input
-              type="checkbox"
-              className="dcs-check-box"
-              checked={loraOn}
-              disabled={busy !== null}
-              title={loraOn ? '这行会附在生成请求里' : '勾选后这行才会附在生成请求里'}
-              onChange={(event) => {
-                setLoraOn(event.target.checked)
-                void saveLora({ on: event.target.checked })
-              }}
-            />
-            <input
-              className="dcs-input"
-              value={loraHint}
-              placeholder="例如：LoRA 强度 0.8　/　综合强度 0.5-0.8-0.4"
-              spellCheck={false}
-              disabled={busy !== null}
-              onChange={(event) => setLoraHint(event.target.value)}
-              onBlur={(event) => {
-                if (event.target.value.trim() !== (state.project.lora_name ?? '').trim()) {
-                  void saveLora({ hint: event.target.value })
-                }
-              }}
-            />
-          </div>
-          <p className="dcs-hint">
-            这一行会原样附在生成请求里，由 Agent 按工作流自己的参数名传进去。
-            这里不校验也不解析——什么 LoRA、多大强度，只有你的工作流知道。
-          </p>
-        </section>
 
-        <section className="dcs-panel dcs-bottom-right">
-          <div className="dcs-group-head">
-            <h3 className="dcs-group-title">参考图</h3>
-            <span className="dcs-hint">
-              {references.length === 0 ? '整个项目共用，还没有添加' : '整个项目共用 · ' + references.length + ' 张'}
-            </span>
-          </div>
-
-          {/* Slots, like the ComfyUI panel's load area: position matters,
-              because a workflow's loaders take them in order. */}
-          <div className="dcs-slots">
-            {references.map((name, index) => (
-              <div className="dcs-slot" key={name + index}>
-                <span className="dcs-slot-index">{index + 1}</span>
-                <img className="dcs-slot-media" src={referenceUrl(name)} alt="" loading="lazy" />
-                <span className="dcs-slot-name" title={name}>{name}</span>
-                <button
-                  type="button"
-                  className="dcs-slot-x"
-                  aria-label="移除这一槽"
-                  disabled={busy !== null}
-                  onClick={() => void removeReference(name)}
-                >×</button>
-              </div>
-            ))}
+        {active !== undefined ? (
+          <div className="dcs-shot-foot">
+            <span className="dcs-spacer" />
             <button
               type="button"
-              className="dcs-slot dcs-slot-empty"
-              disabled={busy !== null}
-              title="从 ComfyUI 的素材里指定一张；浏览器里也可以上传新的"
-              onClick={() => setPickerOpen(true)}
+              className="dcs-btn dcs-btn-small dcs-btn-primary"
+              disabled={phase !== null || busy !== null}
+              onClick={() => void generate([active])}
             >
-              <span className="dcs-slot-index">{references.length + 1}</span>
-              <span className="dcs-slot-add">＋ 指定参考图</span>
+              {phase === null ? (active.path === undefined ? '生成这一镜' : '重新生成') : <BusyLabel phase={phase} idle="" />}
             </button>
           </div>
+        ) : null}
+        </div>
+      </section>
+      <section className="dcs-card">
+        <div className="dcs-card-head">
+          <IconSliders className="dcs-section-icon" />
+          <h3 className="dcs-card-title">生成参数与参考图</h3>
+          <span className="dcs-card-meta"><span>参考图 <b>{references.length}</b> 张</span></span>
+        </div>
+        <div className="dcs-card-body">
+          <div className="dcs-duo-split">
+            <div className="dcs-duo-col">
+              <div className="dcs-col-head"><b>生成参数</b></div>
+              <div className="dcs-row dcs-row-tight">
+                <input
+                  type="checkbox"
+                  className="dcs-check-box"
+                  checked={loraOn}
+                  disabled={busy !== null}
+                  title={loraOn ? '这行会附在生成请求里' : '勾选后这行才会附在生成请求里'}
+                  onChange={(event) => {
+                    setLoraOn(event.target.checked)
+                    void saveLora({ on: event.target.checked })
+                  }}
+                />
+                <input
+                  className="dcs-input"
+                  value={loraHint}
+                  placeholder="例如：LoRA 强度 0.8　/　综合强度 0.5-0.8-0.4"
+                  spellCheck={false}
+                  disabled={busy !== null}
+                  onChange={(event) => setLoraHint(event.target.value)}
+                  onBlur={(event) => {
+                    if (event.target.value.trim() !== (state.project.lora_name ?? '').trim()) {
+                      void saveLora({ hint: event.target.value })
+                    }
+                  }}
+                />
+              </div>
+              <p className="dcs-hint">填入要加载的 LoRA 和对应的强度，发送给 Agent 自行理解。</p>
+            </div>
 
-          <p className="dcs-hint">
-            为图生图（参考图）流程提供指定接口，数量请根据您的工作流决定。
-            槽位按顺序对应工作流的加载参数，所以顺序有意义。
-            这里记的是 ComfyUI 里的文件名，生成时把名称交给 Agent。
-          </p>
-        </section>
-      </div>
+            <div className="dcs-duo-col">
+              <div className="dcs-col-head"><b>参考图</b></div>
+
+              {/* Slots, like the ComfyUI panel's load area: position matters,
+                  because a workflow's loaders take them in order. */}
+              <div className="dcs-slots">
+                {references.map((name, index) => (
+                  <div className="dcs-slot" key={name + index}>
+                    <span className="dcs-slot-index">{index + 1}</span>
+                    <img className="dcs-slot-media" src={referenceUrl(name)} alt="" loading="lazy" />
+                    <span className="dcs-slot-name" title={name}>{name}</span>
+                    <button
+                      type="button"
+                      className="dcs-slot-x"
+                      aria-label="移除这一槽"
+                      disabled={busy !== null}
+                      onClick={() => void removeReference(name)}
+                    >×</button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="dcs-slot dcs-slot-empty"
+                  disabled={busy !== null}
+                  title="从 ComfyUI 的素材里指定一张；浏览器里也可以上传新的"
+                  onClick={() => setPickerOpen(true)}
+                >
+                  <span className="dcs-slot-index">{references.length + 1}</span>
+                  <span className="dcs-slot-add">指定参考图</span>
+                </button>
+              </div>
+              <p className="dcs-hint">指定 ComfyUI 中的参考图，以用于多图风格参考。</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
 
-      <footer className="dcs-actions">
-        <span className="dcs-hint">
-          {approved
-            ? '这一版已经确认过了。再提交一次会替换分镜，成片要重做。'
-            : '确认之后 Agent 才会开始合成。之后想改也可以回来重新提交。'}
-        </span>
-        <span className="dcs-spacer" />
+      <div className="dcs-cta">
         <button
           type="button"
-          className="dcs-btn dcs-btn-primary"
+          className="dcs-cta-primary"
           disabled={busy !== null || phase !== null || done < shots.length}
+          title={done < shots.length ? '还差 ' + (shots.length - done) + ' 镜没生成' : undefined}
           onClick={() => void submit()}
         >
-          {busy === 'submit' ? '提交中…' : done < shots.length ? '还差 ' + (shots.length - done) + ' 镜' : '通过审核'}
+          <IconPlay className="dcs-cta-icon" />
+          {busy === 'submit'
+            ? '提交中…'
+            : done < shots.length
+              ? '还差 ' + (shots.length - done) + ' 镜'
+              : approved ? '重新提交分镜' : '确认分镜，进入成片'}
         </button>
-      </footer>
+        <p className="dcs-cta-hint">
+          {approved
+            ? '这一版已经确认过了。再提交一次会替换分镜，成片要重做。'
+            : '这一页所有分镜确认后的下一步——之后才会开始合成。'}
+        </p>
+      </div>
 
       {pickerOpen ? (
         <AssetPicker

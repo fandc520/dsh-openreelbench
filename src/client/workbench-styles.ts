@@ -27,10 +27,10 @@ const CSS = `
   --dcs-accent: #7c5cff;
   --dcs-accent-2: #2dd4bf;
   --dcs-accent-soft: rgba(124, 92, 255, 0.16);
-  /* The waveform's own gradient: cyan easing into green, read left to right
-     so a clip tints slightly greener as it plays on. */
-  --dcs-wave-from: #22d3ee;
-  --dcs-wave-to: #34d399;
+  /* The waveform's own gradient, vertical: cyan at the centerline easing to
+     green at the peaks — colour doubles as an amplitude read. */
+  --dcs-wave-core: #22d3ee;
+  --dcs-wave-edge: #34d399;
 }
 .dcs-centered { align-items: center; justify-content: center; }
 .dcs-empty { display: flex; flex-direction: column; gap: 12px; align-items: center; }
@@ -266,9 +266,14 @@ const CSS = `
 
 /* ---------------------------------------------------------------- shots */
 
-.dcs-shot-detail { display: flex; gap: 16px; align-items: flex-start; }
+/* One shot, two halves: the picture with its identity and subject on the
+   left, the language and the built prompt on the right — the picture no
+   longer floats beside a tall column with dead space under it. */
+.dcs-shot-detail { display: grid; gap: 16px; align-items: start; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
+@media (max-width: 880px) { .dcs-shot-detail { grid-template-columns: 1fr; } }
+.dcs-shot-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .dcs-shot-image {
-  flex: none; width: 320px; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden;
+  width: 100%; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden;
   background: var(--dsw-alias-bg-layer-1);
   border: 1px solid var(--dsw-alias-border-l2);
   display: grid; place-items: center;
@@ -276,6 +281,11 @@ const CSS = `
 .dcs-shot-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .dcs-shot-empty { font-size: 12px; color: var(--dsw-alias-label-tertiary); }
 .dcs-shot-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+
+/* The strip's toolbar: shot-level commands on one line above the timeline,
+   and the single generate action parked under it, right-aligned. */
+.dcs-shot-tools { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.dcs-shot-foot { display: flex; align-items: center; gap: 10px; margin-top: -2px; }
 
 .dcs-btn-hero {
   border-color: rgba(244, 213, 141, .55);
@@ -504,7 +514,6 @@ const CSS = `
   color: var(--dsw-alias-label-secondary);
 }
 .dcs-shot-text-label { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.dcs-shot-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 /* ---------------------------------------------------------- timeline */
 
 .dcs-screen-wide { max-width: 1080px; }
@@ -1273,14 +1282,14 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
 
 /* ------------------------------------------------------------ audio stage */
 
-/* The voice card's two halves: library + reference audio left, design right.
-   Collapses to one column when there is no room for two readable halves. */
-.dcs-audio-split { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.dcs-audio-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.dcs-audio-col + .dcs-audio-col { padding-left: 16px; border-left: 1px solid var(--dsw-alias-border-l1); }
+/* A card body in two halves with a hairline between; collapses to one column
+   when the view is too narrow for two readable halves. */
+.dcs-duo-split { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dcs-duo-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.dcs-duo-col + .dcs-duo-col { padding-left: 16px; border-left: 1px solid var(--dsw-alias-border-l1); }
 @media (max-width: 880px) {
-  .dcs-audio-split { grid-template-columns: 1fr; }
-  .dcs-audio-col + .dcs-audio-col {
+  .dcs-duo-split { grid-template-columns: 1fr; }
+  .dcs-duo-col + .dcs-duo-col {
     padding-left: 0; border-left: none;
     padding-top: 14px; border-top: 1px solid var(--dsw-alias-border-l1);
   }

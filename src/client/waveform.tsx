@@ -102,11 +102,13 @@ export function Waveform({
 
     const wave = cssVar(canvas, '--dsw-alias-label-tertiary', '#888')
     const brand = cssVar(canvas, '--dsw-alias-brand-primary', '#4a9')
-    // The wave carries the panel's second hue: cyan easing into green across
-    // the clip. A gradient object, so every bar samples its own slice of it.
-    const waveGrad = context.createLinearGradient(0, 0, width, 0)
-    waveGrad.addColorStop(0, cssVar(canvas, '--dcs-wave-from', '#22d3ee'))
-    waveGrad.addColorStop(1, cssVar(canvas, '--dcs-wave-to', '#34d399'))
+    // The wave carries the panel's second hue as a vertical gradient: cyan at
+    // the centerline, easing to green toward the peaks — colour maps to
+    // amplitude, so the loud passages read deeper without a second look.
+    const waveGrad = context.createLinearGradient(0, 0, 0, height)
+    waveGrad.addColorStop(0, cssVar(canvas, '--dcs-wave-edge', '#34d399'))
+    waveGrad.addColorStop(0.5, cssVar(canvas, '--dcs-wave-core', '#22d3ee'))
+    waveGrad.addColorStop(1, cssVar(canvas, '--dcs-wave-edge', '#34d399'))
     const middle = height / 2
 
     if (buffer === null) {

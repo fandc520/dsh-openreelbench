@@ -671,8 +671,8 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
           </button>
         </div>
         <div className="dcs-card-body">
-          <div className="dcs-audio-split">
-            <div className="dcs-audio-col">
+          <div className="dcs-duo-split">
+            <div className="dcs-duo-col">
               <label className="dcs-field">
                 <span className="dcs-label">音色库</span>
                 <select
@@ -749,7 +749,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
               <p className="dcs-hint">槽位按顺序对应工作流的加载参数。</p>
             </div>
 
-            <div className="dcs-audio-col">
+            <div className="dcs-duo-col">
               <div className="dcs-col-head">
                 <b>音色设计</b>
                 <span className="dcs-hint">
