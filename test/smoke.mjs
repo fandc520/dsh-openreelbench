@@ -4064,6 +4064,32 @@ async function main() {
   }
 
 
+
+  console.log('\n== usage 技能与真实工具表对齐 ==')
+  {
+    const { STUDIO_USAGE_SKILL } = await import('../lib/skill-usage.js')
+    const { registerStudioTools: regU } = await import('../lib/tools.js')
+    const uTools = new Map()
+    regU(
+      { tools: { register: (d) => { uTools.set(d.name, d); return () => {} } } },
+      { machine, getConfig: () => config },
+    )
+
+    // The skill described three tools while five were registered, and the two
+    // it omitted were the ones an unattended run needs most. A tool the model
+    // is never told about is a tool it will not reach for.
+    const undocumented = [...uTools.keys()].filter((name) => !STUDIO_USAGE_SKILL.content.includes(name))
+    if (undocumented.length === 0) ok('usage documents every registered tool (' + uTools.size + ')')
+    else bad('tool missing from usage', undocumented.join(', '))
+
+    // And the count in the heading has to move with them.
+    const counts = { 3: '三', 4: '四', 5: '五', 6: '六', 7: '七' }
+    const written = counts[uTools.size]
+    if (written !== undefined && STUDIO_USAGE_SKILL.content.includes(written + '个工具'))
+      ok('the heading counts the tools that exist')
+    else bad('stale tool count', 'the heading does not say ' + written + '个工具')
+  }
+
   console.log('\n== 面板给方向，模型规范定措辞 ==')
   {
     const { buildStageSkills, stageSkillName } = await import('../lib/stage-skills.js')

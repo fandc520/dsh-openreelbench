@@ -30,13 +30,19 @@ const CONTENT = `# dsh-creative-studio 工具契约
 管线怎么走看那条管线自己的技能（如 \`dsh-creative-studio-explainer-stills\`），某一段具体怎么做看 \`dsh-creative-studio-stage-*\`。这份讲**工具本身怎么表现**——
 它会不会改你的输入、报错了怎么办、重试安不安全、和 ComfyUI 插件怎么分工。
 
-## 三个工具的职责边界
+## 五个工具的职责边界
 
 | 工具 | 会改状态吗 | 说明 |
 |---|---|---|
-| \`studio_project\` | **不会** | 建项目、查状态、读产物、搬文件、看风格和绑定、设音色 |
+| \`studio_project\` | **不会** | 建项目、查状态、读产物、搬文件、看风格和绑定、设音色、设目标平台 |
 | \`studio_stage\` | **会，唯一入口** | 写产物 + 推进阶段，所有校验都在这里 |
 | \`studio_compose\` | **不会** | 只出片并返回 report，这一趟算不算数由 \`studio_stage\` 记 |
+| \`studio_edit\` | **不会** | 剪辑版本的增删查、裁剪音频头尾。剪辑是提案，闸在 compose |
+| \`studio_show\` | **不会** | 把项目里已有的文件放进对话让人看。不生成、不导入、不落盘 |
+
+\`studio_edit\` 和面板走的是**同一个函数**——保存剪辑版本用 \`parseCut\`、
+裁剪用 \`trimAudioAsset\`。所以钳制规则只有一份，面板做不到的事你也做不到，
+反过来也一样。无人值守跑流程时它是唯一能改剪辑的入口。
 
 \`studio_compose\` 和 \`studio_stage\` 分成两步是刻意的：渲染只是产生了一个文件，
 **报告要经 \`studio_stage\` 核对输出文件真实存在之后才算数**。
