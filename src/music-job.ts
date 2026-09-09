@@ -79,8 +79,11 @@ export function buildMusicJob(input: MusicJobInput): string {
   // The two rules that disqualify a track outright are repeated here rather
   // than left to the skill alone. They are the difference between a bed and a
   // ruined film, and the request is the last thing the model reads.
-  lines.push('两条不能破的：**必须纯器乐**（负向写 vocals, lyrics, singing），'
-    + '**动态要平**（不要 drop、不要渐强到高潮）。')
+  lines.push('两条不能破的：**必须纯器乐**，**动态要平**（不要 drop、不要渐强到高潮）。')
+  // The panel decides WHAT; the workflow's own pack decides HOW to say it.
+  // Which model sits behind a binding is the user's choice and it changes.
+  lines.push('上面是方向。**提示词怎么写按工作流那个模型的规范来**——'
+    + '先用 `comfyui_workflow` 的 `action: "skill"` 读它的技能包，再把方向转写过去。')
   lines.push('')
   // One bed, so no async line and no gate line: nothing to interleave, and
   // importing music advances no stage.

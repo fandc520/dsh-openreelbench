@@ -37,6 +37,40 @@ export function stageSkillName(key: string): string {
   return STAGE_SKILL_PREFIX + key
 }
 
+/**
+ * The rule every generating stage shares: the panel gives DIRECTION, the model
+ * writes the prompt in its own workflow's dialect.
+ *
+ * A panel cannot know how to prompt. Which model is behind a binding is the
+ * user's choice and it changes; SDXL wants comma-separated tags, Flux wants a
+ * sentence, and a music model wants neither. Text written here to suit one of
+ * them is wrong for the next, silently — a prompt in the wrong dialect still
+ * generates something.
+ *
+ * dsh-comfyui already has the answer: \`comfyui_workflow action: skill\` returns
+ * that workflow's own pack, and a workflow the user marked \`requireSkill\`
+ * REFUSES TO RUN until it has been read.
+ *
+ * Rendered into every sheet whose stage generates, because each sheet loads on
+ * its own — a rule stated only in the pipeline map would be absent exactly when
+ * a panel request loads one sheet and nothing else.
+ */
+const PROMPT_CONVENTION = `### 面板给的是方向，不是提示词原文
+
+**面板不知道你的工作流后面是哪个模型。** 同一个意思，SDXL 要逗号分隔的标签、
+Flux 要一句自然语言、音乐模型两者都不要。照抄一份措辞去喂另一个模型，
+**不会报错，只会生成得不对**。
+
+所以动手之前：
+
+1. 用 \`comfyui_workflow\` 的 \`action: "skill"\` 读这条工作流自己的技能包，
+   里面写着它那个模型的提示词规范、常见坑、可用的风格词表
+2. 把面板给的方向**按那份规范转写**成提示词
+3. 用户标了 \`requireSkill\` 的工作流**不读就跑不了**——它会直接拒绝
+
+面板负责的是**决定**（拍什么、多快、什么调性），你负责的是**转译**。
+两件事都做不了对方那一半。`
+
 export function buildStageSkills(config: Config): RuntimeSkill[] {
   const designWorkflow = defaultWorkflow(config.bindings.voice_design) === ''
     ? '（未绑定——告诉用户去设置页的「ComfyUI 工作流绑定」里填上，不要自己找一条代替）'
@@ -243,6 +277,8 @@ ComfyUI 面板用音色设计工作流做一个「解说」音色。定下来用
 时间几乎全耗在 load models 上。同类连着跑，模型只加载一次。
 管线把配音和配图拆成两段，就是为了让这件事在流程上是天然的。
 
+${PROMPT_CONVENTION}
+
 **逐段提交，不要攒批。** 每收到一段返回就立刻 import 并把这一段写进
 \`asset_manifest_audio\`、用 \`studio_stage\` 以 \`in_progress\` 记一次。
 等全部跑完再一起处理，最后一段失败就会把前面每一段都丢掉；而且创意工作台盯的是清单，
@@ -279,8 +315,16 @@ ComfyUI 面板用音色设计工作流做一个「解说」音色。定下来用
 
 配音通过之后才做。同样一次跑完所有段落。
 
-**提示词不用你拼。** 插件按五层拼好后连同负向提示词一起给你，**原样用**。
-面板发的生成请求里每一镜都带着拼好的整条。
+**五层内容不用你想，插件拼好给你；措辞你要按模型改。**
+这两句不矛盾，因为它们说的是两件事：
+
+| | 谁定 | 能不能动 |
+|---|---|---|
+| **内容**：这一镜多长焦、什么景别、什么光、拍什么 | 插件（按 \`scene_plan\` 五层拼好） | **不能**。删一层、加一截风格前后缀，都是在退回旧做法 |
+| **措辞**：写成逗号标签还是一句自然语言 | **你**，按工作流那个模型的规范 | **要动**，见下一节 |
+
+面板发的生成请求里每一镜都带着拼好的整条，那是**内容清单**——
+按你读到的规范把它转写成那个模型吃的形状，别增删语义。
 
 > 曾经的做法是「风格前缀 + 本段主体 + 风格后缀」。
 > 固定的那两截在提示词里占了 84% 的词，于是构图光线全部收敛，十段出十张同款。
@@ -385,6 +429,8 @@ ComfyUI 面板用音色设计工作流做一个「解说」音色。定下来用
 **为什么值得填 \`shot_language\`**：曾经每张图都是「同一个前缀 + 一句描述 + 同一个后缀」，
 固定的那两截占了 84% 的词，所有画面收敛成同一副样子。
 镜别、焦段、光线是**逐镜不同**的那部分——它们才是让十张图真的是十张图的东西。
+
+${PROMPT_CONVENTION}
 
 ### 跑图时的几条固定规矩
 

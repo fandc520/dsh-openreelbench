@@ -182,7 +182,13 @@ ${renderReview(pipeline)}
 ${renderBinding('配音（TTS）', config.bindings.tts)}
 ${renderBinding('配图（txt2img）', config.bindings.image)}
 
-**怎么调这条工作流，去 \`comfyui_workflow action: list\` 里看。** 那份清单是权威——
+**提示词怎么写，去 \`comfyui_workflow action: "skill"\` 里看。**
+每条工作流可以带自己的技能包，写着它后面那个模型的提示词规范、坑和风格词表。
+面板和这些技能给的都是**方向**（拍什么、多快、什么调性）；
+**把方向转写成那个模型吃的提示词是你的活**，两边都替不了对方。
+用户标了 \`requireSkill\` 的工作流不读技能包就直接拒绝运行。
+
+**参数怎么传，去 \`comfyui_workflow action: list\` 里看。** 那份清单是权威——
 每个参数的英文 \`name\`、中文 \`label\`、默认值、\`options\` 下拉选项、\`numberKind\` 数字类型、
 \`upload\` 加载类型都在里面，而且随用户在面板里的改动实时变。绑定表不重复这些信息，
 就是为了避免两份会互相漂移的参数知识。

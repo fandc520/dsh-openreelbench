@@ -3990,7 +3990,11 @@ async function main() {
     // batch, so each belongs with the node rather than in every message.
     const moved = [
       ['出片尺寸', '成片画幅', '尺寸：按成片尺寸生成'],
-      ['原样传提示词', '原样用', '不要再加风格前后缀'],
+      // The sheet now separates CONTENT from WORDING: the five layers are the
+      // plugin's and may not be edited, the surface form is the model's dialect
+      // and must be. What must not come back is the old template.
+      ['不要重新拼前后缀', '不要再手工拼前后缀', '不要再加风格前后缀'],
+      ['按模型规范转写', '按那份规范转写', undefined],
       ['参考图只传文件名', '只传文件名', undefined],
       ['台词是氛围不是内容', '不要把台词本身画进画面', undefined],
     ]
@@ -4057,6 +4061,68 @@ async function main() {
     else bad('false claim finding', JSON.stringify(quiet.dimensions.unsupported_style_claim))
 
     void checkSceneVariation
+  }
+
+
+  console.log('\n== 面板给方向，模型规范定措辞 ==')
+  {
+    const { buildStageSkills, stageSkillName } = await import('../lib/stage-skills.js')
+    const { buildPipelineSkills } = await import('../lib/pipeline-skill.js')
+    const { STUDIO_SOUND_DESIGN_SKILL } = await import('../lib/skill-sound-design.js')
+    const { buildMusicJob: musicFor } = await import('../lib/music-job.js')
+    const { Config: PCConfig } = await import('../lib/config.js')
+
+    const cfg = PCConfig({ bindings: {} })
+    const sheets = buildStageSkills(cfg)
+    const pipeline = buildPipelineSkills(cfg)[0].content
+
+    // The rule has to reach every place a prompt gets written, and each of
+    // these loads on its own -- a panel request pulls one sheet and nothing
+    // else, so a rule stated only in the map would be absent exactly then.
+    const generating = ['assets-audio', 'assets-shots']
+    const withoutRule = generating.filter((key) => {
+      const body = sheets.find((s) => s.name === stageSkillName(key)).content
+      return !body.includes('action: "skill"')
+    })
+    if (withoutRule.length === 0) ok('every generating sheet points at the workflow\'s own skill pack')
+    else bad('sheet without the rule', withoutRule.join(', '))
+
+    // ...and so does the map, and the music skill, which is not a stage sheet.
+    if (pipeline.includes('action: "skill"')) ok('the pipeline map carries it too')
+    else bad('map without the rule', 'the binding table never mentions the skill pack')
+    if (STUDIO_SOUND_DESIGN_SKILL.content.includes('action: "skill"'))
+      ok('the sound-design skill sends the model to the pack before writing a prompt')
+    else bad('music skill without the rule', 'it still reads as a copyable prompt')
+
+    // The refusal is real, not advice: dsh-comfyui gates a requireSkill
+    // workflow until the pack has been read. Saying so turns a refusal the
+    // model would hit into a step it already took.
+    const mentionsGate = [
+      ['分镜细则', sheets.find((s) => s.name === stageSkillName('assets-shots')).content],
+      ['配音细则', sheets.find((s) => s.name === stageSkillName('assets-audio')).content],
+      ['管线地图', pipeline],
+      ['配乐技能', STUDIO_SOUND_DESIGN_SKILL.content],
+    ].filter(([, body]) => !body.includes('requireSkill'))
+    if (mentionsGate.length === 0) ok('all four say the pack can be mandatory')
+    else bad('gate unmentioned', mentionsGate.map(([what]) => what).join(', '))
+
+    // The music request says it too, because it is the one generative request
+    // whose skill is a craft skill rather than a stage sheet.
+    const music = musicFor({
+      projectId: 'p', workflow: 'w', styleName: 's',
+      pacingProfile: 'conversational', totalSeconds: 60,
+    })
+    if (music.includes('action: "skill"') && music.includes('方向'))
+      ok('the music request hands over direction and points at the pack')
+    else bad('music request', music)
+
+    // THE ONE THAT MUST NOT BE LOST. Adapting the wording is not licence to
+    // re-template: the five layers collapsed to 84% shared words once, and the
+    // sheet has to keep saying so while also asking for a rewrite.
+    const shots = sheets.find((s) => s.name === stageSkillName('assets-shots')).content
+    if (shots.includes('不要再手工拼前后缀') && shots.includes('按那份规范转写'))
+      ok('the shots sheet asks for a rewrite without reopening the template')
+    else bad('contradiction', 'the sheet lost one half of the content/wording split')
   }
 
   console.log('\n== 协议在细则里，请求只带手势 ==')

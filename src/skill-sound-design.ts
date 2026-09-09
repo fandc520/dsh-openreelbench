@@ -88,17 +88,26 @@ const CONTENT = `# 给片子配一段背景音乐
 
 宁可长，长了会从头截断，并自动做 1.5s 淡入 / 2s 淡出。
 
-## 五、写提示词时
+## 五、把方向转写成提示词
 
-一句话里说清四件事：**曲风 + BPM + 情绪 + instrumental**，
-再加上时长。例如：
+你要说清的是四件事：**曲风 + BPM + 情绪 + instrumental**，再加时长。
+但**怎么写出来，取决于工作流后面是哪个模型**——
+
+> 面板和这份技能给的是**方向**，不是可以照抄的提示词。
+> 先用 \`comfyui_workflow\` 的 \`action: "skill"\` 读那条配乐工作流的技能包：
+> 它写着那个模型吃什么形状的提示词、有没有自己的风格词表、负向怎么写。
+> 用户标了 \`requireSkill\` 的工作流**不读就跑不了**。
+
+下面这行只是**信息完整度的样子**，不是格式模板：
 
 \`\`\`
-lo-fi ambient instrumental, 75 BPM, calm and focused,
-steady even dynamics, no drops, no build-up, 90 seconds
+lo-fi ambient instrumental / 75 BPM / calm, focused / steady, no drops / 90s
 \`\`\`
 
-负向：\`vocals, lyrics, singing, drums solo, sudden dynamics, crescendo\`
+四项都在、时长在、instrumental 写明——**够不够按这个比，怎么排按模型的规范来**。
+
+负向要表达的是：\`vocals, lyrics, singing, sudden dynamics, crescendo\`。
+有的模型没有负向输入槽，那就在正向里用它自己的写法表达"纯器乐、动态平稳"。
 
 ## 六、交给用户之前
 
