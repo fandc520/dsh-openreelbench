@@ -926,18 +926,25 @@ async function main() {
       for (const skill of entry.skills) {
         // Whitespace-bounded, the way the harness matches it: a name mentioned
         // inside a sentence is not a gesture.
-        if (!new RegExp('(^|\\s)/' + skill + '(\\s|$)').test(entry.text)) {
+        if (!entry.text.split(/\s+/).includes('/' + skill)) {
           missing.push(entry.what + ' → /' + skill)
         }
       }
     }
-    // The screen that still inlines its gesture has no builder yet; keep it
-    // covered the old way until node 3 gives it one.
-    const audioSource = read('src/client/audio-screen.tsx', 'utf-8')
-    if (!audioSource.includes("'/dsh-creative-studio-cinematography'")) missing.push('镜头语言 → /cinematography')
+    const { buildScenePlanJob } = await import('../lib/voice-extra-jobs.js')
+    sentMessages.push({
+      what: '镜头语言',
+      text: buildScenePlanJob('p', 8),
+      skills: ['dsh-creative-studio-stage-assets-shots', 'dsh-creative-studio-cinematography'],
+    })
+    for (const skill of sentMessages[sentMessages.length - 1].skills) {
+      if (!sentMessages[sentMessages.length - 1].text.split(/\s+/).includes('/' + skill)) {
+        missing.push('镜头语言 → /' + skill)
+      }
+    }
 
     if (missing.length === 0)
-      ok('every generative handoff loads its skills (' + (sentMessages.length + 1) + ' handoffs)')
+      ok('every generative handoff loads its skills (' + sentMessages.length + ' handoffs)')
     else bad('handoff without a skill', missing.join(', '))
   }
   console.log('\n== 后台合成（不经过 Agent） ==')
@@ -2916,10 +2923,12 @@ async function main() {
     if (full.includes('参考台词氛围：')) ok('narration is labelled as atmosphere, not subject')
     else bad('unlabelled narration', full)
 
-    // Async, incremental — the same protocol the audio screen uses.
-    if (full.includes('异步') && full.includes('不要等全部跑完'))
-      ok('the message asks for async, incremental submission')
-    else bad('missing async protocol', full)
+    // The incremental protocol moved into the stage sheet; the request points
+    // at it. Asserted in full under 「协议在细则里，请求只带手势」 -- here it is
+    // enough that the pointer is present, because without it nothing loads.
+    if (full.split(String.fromCharCode(10))[0].startsWith('/dsh-creative-studio-stage-'))
+      ok('the message opens with the stage gesture that carries the protocol')
+    else bad('missing stage gesture', full.split(String.fromCharCode(10))[0])
   }
 
 
@@ -3016,9 +3025,9 @@ async function main() {
 
     // Same protocol as the shots screen: a failure on the last segment must not
     // throw away every earlier one.
-    if (plain.includes('异步') && plain.includes('不要等全部跑完') && plain.includes('不要提交 completed'))
-      ok('the message asks for async, incremental submission and no self-approval')
-    else bad('missing async protocol', plain)
+    if (plain.split(String.fromCharCode(10))[0].startsWith('/dsh-creative-studio-stage-'))
+      ok('the message opens with the stage gesture that carries the protocol')
+    else bad('missing stage gesture', plain.split(String.fromCharCode(10))[0])
   }
 
 
@@ -3865,11 +3874,97 @@ async function main() {
     void schemaMod
   }
 
-  console.log('\n== 请求的共用收尾约定 ==')
+
+  console.log('\n== 节点 3 配音：四处发送 ==')
+  {
+    const { buildVoiceJob } = await import('../lib/voice-job.js')
+    const {
+      buildScenePlanJob, buildVoiceProposalJob, buildVoiceDesignJob,
+    } = await import('../lib/voice-extra-jobs.js')
+    const { buildStageSkills, stageSkillName } = await import('../lib/stage-skills.js')
+    const { Config: N3Config } = await import('../lib/config.js')
+    const { readFileSync: readN3 } = await import('node:fs')
+
+    const sheets = buildStageSkills(N3Config({ bindings: {} }))
+    const audioSheet = sheets.find((s) => s.name === stageSkillName('assets-audio')).content
+
+    const takes = buildVoiceJob({
+      projectId: 'demo-film', workflow: 'Alpha-TTS', voice: 'v1', voiceReferences: [],
+      sections: [{ id: 's1', text: '台词', deliveryNote: '' }],
+    })
+    const plan = buildScenePlanJob('demo-film', 8)
+    const proposal = buildVoiceProposalJob('demo-film')
+    const design = buildVoiceDesignJob({
+      projectId: 'demo-film', workflow: 'VoiceDesign', name: 'beijing_40y_male_calm',
+      prompt: '沉稳中年男声', refreshWorkflows: ['Alpha-TTS', 'VoiceQuery'],
+    })
+
+    // All four now name the project. Two of them named nothing at all before:
+    // the 音色方案 button interpolated the id into prose, and the 创建音色 one
+    // never mentioned the project.
+    const nameless = [['配音', takes], ['镜头语言', plan], ['音色方案', proposal], ['创建音色', design]]
+      .filter(([, text]) => !text.includes('`demo-film`'))
+    if (nameless.length === 0) ok('all four voice-screen requests carry the project id')
+    else bad('no project id', nameless.map(([what]) => what).join(', '))
+
+    // Every one of them opens with the sheet that governs it.
+    const ungestured = [['配音', takes], ['音色方案', proposal], ['创建音色', design]]
+      .filter(([, text]) => !text.split(/\s+/).includes('/' + stageSkillName('assets-audio')))
+    if (ungestured.length === 0) ok('the three voice requests load the voice sheet')
+    else bad('no gesture', ungestured.map(([what]) => what).join(', '))
+
+    // The handoff into planning is the shots stage, not this one, and it needs
+    // both the sheet and the craft skill -- same pairing as the script request.
+    const planGestures = plan.split(/\s+/).filter((t) => t.startsWith('/'))
+    if (planGestures.includes('/' + stageSkillName('assets-shots'))
+      && planGestures.includes('/dsh-creative-studio-cinematography'))
+      ok('the planning handoff loads the shots sheet and the craft skill')
+    else bad('plan gestures', JSON.stringify(planGestures))
+
+    // WHAT THE OLD REQUESTS RESTATED. The 音色方案 one told the model which
+    // fields to write and never mentioned that voice_design_name is a filename
+    // -- lowercase ASCII, no extension, never Chinese -- which is the thing
+    // that actually goes wrong. The sheet has all of it.
+    for (const rule of ['voice_design_name', '不要写', '中文']) {
+      if (!audioSheet.includes(rule)) bad('sheet missing the naming rule', rule)
+    }
+    if (!proposal.includes('voice_design_name')) ok('the proposal request stopped naming fields the sheet owns')
+    else bad('still naming fields', proposal)
+
+    // Planning writes no pictures. That constraint was only ever in the
+    // request; it is a property of the step, so it moved to the sheet.
+    const shotsSheet = sheets.find((s) => s.name === stageSkillName('assets-shots')).content
+    if (shotsSheet.includes('不生成任何图片')) ok('the sheet says planning produces no pictures')
+    else bad('missing constraint', 'nothing says scene_plan draws nothing')
+    if (!plan.includes('不生成')) ok('the request no longer restates it')
+    else bad('still restating', plan)
+
+    // WHICH workflows need refreshing is panel state -- the model cannot see
+    // the settings page, so this one stays in the request.
+    if (design.includes('Alpha-TTS') && design.includes('VoiceQuery'))
+      ok('the design request names the workflows only the panel knows about')
+    else bad('refresh list', design)
+    const unbound = buildVoiceDesignJob({
+      projectId: 'p', workflow: '', name: 'n', prompt: 'p', refreshWorkflows: [],
+    })
+    if (unbound.includes('还没绑定')) ok('an unbound design workflow is said plainly, not left blank')
+    else bad('unbound workflow', unbound)
+
+    // Four inline strings became four builders; nothing composes a request in
+    // the screen any more.
+    const screen = readN3('src/client/audio-screen.tsx', 'utf-8')
+    if (!/onSend\(\[/.test(screen) && !/onSend\('/.test(screen))
+      ok('the voice screen composes no request of its own')
+    else bad('inline request', 'the screen still builds a message inline')
+  }
+
+  console.log('\n== 协议在细则里，请求只带手势 ==')
   {
     const { buildShotJob } = await import('../lib/shot-job.js')
     const { buildVoiceJob } = await import('../lib/voice-job.js')
     const { buildMusicJob } = await import('../lib/music-job.js')
+    const { buildStageSkills, stageSkillName } = await import('../lib/stage-skills.js')
+    const { Config: ProtoConfig } = await import('../lib/config.js')
 
     const shots = buildShotJob({
       workflow: 'Alpha-Image',
@@ -3878,81 +3973,56 @@ async function main() {
       shots: [{ sectionId: 's1', index: 0, seconds: 3, text: '台词', fallbackPrompt: 'a cat' }],
     })
     const voice = buildVoiceJob({
-      workflow: 'Alpha-TTS',
-      voice: 'v1',
-      voiceReferences: [],
+      projectId: 'p', workflow: 'Alpha-TTS', voice: 'v1', voiceReferences: [],
       sections: [{ id: 's1', text: '台词', deliveryNote: '' }],
     })
     const music = buildMusicJob({
       projectId: 'p', workflow: 'Alpha-Music', styleName: 's',
       pacingProfile: 'conversational', totalSeconds: 60,
     })
+    const sheets = buildStageSkills(ProtoConfig({ bindings: {} }))
+    const audioSheet = sheets.find((s) => s.name === stageSkillName('assets-audio')).content
+    const shotsSheet = sheets.find((s) => s.name === stageSkillName('assets-shots')).content
 
-    // THE DRIFT THIS MODULE EXISTS FOR. All three name a workflow; only two of
-    // them said which tool runs one. The shots request never mentioned
-    // comfyui_workflow at all -- it named a workflow and left the model to
-    // remember where workflows are run, which it did, most of the time.
+    // Still shared, because it is not invariant: which workflow to run is panel
+    // state. The drift this caught stays caught -- the shots request named a
+    // workflow and never said which tool runs one.
     const missingTool = [['分镜', shots], ['配音', voice], ['配乐', music]]
       .filter(([, text]) => !text.includes('comfyui_workflow'))
     if (missingTool.length === 0) ok('every request naming a workflow also names the tool that runs one')
     else bad('workflow without a tool', missingTool.map(([label]) => label).join(', '))
 
-    // Batches submit incrementally: waiting for the whole thing means a failure
-    // on the last item throws away every earlier one, and the panel -- which
-    // watches the manifest -- shows nothing until the very end.
-    if (shots.includes('异步') && voice.includes('异步')) ok('both batch requests ask for incremental submission')
-    else bad('async line', 'a batch request lost it')
-    // The bed is one file. An async line there would be instructions for a loop
-    // that does not exist.
-    if (!music.includes('异步')) ok('the single-item request does not ask for a loop it has no items for')
-    else bad('async on music', 'the bed request talks about submitting one at a time')
+    // THE PROTOCOL MOVED. A protocol is invariant, so it belongs with the node
+    // it governs, not restated in every message about that node. Each request
+    // now points at its sheet instead.
+    if (shots.startsWith('/' + stageSkillName('assets-shots'))) ok('the shots request opens with its stage gesture')
+    else bad('no gesture', shots.split(String.fromCharCode(10))[0])
+    if (voice.startsWith('/' + stageSkillName('assets-audio'))) ok('the takes request opens with its stage gesture')
+    else bad('no gesture', voice.split(String.fromCharCode(10))[0])
 
-    // Governance, not preference: studio_stage refuses a completed without
-    // human_approved, so a model that submits one gets a GATE VIOLATION and has
-    // to be told why. Saying it up front turns the refusal into a known rule.
-    if (shots.includes('不要提交 completed') && voice.includes('不要提交 completed'))
-      ok('both gated batches are told to leave the gate shut')
-    else bad('gate line', 'a gated request lost it')
-    // Importing music advances no stage, so there is no gate to hold.
-    if (!music.includes('不要提交 completed')) ok('the ungated request has no gate line to carry')
-    else bad('gate on music', 'the bed request talks about a gate it does not touch')
+    // ...and the sheets have to carry what the requests stopped saying, or this
+    // was a deletion rather than a move.
+    const protocol = [
+      ['配音 逐段提交', audioSheet, '逐段提交'],
+      ['配音 落盘规则', audioSheet, 'action: "import"'],
+      ['配音 审批闸', audioSheet, 'awaiting_human'],
+      ['分镜 逐张提交', shotsSheet, '逐张提交'],
+      ['分镜 shot_index', shotsSheet, 'shot_index'],
+      ['分镜 落盘规则', shotsSheet, 'action: "import"'],
+    ].filter(([, sheet, needle]) => !sheet.includes(needle))
+    if (protocol.length === 0) ok('both asset sheets carry the protocol their requests dropped')
+    else bad('protocol lost in the move', protocol.map(([what]) => what).join(', '))
 
-    // The bed belongs to the film, not a section. A fabricated scene_id is
-    // rejected as an orphan, so the request has to say so rather than leave the
-    // model to guess a section for it.
-    if (music.includes('不要填') && music.includes('scene_id')) ok('the bed request says it takes no scene_id')
-    else bad('music scene_id', music)
+    // And the requests are actually shorter for it -- the point of the round.
+    if (voice.length < 420 && shots.length < 700)
+      ok('the requests came out short (' + voice.length + ' / ' + shots.length + ' chars)')
+    else bad('still long', voice.length + ' / ' + shots.length)
 
-    // Several pictures can share a section; takes cannot. Only the shots
-    // request should carry shot_index -- this is the part that IS per-screen,
-    // and folding it into the shared module would make it the union of three
-    // requests rather than their intersection.
-    if (shots.includes('shot_index') && !voice.includes('shot_index'))
-      ok('the per-screen clause stayed per-screen')
-    else bad('shot_index', 'it leaked into the takes request, or left the shots one')
-
-    // Counted in the unit each screen actually deals in.
-    if (shots.includes('逐张') && voice.includes('逐段')) ok('each batch is counted in its own unit')
-    else bad('unit', 'a request counts in the wrong unit')
-
-    // And the wording is now ONE definition: the same sentence, not two
-    // spellings that happen to agree today.
-    const { asyncLine, holdGateLine } = await import('../lib/job-conventions.js')
-    if (shots.includes(asyncLine('张')) && voice.includes(asyncLine('段')))
-      ok('both requests carry the shared sentence verbatim, not a copy of it')
-    else bad('async drift', 'a builder has its own wording again')
-    if (shots.includes(holdGateLine('看过')) && voice.includes(holdGateLine('听过')))
-      ok('the gate line is the shared one in both')
-    else bad('gate drift', 'a builder has its own wording again')
-
-    // Wording assertions catch a builder that inlines DIFFERENT text. One that
-    // inlines identical text drifts only on the next edit, so the import is
-    // pinned too -- the same "one list, several places" rule as §5.4.
-    const { readFileSync: readSource } = await import('node:fs')
-    const inlined = ['shot-job', 'voice-job', 'music-job'].filter((name) =>
-      !readSource('src/' + name + '.ts', 'utf-8').includes("from './job-conventions.js'"))
-    if (inlined.length === 0) ok('every job builder takes its closing lines from the shared module')
-    else bad('builder stopped sharing', inlined.join(', '))
+    // The bed is the exception, and it is a real one: importing music advances
+    // no stage, so there is no stage sheet for its import line to live in.
+    if (music.includes('不要填') && music.includes('scene_id'))
+      ok('the bed request still carries its own import line, having no sheet to hold it')
+    else bad('music import', music)
   }
 
   console.log('\n== 管线技能：地图与地形分开 ==')

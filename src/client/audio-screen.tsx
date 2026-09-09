@@ -37,6 +37,7 @@ import { type AssetFile, AssetPicker, inputAssetUrl, useAssetUrls } from './asse
 import { Spinner } from './busy.tsx'
 import { type Selection, Waveform } from './waveform.tsx'
 import { buildVoiceJob } from '../voice-job.js'
+import { buildScenePlanJob, buildVoiceDesignJob, buildVoiceProposalJob } from '../voice-extra-jobs.js'
 
 export interface AudioScreenProps {
   state: StudioState
@@ -348,6 +349,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
     const before = signatureOf(state)
     try {
       await onSend(buildVoiceJob({
+        projectId: state.project.id,
         workflow: ttsWorkflow,
         voice,
         voiceReferences,
@@ -477,25 +479,10 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
       // with all six shot-language pickers empty — which is not a blank slate
       // waiting for the user, it is four of the five prompt layers missing.
       //
-      // The leading `/dsh-creative-studio-cinematography` is a load gesture the
-      // harness resolves deterministically: any whitespace-bounded `/name` in a
-      // user message injects that skill's body as instructions for this turn.
-      // So the craft knowledge arrives because the panel asked for it, not
-      // because the model recognised a catalog line — and it is not resident,
-      // the catalog carries one line and the body only comes on this turn.
+      // Two gestures: what a scene_plan is, and how to choose a shot for a
+      // line. See `voice-extra-jobs.ts`.
       onGoToStage('assets_shots')
-      await onSend([
-        '/dsh-creative-studio-cinematography',
-        '',
-        '配音过了，接下来设计分镜的镜头语言。项目 `' + state.project.id + '`。',
-        '',
-        '按脚本逐段设计，写成 `scene_plan` 用 `studio_stage` 以 `in_progress` 提交'
-        + '（stage 是 `assets_shots`）。**这一步不生成任何图片**，只定计划。',
-        '每一段的时长已经由配音实测出来了，用 `studio_project` 的 `action: "status"` 能看到进度，'
-        + '`action: "get"` 传 `artifact: "script"` 能读脚本。',
-        '',
-        '写完在对话里告诉我：你定的节奏是什么、哪几镜你拿不准。我在分镜页看。',
-      ].join(String.fromCharCode(10)))
+      await onSend(buildScenePlanJob(state.project.id, sections.length))
     } catch (error) {
       say('error', (error as Error).message)
     } finally {
@@ -763,9 +750,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                   disabled={working !== null}
                   title="让 Agent 看着项目题材和风格，提一个音色方案"
                   onClick={() => {
-                    void onSend('看看这个项目的题材和风格，给我一个合适的解说音色方案：'
-                      + '用 studio_project 的 set_voice，把 voice_design_name 和 voice_design_prompt '
-                      + '写到项目 ' + state.project.id + ' 上，我在创意工作台里看。')
+                    void onSend(buildVoiceProposalJob(state.project.id))
                     say('ok', '已经让 Agent 想一个，写好后这里会自动填上。')
                   }}
                 ><IconSpark className="dcs-btn-icon" />自动生成</button>
@@ -790,23 +775,13 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                   className="dcs-btn dcs-btn-accent"
                   disabled={designName.trim() === '' || designPrompt.trim() === ''}
                   onClick={() => {
-                    void onSend([
-                      '请用音色设计工作流 ' + (designWorkflow === '' ? '（设置页里还没绑定）' : '`' + designWorkflow + '`')
-                        + ' 做一个新音色。',
-                      '',
-                      '- 音色名称：`' + designName.trim() + '`',
-                      '- 音色提示词：' + designPrompt.trim(),
-                      '',
-                      '保存进音色库后，刷新音色库快照与音色库数据，并确认新音色可用。'
-                      + ([ttsWorkflow, queryWorkflow].filter((name) => name.trim() !== '').length === 0
-                        ? '（配音与音色查询工作流都还没绑定，刷新完提醒我去设置页填上。）'
-                        : '涉及的工作流：'
-                          + [ttsWorkflow, queryWorkflow]
-                            .filter((name) => name.trim() !== '')
-                            .map((name) => '`' + name + '`')
-                            .join('、')
-                          + '。'),
-                    ].join('\n'))
+                    void onSend(buildVoiceDesignJob({
+                      projectId: state.project.id,
+                      workflow: designWorkflow,
+                      name: designName.trim(),
+                      prompt: designPrompt.trim(),
+                      refreshWorkflows: [ttsWorkflow, queryWorkflow].filter((n) => n.trim() !== ''),
+                    }))
                     say('ok', '已经交给 Agent。做好之后按它的提示刷新一次工作流快照，再回来选音色。')
                   }}
                 >创建音色</button>

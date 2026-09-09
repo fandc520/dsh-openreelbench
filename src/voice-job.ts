@@ -22,6 +22,7 @@ export interface VoiceJobSection {
 }
 
 export interface VoiceJobInput {
+  projectId: string
   workflow: string
   /** The library voice, as `voice_name`. */
   voice: string
@@ -33,13 +34,18 @@ export interface VoiceJobInput {
   sections: readonly VoiceJobSection[]
 }
 
-import { closingLines, workflowLine } from './job-conventions.js'
+import { workflowLine } from './job-conventions.js'
 
 const NEWLINE = String.fromCharCode(10)
 
+/** The sheet carries the recording protocol; the request only points at it. */
+export const AUDIO_STAGE_SKILL = 'dsh-creative-studio-stage-assets-audio'
+
 export function buildVoiceJob(input: VoiceJobInput): string {
   const lines: string[] = [
-    '请用 ComfyUI 生成下面 ' + input.sections.length + ' 段旁白配音。',
+    '/' + AUDIO_STAGE_SKILL,
+    '',
+    '项目 `' + input.projectId + '`，请用 ComfyUI 生成下面 ' + input.sections.length + ' 段旁白配音。',
     '',
     workflowLine(input.workflow),
     '音色参数 `voice_name`：`' + input.voice + '`',
@@ -68,12 +74,6 @@ export function buildVoiceJob(input: VoiceJobInput): string {
   // Same protocol as the shots screen. Waiting for the whole batch means a
   // failure on the last segment throws away every earlier one, and the panel —
   // which watches the manifest — shows nothing at all until the very end.
-  lines.push(...closingLines({
-    kind: 'audio',
-    manifest: 'asset_manifest_audio',
-    unit: '段',
-    review: '听过',
-  }))
 
   return lines.join(NEWLINE)
 }

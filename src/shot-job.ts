@@ -37,9 +37,12 @@ export interface ShotJobInput {
   shots: readonly ShotJobItem[]
 }
 
-import { closingLines, workflowLine } from './job-conventions.js'
+import { workflowLine } from './job-conventions.js'
 
 const NEWLINE = String.fromCharCode(10)
+
+/** The sheet carries the recording protocol; the request only points at it. */
+export const SHOTS_STAGE_SKILL = 'dsh-creative-studio-stage-assets-shots'
 
 /**
  * Every prompt is handed over finished.
@@ -51,6 +54,8 @@ const NEWLINE = String.fromCharCode(10)
  */
 export function buildShotJob(input: ShotJobInput): string {
   const lines: string[] = [
+    '/' + SHOTS_STAGE_SKILL,
+    '',
     '请用 ComfyUI 生成下面 ' + input.shots.length + ' 张分镜。',
     '',
     workflowLine(input.workflow),
@@ -100,17 +105,6 @@ export function buildShotJob(input: ShotJobInput): string {
     if (shot.text.trim() !== '') lines.push('  　参考台词氛围：' + shot.text.trim())
   }
 
-  lines.push('')
-  // The four closing conventions live in `job-conventions.ts`. Only the part
-  // that is true of THIS batch is passed in: several pictures can share a
-  // section, so this is the one request that needs `shot_index`.
-  lines.push(...closingLines({
-    kind: 'image',
-    manifest: 'asset_manifest_shots',
-    unit: '张',
-    extra: '同一段有多张时按顺序写 `shot_index`。',
-    review: '看过',
-  }))
 
   return lines.join(NEWLINE)
 }
