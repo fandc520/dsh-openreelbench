@@ -121,6 +121,35 @@ export function buildStageSkills(config: Config): RuntimeSkill[] {
 
 **分段即分镜。** 每个 section 是一句解说 + 一张配图，这是这条管线的物理约束。
 
+**字段就这些，不要自己发明**（和 brief 一样，多一个键就整条被判 \`SCHEMA INVALID\`）：
+
+| 顶层 | 必填 | 说明 |
+|---|---|---|
+| \`version\` | ✔ | 固定字符串 \`"1.0"\` |
+| \`title\` | ✔ | 片名 |
+| \`total_duration_seconds\` | ✔ | 全片预估秒数 |
+| \`sections\` | ✔ | 至少一段，见下表 |
+| \`voice_performance\` | | 表演指导，见下一节 |
+| \`metadata\` | | 自由字段，放不进上面的塞这里 |
+
+| section | 必填 | 说明 |
+|---|---|---|
+| \`id\` | ✔ | 段落编号，**全片唯一**。素材文件名、清单、字幕都按它对齐 |
+| \`text\` | ✔ | 要念出来的字 |
+| \`start_seconds\` | ✔ | 段落起点。段间**不许重叠**，也不许倒退 |
+| \`end_seconds\` | ✔ | 必须大于 \`start_seconds\` |
+| \`label\` | | 给人看的段落名（钩子 / 概念一 / 收尾） |
+| \`speaker_directions\` | | 整段的表演说明，一句话 |
+| \`delivery_cues\` | | 逐段表演参数，见下面的表 |
+| \`visual\` | | \`{ prompt, ... }\`，这一段配什么画面 |
+
+\`voice_performance\` 只认这五个键：\`performance_intent\` / \`pacing_profile\` /
+\`energy_curve\` / \`pause_policy\` / \`sample_section_id\`。
+
+**没有 \`speaker\`、没有 \`duration\`、没有 \`image\`、没有 \`notes\`。**
+想不出往哪放的东西一律进 \`metadata\`——那是唯一的自由格。
+
+
 - **按 ${charsPerSecond} 字/秒估算**（当前风格的值，风格不同语速不同）。
   ${config.defaultDurationSeconds} 秒片约 ${budget} 字。写超了就是要重录。
 - 单段 ${playbook.pacing.minSectionSeconds}–${playbook.pacing.maxSectionSeconds} 秒。
@@ -164,7 +193,7 @@ export function buildStageSkills(config: Config): RuntimeSkill[] {
    pace / emphasis / pause / energy，否则等于没写
 5. **一段只放一个表演意图。** 需要三次情绪转折就拆成三段
 
-写完停下等确认。
+写完以 \`awaiting_human\` 提交，**停下等确认**——直接写 \`completed\` 会被 \`GATE VIOLATION\` 挡回来。
 `,
     },
     {

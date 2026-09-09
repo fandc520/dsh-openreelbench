@@ -895,24 +895,50 @@ async function main() {
     // GENERATE goes to the agent, and the craft knowledge rides a skill gesture
     // rather than being inlined. Inlined, it would either be resident context
     // forever or quietly drift from the skill it was copied out of.
-    const withSkill = [
-      { screen: 'script-screen', skill: 'dsh-creative-studio-storytelling' },
-      { screen: 'audio-screen', skill: 'dsh-creative-studio-cinematography' },
-      { screen: 'timeline-screen', skill: 'dsh-creative-studio-sound-design', constant: 'MUSIC_SKILL' },
+    // Checked on the MESSAGE, not on the screen's source. Scanning the source
+    // for a quoted gesture meant the check failed the moment a screen stopped
+    // inlining the string and started calling a builder -- which is the exact
+    // direction this consolidation moves in, so the test was pulling the other
+    // way. It even tempted a `void SKILL` line into the screen purely to be
+    // found. What matters is what the agent receives.
+    const { buildScriptJob } = await import('../lib/script-job.js')
+    const { buildMusicJob: musicJob } = await import('../lib/music-job.js')
+    const sentMessages = [
+      {
+        what: '写脚本',
+        text: buildScriptJob({
+          projectId: 'p', title: 't', durationSeconds: 30,
+          charsPerSecond: 4.9, style: 'clean-tech', rewrite: false,
+        }),
+        skills: ['dsh-creative-studio-stage-script', 'dsh-creative-studio-storytelling'],
+      },
+      {
+        what: '选配乐',
+        text: musicJob({
+          projectId: 'p', workflow: 'w', styleName: 's',
+          pacingProfile: 'conversational', totalSeconds: 60,
+        }),
+        skills: ['dsh-creative-studio-sound-design'],
+      },
     ]
-    const missing = withSkill.filter((entry) => {
-      const source = read('src/client/' + entry.screen + '.tsx', 'utf-8')
-      // The QUOTED gesture, not the bare name: every one of these screens also
-      // names its skill in a comment explaining why the gesture is there, and a
-      // whole-file search would call a deleted gesture present.
-      const sent = source.includes("'/" + entry.skill + "'")
-      // ...or the constant a job builder exports for the same string.
-      const viaConstant = entry.constant !== undefined && source.includes(entry.constant)
-      return !sent && !viaConstant
-    })
+    const missing = []
+    for (const entry of sentMessages) {
+      for (const skill of entry.skills) {
+        // Whitespace-bounded, the way the harness matches it: a name mentioned
+        // inside a sentence is not a gesture.
+        if (!new RegExp('(^|\\s)/' + skill + '(\\s|$)').test(entry.text)) {
+          missing.push(entry.what + ' → /' + skill)
+        }
+      }
+    }
+    // The screen that still inlines its gesture has no builder yet; keep it
+    // covered the old way until node 3 gives it one.
+    const audioSource = read('src/client/audio-screen.tsx', 'utf-8')
+    if (!audioSource.includes("'/dsh-creative-studio-cinematography'")) missing.push('镜头语言 → /cinematography')
+
     if (missing.length === 0)
-      ok('every generative handoff loads its craft skill instead of inlining it')
-    else bad('handoff without a skill', missing.map((entry) => entry.screen).join(', '))
+      ok('every generative handoff loads its skills (' + (sentMessages.length + 1) + ' handoffs)')
+    else bad('handoff without a skill', missing.join(', '))
   }
   console.log('\n== 后台合成（不经过 Agent） ==')
   {
@@ -3345,8 +3371,18 @@ async function main() {
     // versions of this check bounded it by a character count and then by the
     // enclosing </section>, and both reported a missing preview the first time
     // the panel was rearranged around an intact player.
-    if (/<audio[^>]*src=\{musicUrl\}/.test(screen)) ok('the bed can be played on the page, not just named')
-    else bad('no preview', 'nothing renders an audio element bound to the bed url')
+    // Asserted on the BEHAVIOUR -- the bed is audible on this screen, at the
+    // mix level, in step with the picture. Three earlier versions of this check
+    // named an implementation instead (a character window, then the enclosing
+    // </section>, then an <audio> bound to a url) and each one broke on a
+    // rework that left the bed perfectly audible. The standalone player is gone
+    // on purpose: the bed now runs through the preview engine so it plays WITH
+    // the timeline rather than beside it.
+    const audible = screen.includes('previewMusic')
+      && /gain:\s*gainToVolume/.test(screen)
+      && /ducked:\s*gainToVolume/.test(screen)
+    if (audible) ok('the bed plays in step with the timeline, at the mix level')
+    else bad('no preview', 'nothing feeds the bed to the preview engine')
 
     // And it has to appear as a track on the timeline, which is what the user
     // asked for: one block the length of the film, because that is what it is.
@@ -3733,6 +3769,100 @@ async function main() {
     const save = screen.lastIndexOf('api.updateProject(', send)
     if (save !== -1 && send - save < 700) ok('the draft request is sent after the settings are saved')
     else bad('unsaved draft', 'nothing saves the form before asking for a brief')
+  }
+
+
+  console.log('\n== 节点 2 脚本：请求与阶段细则 ==')
+  {
+    const { buildScriptJob } = await import('../lib/script-job.js')
+    const { buildStageSkills, stageSkillName } = await import('../lib/stage-skills.js')
+    const { Config: ScriptConfig } = await import('../lib/config.js')
+    const schemaMod = await import('../lib/schema.js')
+
+    const job = buildScriptJob({
+      projectId: 'demo-film', title: '演示片', durationSeconds: 45,
+      charsPerSecond: 4.9, style: 'clean-tech', rewrite: false,
+    })
+    const again = buildScriptJob({
+      projectId: 'demo-film', title: '演示片', durationSeconds: 45,
+      charsPerSecond: 4.9, style: 'clean-tech', rewrite: true,
+    })
+    const sheet = buildStageSkills(ScriptConfig({ bindings: {} }))
+      .find((s) => s.name === stageSkillName('script')).content
+
+    // Same omission node 1 had: the old request said "简报已经通过了" and named
+    // no project at all.
+    if (job.includes('`demo-film`') && again.includes('`demo-film`'))
+      ok('both script requests carry the project id')
+    else bad('no project id', job)
+
+    // THE BIG GAP THIS NODE FOUND. `script` is whitelisted exactly like
+    // `brief` -- six top-level keys, eight section keys, one extra and the
+    // whole document is rejected -- and the sheet listed none of them. This is
+    // the same class as the SCHEMA INVALID failures that started this work.
+    const topKeys = ['version', 'title', 'total_duration_seconds', 'sections', 'voice_performance', 'metadata']
+    const sectionKeys = ['id', 'text', 'start_seconds', 'end_seconds', 'label', 'speaker_directions', 'delivery_cues', 'visual']
+    const undocumented = [...topKeys, ...sectionKeys].filter((key) => !sheet.includes('`' + key + '`'))
+    if (undocumented.length === 0) ok('the sheet documents every key the validator accepts')
+    else bad('undocumented key', undocumented.join(', '))
+
+    // And it has to say that the list is CLOSED, or a model reads it as
+    // examples and adds a sensible-looking one.
+    if (sheet.includes('SCHEMA INVALID') && sheet.includes('不要自己发明'))
+      ok('the sheet says the key list is closed, not a sample')
+    else bad('open-ended field list', 'nothing warns that an extra key rejects the document')
+
+    // A key the sheet invents would be worse than one it omits: the model would
+    // write it and the document would be refused. Pinned against the validator.
+    // Scoped to TABLE ROWS. A whole-sheet scan also caught the line naming the
+    // fields that do NOT exist (「没有 `speaker`、没有 `duration`…」), a pacing_profile
+    // value and two status names -- it could not tell "here is a field" from
+    // "there is no such field", which is the opposite claim.
+    const invented = [...sheet.matchAll(/^\| `([a-z_]{3,})` \|/gm)].map((m) => m[1])
+    const known = new Set([...topKeys, ...sectionKeys,
+      'performance_intent', 'pacing_profile', 'energy_curve', 'pause_policy', 'sample_section_id',
+      'pace', 'energy', 'emphasis_words', 'pause_before_seconds', 'pause_after_seconds',
+      'delivery_note', 'provider_text', 'prompt', 'cinematic', 'metadata'])
+    const strays = [...new Set(invented)].filter((name) => !known.has(name))
+    if (strays.length === 0) ok('the sheet names no field the validator would reject')
+    else bad('invented field', strays.join(', '))
+
+    // Two gestures, and they answer different questions: how to write it, and
+    // which keys to write it into. Neither substitutes for the other.
+    const first = job.split(String.fromCharCode(10)).slice(0, 2)
+    if (first.includes('/' + stageSkillName('script')) && first.includes('/dsh-creative-studio-storytelling'))
+      ok('the request loads both the stage sheet and the craft skill')
+    else bad('gestures', JSON.stringify(first))
+
+    // Out of the request: each was a weaker copy of something already loaded.
+    const echoes = [
+      ['分段即分镜', '分段即分镜'],
+      ['闸协议', 'awaiting_human'],
+      ['storytelling 的收尾清单', '哪一段你拿不准'],
+    ].filter(([, needle]) => job.includes(needle) || again.includes(needle))
+    if (echoes.length === 0) ok('the request stopped paraphrasing what the gestures load')
+    else bad('still paraphrasing', echoes.map(([what]) => what).join(', '))
+
+    // ...and each is still somewhere. The last one lives in storytelling, not
+    // in the sheet, which is exactly why both gestures are needed.
+    const { STUDIO_STORYTELLING_SKILL } = await import('../lib/skill-storytelling.js')
+    if (sheet.includes('分段即分镜') && sheet.includes('awaiting_human')
+      && STUDIO_STORYTELLING_SKILL.content.includes('哪一段你拿不准'))
+      ok('everything the request dropped is carried by one of the two skills')
+    else bad('dropped for good', 'a line left the request and landed nowhere')
+
+    // The panel knows both numbers, so it gives the answer rather than the
+    // formula. 45s at 4.9 chars/second is 221 characters.
+    if (job.includes('221 字') && job.includes('45s')) ok('the request states the character budget, not the multiplication')
+    else bad('budget', job)
+
+    // A rewrite has to ask for a different SHAPE, not different words -- that
+    // was the one thing the old request said that the skills do not.
+    if (again.includes('分段结构要重新设计') && !job.includes('分段结构要重新设计'))
+      ok('a rewrite asks for a new segmentation, and a first draft does not')
+    else bad('rewrite', 'the two requests read the same')
+
+    void schemaMod
   }
 
   console.log('\n== 请求的共用收尾约定 ==')

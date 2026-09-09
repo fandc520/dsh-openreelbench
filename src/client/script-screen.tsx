@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { type StudioState, api } from './api.ts'
 import { type AgentPhase, BusyLabel } from './busy.tsx'
 import { IconPen, IconPlay, IconSpark } from './icons.tsx'
+import { buildScriptJob } from '../script-job.js'
 
 const NEWLINE = String.fromCharCode(10)
 
@@ -248,23 +249,17 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
     setPhase('sending')
     const before = JSON.stringify(state.artifacts.script ?? null)
     try {
-      // The leading `/dsh-creative-studio-storytelling` is a load gesture the
-      // harness resolves deterministically, the same way the shots screen loads
-      // its cinematography skill. Without it a script comes out as the brief's
-      // key points read aloud in order — every sentence true, nothing
-      // remembered. The brief's points are parallel; a film is linear, and
-      // turning one into the other is a craft with a method.
-      await onSend([
-        '/dsh-creative-studio-storytelling',
-        '',
-        ...(kind === 'draft'
-          ? ['简报已经通过了，请按它写脚本：分段即分镜，每段一句解说加一张配图，'
-            + '写成 script 并以 awaiting_human 提交，我在创意工作台里改。']
-          : ['这版脚本我想换个写法，请重写一版 script 并以 awaiting_human 提交。',
-            '**分段结构要重新设计，不要只换措辞**——换个钩子类型，或者换一条因果链。']),
-        '',
-        '交给我时说清楚：用的哪种钩子、整片弧线怎么走、哪一段你拿不准。',
-      ].join(NEWLINE))
+      // Two gestures: how to write it, and which keys to write it into. See
+      // `script-job.ts` -- the sheet was never loaded here, and `script` is a
+      // strictly whitelisted artifact.
+      await onSend(buildScriptJob({
+        projectId: state.project.id,
+        title: state.project.title,
+        durationSeconds: state.project.target_duration_seconds,
+        charsPerSecond: playbook.narration.chars_per_second,
+        style: state.style.id,
+        rewrite: kind !== 'draft',
+      }))
       setPhase(kind === 'draft' ? 'drafting' : 'regenerating')
       for (let attempt = 0; attempt < 60; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 2000))
