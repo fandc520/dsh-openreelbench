@@ -3340,14 +3340,13 @@ async function main() {
 
     // A filename is not a preview. The bed has to be playable in place, the
     // same rule the media card and the reference slots follow.
-    // Bounded by the section's own end rather than a character count: the panel
-    // grew past the old window and the check reported a missing preview that
-    // was there all along.
-    const panelAt = screen.indexOf('dcs-panel dcs-music')
-    const panelEnd = screen.indexOf('</section>', panelAt)
-    if (panelAt !== -1 && screen.slice(panelAt, panelEnd).includes('<audio'))
-      ok('the bed can be played on the page, not just named')
-    else bad('no preview', 'the panel only shows a filename')
+    //
+    // Asserted on the BINDING, not on where the element sits. Two earlier
+    // versions of this check bounded it by a character count and then by the
+    // enclosing </section>, and both reported a missing preview the first time
+    // the panel was rearranged around an intact player.
+    if (/<audio[^>]*src=\{musicUrl\}/.test(screen)) ok('the bed can be played on the page, not just named')
+    else bad('no preview', 'nothing renders an audio element bound to the bed url')
 
     // And it has to appear as a track on the timeline, which is what the user
     // asked for: one block the length of the film, because that is what it is.
@@ -3383,12 +3382,16 @@ async function main() {
     else bad('inline message', 'the timeline screen composes its own music request')
 
     // Saving is explicit. It used to happen on blur, which gave no sign it had
-    // -- the only way to find out was to reload the page. Three more fields
-    // saving that way would have been three more things to doubt.
-    const panelSlice = panelAt === -1 ? '' : screen.slice(panelAt, panelEnd)
-    if (panelSlice.includes('commitMusic()') && !panelSlice.includes('onBlur'))
-      ok('the music form saves on a button, not silently on blur')
-    else bad('blur save', 'the form still persists without saying so')
+    // -- the only way to find out was to reload the page.
+    //
+    // What matters is that a button commits and a marker says when something is
+    // pending; forbidding `onBlur` anywhere near the panel was the wrong shape
+    // for that, and it fired on the shot editor's own lead/tail fields as soon
+    // as the screen was rearranged.
+    const commits = /onClick=\{\(\) => void commitMusic\(\)\}/.test(screen)
+    const gated = screen.includes('disabled={phase !== null || busy !== null || !musicDirty}')
+    if (commits && gated) ok('the music form saves on a button, and the button knows when there is nothing to save')
+    else bad('blur save', 'commit=' + commits + ' gated=' + gated)
     if (screen.includes('musicDirty') && screen.includes('未保存'))
       ok('and says so while anything is unsaved')
     else bad('no dirty marker', 'nothing shows that the form has unsaved changes')
@@ -3653,6 +3656,84 @@ async function main() {
   }
 
 
+
+
+  console.log('\n== 节点 1 立项：请求与阶段细则 ==')
+  {
+    const { buildBriefJob, buildBriefApprovedNote } = await import('../lib/brief-job.js')
+    const { buildStageSkills, stageSkillName } = await import('../lib/stage-skills.js')
+    const { Config: BriefConfig } = await import('../lib/config.js')
+    const { readFileSync: readSrc } = await import('node:fs')
+
+    const job = buildBriefJob({
+      projectId: 'demo-film', title: '演示片', durationSeconds: 45,
+      style: 'clean-tech', platform: 'douyin', redraft: false,
+    })
+    const again = buildBriefJob({
+      projectId: 'demo-film', title: '演示片', durationSeconds: 45,
+      style: 'clean-tech', platform: 'douyin', redraft: true,
+    })
+    const sheet = buildStageSkills(BriefConfig({ bindings: {} }))
+      .find((s) => s.name === stageSkillName('brief')).content
+
+    // THE OMISSION THIS ROUND FOUND. The old request named the project by
+    // title only. studio_stage takes an id, so a model whose history had been
+    // compacted had to look the id up by name before it could record anything.
+    if (job.includes('`demo-film`')) ok('the request carries the project id, not just the title')
+    else bad('no project id', job)
+
+    // The four settings are the user's own choices, made on the screen. The
+    // request states them so the model does not fill defaults over them.
+    const stated = ['45s', 'clean-tech', 'douyin'].filter((v) => !job.includes(v))
+    if (stated.length === 0) ok('the request states the settings the user picked')
+    else bad('setting missing from the request', stated.join(', '))
+
+    // Structure and protocol moved OUT of the request. Each of these was a
+    // weaker restatement of something the sheet says in full.
+    const leftovers = [
+      ['字段清单', '三到五条要点'],
+      ['闸协议', 'awaiting_human'],
+    ].filter(([, needle]) => job.includes(needle) || again.includes(needle))
+    if (leftovers.length === 0) ok('the request no longer paraphrases the sheet')
+    else bad('still paraphrasing', leftovers.map(([what]) => what).join(', '))
+
+    // ...and the sheet still has them, or the split lost the content instead of
+    // moving it.
+    const sheetHas = ['key_points', 'awaiting_human', '方向要真的不同'].filter((n) => !sheet.includes(n))
+    if (sheetHas.length === 0) ok('the sheet carries what the request stopped saying')
+    else bad('lost in the move', sheetHas.join(', '))
+
+    // A redraft has to read as a different instruction, not the same one twice.
+    if (again.includes('方向不同') && !job.includes('方向不同'))
+      ok('redraft and first draft are different requests')
+    else bad('redraft', 'the two requests read the same')
+
+    // The gesture is what makes the sheet reliable rather than optional -- the
+    // whole reason protocol may live there at all.
+    if (job.startsWith('/' + stageSkillName('brief'))) ok('the request opens with the stage gesture')
+    else bad('no gesture', job.split(String.fromCharCode(10))[0])
+
+    // Approving hands the turn to the next stage, so it carries that gesture.
+    const approved = buildBriefApprovedNote('demo-film', '演示片')
+    if (approved.startsWith('/' + stageSkillName('script')) && approved.includes('`demo-film`'))
+      ok('approving the brief hands over with the script gesture and the id')
+    else bad('handover', approved)
+
+    // NEW RULE IN THE SHEET: the marker is where the user's choices live, and
+    // the old text told the model to fall back to a configured default instead.
+    if (sheet.includes('以项目标记为准') && !sheet.includes('用户没说就用'))
+      ok('the sheet reads the settings off the marker rather than defaulting over them')
+    else bad('marker rule', 'the sheet still tells the model to use the configured default')
+
+    // Save-then-send: 起草 is a separate button from 保存, so without this a
+    // user who set 45s and asked for a draft got one written against the last
+    // saved values, with nothing saying so.
+    const screen = readSrc('src/client/project-screen.tsx', 'utf-8')
+    const send = screen.indexOf('buildBriefJob(')
+    const save = screen.lastIndexOf('api.updateProject(', send)
+    if (save !== -1 && send - save < 700) ok('the draft request is sent after the settings are saved')
+    else bad('unsaved draft', 'nothing saves the form before asking for a brief')
+  }
 
   console.log('\n== 请求的共用收尾约定 ==')
   {

@@ -30,6 +30,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { PLATFORM_FRAMES, type Brief, type StudioState, api } from './api.ts'
 import { type AgentPhase, BusyLabel } from './busy.tsx'
 import { IconCheck, IconDoc, IconMic, IconPalette, IconPlay, IconSliders, IconSpark } from './icons.tsx'
+import { buildBriefApprovedNote, buildBriefJob } from '../brief-job.js'
 
 export interface ProjectScreenProps {
   state: StudioState
@@ -161,11 +162,25 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
     setPhase('sending')
     const before = JSON.stringify(state.artifacts.brief ?? null)
     try {
-      await onSend(kind === 'draft'
-        ? '请为项目「' + state.project.title + '」起草创意简报（钩子、三到五条要点、受众、调性），'
-          + '写成 brief 并以 awaiting_human 提交，我在创意工作台里看。'
-        : '这版简报的方向我想换一个。请重新起草一版**方向不同**的创意简报，'
-          + '同样写成 brief 并以 awaiting_human 提交。')
+      // Save first. The four settings on this screen are what the brief is
+      // written against, and 起草 is a separate button from 保存 -- a user who
+      // set 45s and picked 抖音 and then asked for a draft would otherwise get
+      // one written against whatever was last saved, with nothing saying so.
+      await api.updateProject({
+        project: state.project.id,
+        title: draft.title.trim(),
+        target_duration_seconds: durationValue,
+        style: draft.style,
+        target_platform: draft.platform,
+      })
+      await onSend(buildBriefJob({
+        projectId: state.project.id,
+        title: draft.title.trim(),
+        durationSeconds: durationValue,
+        style: draft.style,
+        platform: draft.platform,
+        redraft: kind !== 'draft',
+      }))
       setPhase(kind === 'draft' ? 'drafting' : 'regenerating')
       for (let attempt = 0; attempt < 60; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 2000))
@@ -219,7 +234,7 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
         note: '在创意工作台确认',
       })
       await onReload()
-      await onSend('我在创意工作台确认了简报「' + brief.title + '」，brief 闸已通过，请继续写脚本。')
+      await onSend(buildBriefApprovedNote(state.project.id, brief.title ?? draft.title.trim()))
       setSubmitNote({ kind: 'ok', text: '简报已通过，已通知 Agent 继续写脚本。' })
     } catch (error) {
       setSubmitNote({ kind: 'error', text: (error as Error).message })

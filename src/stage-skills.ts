@@ -65,13 +65,24 @@ export function buildStageSkills(config: Config): RuntimeSkill[] {
 | \`hook\` | ✔ | 开场三秒抓人的那句，**不是标题的复述** |
 | \`key_points\` | ✔ | 三到五条，每条是一个能独立成段的信息点，不是关键词 |
 | \`style\` | ✔ | 当前风格的 id（如 \`clean-tech\`） |
-| \`target_duration_seconds\` | ✔ | 用户没说就用 ${config.defaultDurationSeconds} |
+| \`target_duration_seconds\` | ✔ | **以项目标记为准**，没有才用 ${config.defaultDurationSeconds} |
 | \`core_message\` | | 一句话说清整片要传达什么。**「切入角度」写这里**，没有 \`angle\` 字段 |
 | \`cta\` | | 结尾行动号召 |
 | \`target_audience\` | | 受众 |
 | \`tone\` | | 语气。不填就用风格自带的旁白语气 |
 | \`target_platform\` | | 只能是 \`youtube\` / \`bilibili\` / \`douyin\` / \`xiaohongshu\` / \`wechat\` / \`generic\`。**它决定成片画幅**（见下表）。**不确定就填 \`generic\`**，别写 \`web\` 这类不在表里的值 |
 | \`metadata\` | | 自由字段，放不进上面任何一格的东西塞这里 |
+
+### 动笔前先读项目标记
+
+**\`studio_project action: "status"\` 返回的 \`project\` 就是项目标记。**
+\`title\` / \`target_duration_seconds\` / \`style\` / \`target_platform\` 四项，
+**用户在创意工作台的立项页上自己选过**，选的结果就存在那里。
+
+所以这四项**不要按默认值填，也不要自己推**——照标记抄。
+面板发来的请求里通常也会把它们列一遍，那是同一份东西，方便你不用先查。
+
+两边都有时以**项目标记**为准：那是用户点出来的，请求只是把它复述给你。
 
 **建完项目就立刻起草一版，不要等用户再说一遍。** 用户在创意工作台里看到的是一个
 表单——空表单等于让他从零写，而他刚刚已经把需求讲过一次了。正确节奏是：
@@ -95,8 +106,8 @@ export function buildStageSkills(config: Config): RuntimeSkill[] {
 | \`xiaohongshu\` | 1080x1440 竖屏 3:4 |
 | \`generic\` | 用设置里的默认值 |
 
-用户也能在创意工作台的项目页直接选，选的结果存在项目标记上。
-**两处都有时以项目标记为准**——那是用户自己点的。
+用户也能在创意工作台的项目页直接选，选的结果存在项目标记上——
+和上面那四项一样，**以项目标记为准**。
 所以你要改画幅，改 \`brief.target_platform\` 可能不生效；
 让用户在面板上选，或者明确告诉他去改。
 `,
