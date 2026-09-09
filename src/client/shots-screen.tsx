@@ -882,6 +882,8 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                   />
                 )}
               </label>
+              <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
+                onClick={() => void move(-1)} title="在本段内前移">←</button>
               <button
                 type="button"
                 className={'dcs-btn dcs-btn-small' + (isHero ? ' dcs-btn-hero' : '')}
@@ -890,11 +892,9 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                 title="全片的画面顶点。标了之后前后两镜的镜别要和它不一样，否则顶不起来。"
               >{isHero ? '★ 高光' : '☆ 高光'}</button>
               <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
-                onClick={() => void move(-1)} title="在本段内前移">←</button>
-              <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
                 onClick={() => void move(1)} title="在本段内后移">→</button>
               <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
-                onClick={() => void addShot()} title="给这一段再加一镜，时长从本段切分">+ 加一镜</button>
+                onClick={() => void addShot()} title="给这一段再加一镜，时长从本段切分">添加</button>
               <button type="button" className="dcs-btn dcs-btn-small dcs-btn-quiet-danger" disabled={busy !== null}
                 onClick={() => void removeShot()}>删除</button>
               {draftPrompt !== null ? (
@@ -961,7 +961,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
             <span className="dcs-spacer" />
             <button
               type="button"
-              className="dcs-btn dcs-btn-small"
+              className="dcs-btn dcs-btn-small dcs-btn-accent"
               disabled={phase !== null || busy !== null || shots.length === 0}
               onClick={() => void generate(shots)}
               title="整批重新生成，已有图会被替换"
@@ -970,7 +970,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
             </button>
             <button
               type="button"
-              className="dcs-btn dcs-btn-small dcs-btn-primary"
+              className="dcs-btn dcs-btn-small dcs-btn-accent"
               disabled={phase !== null || busy !== null}
               onClick={() => void generate([active])}
             >

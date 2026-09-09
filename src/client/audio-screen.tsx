@@ -550,14 +550,6 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
           ) : (
             <span className="dcs-hint">工作流 {ttsWorkflow === '' ? '（未绑定）' : ttsWorkflow}</span>
           )}
-          <button
-            type="button"
-            className="dcs-btn dcs-btn-small"
-            disabled={working !== null || phase !== null || sections.length === 0}
-            onClick={() => void generate(sections.map((section) => section.id))}
-          >
-            <BusyLabel phase={phase} idle="全部生成" />
-          </button>
         </div>
         <div className="dcs-card-body">
         {active !== undefined ? (
@@ -584,9 +576,18 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
               <button type="button" className="dcs-btn dcs-btn-small"
                 disabled={selection === null || working !== null || active.path === undefined}
                 onClick={() => void trim()}>裁掉选区外</button>
-              <button type="button" className="dcs-btn dcs-btn-small dcs-btn-primary"
+              <button
+                type="button"
+                className="dcs-btn dcs-btn-small dcs-btn-accent"
+                disabled={working !== null || phase !== null || sections.length === 0}
+                onClick={() => void generate(sections.map((section) => section.id))}
+              >
+                <BusyLabel phase={phase} idle="全部生成" />
+              </button>
+              <button type="button" className="dcs-btn dcs-btn-small dcs-btn-accent"
                 disabled={working !== null || phase !== null}
                 onClick={() => void generate([active.id])}>
+                <IconSpark className="dcs-btn-icon" />
                 {phase === null
                   ? (active.path === undefined ? '生成这一段' : '重新生成')
                   : <BusyLabel phase={phase} idle="" />}
@@ -786,7 +787,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                 <span className="dcs-spacer" />
                 <button
                   type="button"
-                  className="dcs-btn"
+                  className="dcs-btn dcs-btn-accent"
                   disabled={designName.trim() === '' || designPrompt.trim() === ''}
                   onClick={() => {
                     void onSend([

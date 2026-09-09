@@ -341,7 +341,7 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
             </span>
           </span>
           <span className="dcs-spacer" />
-          <button type="button" className="dcs-btn dcs-btn-small" disabled={phase !== null || busy}
+          <button type="button" className="dcs-btn dcs-btn-small dcs-btn-accent" disabled={phase !== null || busy}
             onClick={() => void askForScript(hasScript ? 'regenerate' : 'draft')}>
             <IconSpark className="dcs-btn-icon" />
             <BusyLabel phase={phase} idle={hasScript ? '重新生成' : '让 Agent 起草'} />

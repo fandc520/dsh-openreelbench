@@ -390,7 +390,7 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
           <span className="dcs-spacer" />
           <button
             type="button"
-            className="dcs-btn dcs-btn-small"
+            className="dcs-btn dcs-btn-small dcs-btn-accent"
             disabled={phase !== null || busy !== 'idle'}
             title="让 Agent 换一个方向重写，你可以多要几版再挑"
             onClick={() => void askForBrief(hasBrief ? 'regenerate' : 'draft')}

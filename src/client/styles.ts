@@ -87,6 +87,7 @@ const CSS = `
 }
 .dcs-spacer { flex: 1; }
 .dcs-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   font: inherit; font-size: 13px; padding: 5px 14px; border-radius: 6px;
   border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-2);

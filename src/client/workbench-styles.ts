@@ -266,20 +266,25 @@ const CSS = `
 
 /* ---------------------------------------------------------------- shots */
 
-/* One shot, two halves: the picture with its identity and subject on the
-   left, the language and the built prompt on the right — the picture no
-   longer floats beside a tall column with dead space under it. */
-.dcs-shot-detail { display: grid; gap: 16px; align-items: start; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
+/* One shot, two halves: the picture with its identity on the left, the
+   prompt pipeline on the right. Stretch alignment, so the left column's
+   bottom meets the timeline wherever the right column ends — the preview
+   box absorbs the difference, and a portrait shot fills it upward first. */
+.dcs-shot-detail { display: grid; gap: 16px; align-items: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
 @media (max-width: 880px) { .dcs-shot-detail { grid-template-columns: 1fr; } }
 .dcs-shot-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .dcs-shot-image {
-  width: 100%; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden;
+  flex: 1 1 auto; min-height: 240px; width: 100%; border-radius: 10px; overflow: hidden;
   background: var(--dsw-alias-bg-layer-1);
   border: 1px solid var(--dsw-alias-border-l2);
   box-shadow: 0 16px 34px -22px rgba(0, 0, 0, .65);
   display: grid; place-items: center;
 }
-.dcs-shot-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Contain, pinned to the bottom: a landscape still rests on the timeline
+   with its spare space above; a portrait one climbs to the top edge first. */
+.dcs-shot-image img {
+  width: 100%; height: 100%; object-fit: contain; object-position: center bottom; display: block;
+}
 .dcs-shot-empty { font-size: 12px; color: var(--dsw-alias-label-tertiary); }
 .dcs-shot-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 
@@ -292,6 +297,20 @@ const CSS = `
   background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1);
 }
 .dcs-shot-foot { display: flex; align-items: center; gap: 8px; }
+
+/* The themed secondary: a calm mid-point between the panel's two hues —
+   teal pulled 30% toward violet so it does not shout. On hover the text
+   resolves to the pure teal. */
+.dcs-btn-accent {
+  border-color: color-mix(in srgb, var(--dcs-accent-2) 70%, var(--dcs-accent) 30%);
+  color: color-mix(in srgb, var(--dcs-accent-2) 70%, var(--dcs-accent) 30%);
+  background: transparent;
+}
+.dcs-btn-accent:hover:not(:disabled) {
+  border-color: var(--dcs-accent-2);
+  color: var(--dcs-accent-2);
+  background: color-mix(in srgb, var(--dcs-accent-2) 10%, transparent);
+}
 
 .dcs-btn-hero {
   border-color: rgba(244, 213, 141, .55);
@@ -360,6 +379,10 @@ const CSS = `
 }
 .dcs-plan-advice-ok { color: var(--dsw-alias-state-success-primary); }
 .dcs-plan-advice-warn { color: var(--dsw-alias-state-warn-primary); }
+/* The headline verdict on the bar reads at the title's size, not larger —
+   it is a status, not a shout. */
+.dcs-plan-advice-head .dcs-plan-advice-ok,
+.dcs-plan-advice-head .dcs-plan-advice-warn { font-size: 12px; font-weight: 550; }
 .dcs-plan-advice-fail { color: var(--dsw-alias-state-error-primary); }
 
 .dcs-plan-advice-list {
@@ -763,9 +786,14 @@ const CSS = `
   transition: width .4s ease-out;
 }
 /* Unsaved is stated in words as well as colour: the marker has to survive a
-   reader who cannot tell the accent from the resting state. */
+   reader who cannot tell the accent from the resting state.
+
+   Its own class, NOT dcs-btn-accent: that name means "ask the model again"
+   and is used by six buttons on four screens. Both rules under one name meant
+   the later one won, so every one of those six rendered in this gold instead
+   of the accent -- silently, because a wrong colour still looks deliberate. */
 .dcs-music-dirty { color: #f4d58d; }
-.dcs-btn-accent { border-color: rgba(244, 213, 141, .45); color: #f4d58d; }
+.dcs-btn-dirty { border-color: rgba(244, 213, 141, .45); color: #f4d58d; }
 
 /* Info area: what the one-line lanes had to leave out. */
 .dcs-info { gap: 10px; }
@@ -1182,7 +1210,6 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
   border-top: 1px solid var(--dsw-alias-border-l1);
 }
 .dcs-btn-icon { flex: none; }
-.dcs-card-foot .dcs-btn { display: inline-flex; align-items: center; gap: 6px; }
 
 /* Settings row: the three identity choices side by side. */
 .dcs-setgrid {

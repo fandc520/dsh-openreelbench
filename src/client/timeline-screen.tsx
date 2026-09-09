@@ -1666,7 +1666,7 @@ export function TimelineScreen({
           {musicDirty ? <span className="dcs-hint dcs-music-dirty">未保存</span> : null}
           <button
             type="button"
-            className={'dcs-btn dcs-btn-small' + (musicDirty ? ' dcs-btn-accent' : '')}
+            className={'dcs-btn dcs-btn-small' + (musicDirty ? ' dcs-btn-dirty' : '')}
             disabled={phase !== null || busy !== null || !musicDirty}
             title="保存工作流名称和这三项设置。合成与试听都按保存后的值走"
             onClick={() => void commitMusic()}
