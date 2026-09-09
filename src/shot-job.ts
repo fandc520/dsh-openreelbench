@@ -28,6 +28,7 @@ export interface ShotJobItem {
 }
 
 export interface ShotJobInput {
+  projectId: string
   workflow: string
   negativePrompt: string
   /** Reference image names in ComfyUI's input directory. Names only. */
@@ -56,11 +57,10 @@ export function buildShotJob(input: ShotJobInput): string {
   const lines: string[] = [
     '/' + SHOTS_STAGE_SKILL,
     '',
-    '请用 ComfyUI 生成下面 ' + input.shots.length + ' 张分镜。',
+    '项目 `' + input.projectId + '`，请用 ComfyUI 生成下面 ' + input.shots.length + ' 张分镜。',
     '',
     workflowLine(input.workflow),
-    '负向提示词，一字不改：' + input.negativePrompt,
-    '　（工作流没有负向输入就忽略这一条）',
+    '负向提示词：' + input.negativePrompt,
   ]
 
   // Just the names. Which loader node and which slot is something the model
@@ -73,13 +73,12 @@ export function buildShotJob(input: ShotJobInput): string {
       .map((name, index) => '参考图' + (index + 1) + ' `' + name + '`').join('　'))
   }
 
-  lines.push('尺寸：按成片尺寸生成')
   if (input.extraParams !== undefined && input.extraParams.trim() !== '') {
     lines.push('附加参数：' + input.extraParams.trim())
   }
 
   lines.push('')
-  lines.push('每张的**完整正面提示词**如下，已经拼好，**原样传给工作流**，不要再加风格前后缀：')
+  lines.push('每张的正面提示词：')
   lines.push('')
 
   for (const shot of input.shots) {

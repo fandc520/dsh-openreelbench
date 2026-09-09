@@ -2879,9 +2879,15 @@ async function main() {
 
     // The failure that was reported by eye: a message with a negative prompt
     // and no positive one.
-    if (/完整正面提示词/.test(full) && full.split('负向提示词').length === 2)
+    //
+    // Asserted on the PROMPTS, not on the heading that introduces them. The
+    // first version matched the literal 「完整正面提示词」 and broke the moment
+    // that heading was shortened, around prompts that were all present.
+    const positives = /正面提示词/.test(full)
+    const negativeOnce = full.split('负向提示词').length === 2
+    if (positives && negativeOnce)
       ok('the message labels the positive prompts and carries the negative once')
-    else bad('prompt labelling', full.slice(0, 300))
+    else bad('prompt labelling', 'positives=' + positives + ' negativeOnce=' + negativeOnce)
 
     // No prompt built (no scene plan reached this shot): the raw subject still
     // has to appear, or the shot goes out blank.
@@ -3956,6 +3962,101 @@ async function main() {
     if (!/onSend\(\[/.test(screen) && !/onSend\('/.test(screen))
       ok('the voice screen composes no request of its own')
     else bad('inline request', 'the screen still builds a message inline')
+  }
+
+
+  console.log('\n== 节点 4 分镜：请求与阶段细则 ==')
+  {
+    const { buildShotJob } = await import('../lib/shot-job.js')
+    const { buildStageSkills, stageSkillName } = await import('../lib/stage-skills.js')
+    const { Config: N4Config } = await import('../lib/config.js')
+
+    const sheet = buildStageSkills(N4Config({ bindings: {} }))
+      .find((s) => s.name === stageSkillName('assets-shots')).content
+    const job = buildShotJob({
+      projectId: 'demo-film', workflow: 'Alpha-Image', negativePrompt: 'text, watermark',
+      references: ['char.png'], extraParams: 'style_lora_v3',
+      shots: [
+        { sectionId: 's1', index: 0, seconds: 3.2, text: '第一句', fallbackPrompt: 'a lone figure' },
+        { sectionId: 's2', index: 0, seconds: 4.1, text: '第二句', fallbackPrompt: 'a city skyline' },
+      ],
+    })
+
+    // Same omission every other node had.
+    if (job.includes('`demo-film`')) ok('the shots request carries the project id')
+    else bad('no project id', job)
+
+    // THE INVARIANTS MOVED. Each of these is true of the step, not of this
+    // batch, so each belongs with the node rather than in every message.
+    const moved = [
+      ['出片尺寸', '成片画幅', '尺寸：按成片尺寸生成'],
+      ['原样传提示词', '原样用', '不要再加风格前后缀'],
+      ['参考图只传文件名', '只传文件名', undefined],
+      ['台词是氛围不是内容', '不要把台词本身画进画面', undefined],
+    ]
+    const notInSheet = moved.filter(([, needle]) => !sheet.includes(needle))
+    if (notInSheet.length === 0) ok('the sheet carries every rule that is true of the step')
+    else bad('rule missing from the sheet', notInSheet.map(([what]) => what).join(', '))
+    const stillEchoed = moved.filter(([, , echo]) => echo !== undefined && job.includes(echo))
+    if (stillEchoed.length === 0) ok('the request stopped restating them')
+    else bad('still restating', stillEchoed.map(([what]) => what).join(', '))
+
+    // What must stay: the live data. A prompt silently absent from the message
+    // is the failure this builder was extracted for in the first place.
+    const carried = ['a lone figure', 'a city skyline', 'Alpha-Image', 'text, watermark', 'char.png', 'style_lora_v3']
+      .filter((v) => !job.includes(v))
+    if (carried.length === 0) ok('every prompt and panel parameter reaches the message')
+    else bad('dropped from the message', carried.join(', '))
+
+    // The atmosphere label is data-side and stays: unlabelled, the model drew
+    // the words. The RULE about it is in the sheet; the LINE is per shot.
+    if (job.includes('参考台词氛围：第一句')) ok('each shot carries its line, labelled as atmosphere')
+    else bad('atmosphere line', job)
+  }
+
+  console.log('\n== 创作建议：真项目上的两道检查 ==')
+  {
+    const { checkSceneVariation } = await import('../lib/variation.js')
+    const { scoreSlideshowRisk } = await import('../lib/slideshow.js')
+    const { resolvePlaybook } = await import('../lib/playbooks.js')
+
+    // A plan that claims cinematic and does nothing cinematic. This is the
+    // shape a real project turned out to have, and the panel reported it --
+    // one shot size, almost no lighting set, no hero shot.
+    const { playbook } = resolvePlaybook('clean-tech', {})
+    const cinematic = {
+      ...playbook,
+      visual: { ...playbook.visual, style_hint: 'cinematic photography, filmic grade' },
+    }
+    const flat = [
+      { section_id: 's1', shot_index: 0, prompt: 'a room', shot_language: { shot_size: 'wide' } },
+      { section_id: 's2', shot_index: 0, prompt: 'a desk', shot_language: { shot_size: 'wide' } },
+      { section_id: 's3', shot_index: 0, prompt: 'a lamp', shot_language: { shot_size: 'wide' } },
+    ]
+    const subjects = new Map([['s1', 'a room'], ['s2', 'a desk'], ['s3', 'a lamp']])
+    const planned = [
+      { sectionId: 's1', duration: 6, shots: [{ index: 0, duration: 6 }] },
+      { sectionId: 's2', duration: 6, shots: [{ index: 0, duration: 6 }] },
+      { sectionId: 's3', duration: 6, shots: [{ index: 0, duration: 6 }] },
+    ]
+    const risk = scoreSlideshowRisk(flat, planned, cinematic, subjects)
+    const claim = risk.dimensions.unsupported_style_claim
+    if (claim !== undefined && claim.score >= 4)
+      ok('a style that claims cinematic and delivers none is caught (' + claim.score + '/5)')
+    else bad('style claim not caught', JSON.stringify(claim))
+    // Advice, not a wall: one bad dimension out of five must not block a render
+    // the person has looked at and wants.
+    if (risk.blocking === false) ok('one failing dimension advises rather than blocks')
+    else bad('over-blocking', 'average ' + risk.average)
+
+    // And the same plan under a style that claims nothing is not accused of
+    // failing to deliver it.
+    const quiet = scoreSlideshowRisk(flat, planned, playbook, subjects)
+    if (quiet.dimensions.unsupported_style_claim.score === 0)
+      ok('a style making no claim is not marked down for not keeping one')
+    else bad('false claim finding', JSON.stringify(quiet.dimensions.unsupported_style_claim))
+
+    void checkSceneVariation
   }
 
   console.log('\n== 协议在细则里，请求只带手势 ==')

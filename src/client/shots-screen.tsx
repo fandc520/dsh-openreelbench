@@ -334,6 +334,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
     // panel guessing at parameter names it cannot know.
     const hint = (state.project.lora_name ?? '').trim()
     return buildShotJob({
+      projectId: state.project.id,
       workflow: imageWorkflow,
       negativePrompt: playbook.visual.negative_prompt,
       references,
@@ -686,23 +687,27 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
             <span><b>{done}</b>/{shots.length} 镜已生成 · 全片 {total.toFixed(1)} 秒</span>
           </span>
           <span className="dcs-spacer" />
-          {imageChoices.length > 1 ? (
-            <label className="dcs-inline-pick">
-              <span className="dcs-hint">工作流</span>
-              <select
-                className="dcs-select dcs-select-small"
-                value={imageWorkflow}
-                disabled={phase !== null || busy !== null}
-                onChange={(event) => setImagePick(event.target.value)}
-              >
-                {imageChoices.map((name, index) => (
-                  <option key={name} value={name}>{index === 0 ? name + '（默认）' : name}</option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <span className="dcs-hint">工作流 {imageWorkflow === '' ? '（未绑定）' : imageWorkflow}</span>
-          )}
+          {/* Always a dropdown, even with one candidate: a read-only name looks
+              like a label, and a select says "this is a choice you own" — plus
+              an unbound capability shows where to fix it instead of a blank. */}
+          <label className="dcs-inline-pick">
+            <span className="dcs-hint">工作流</span>
+            <select
+              className="dcs-select dcs-select-small"
+              value={imageWorkflow}
+              disabled={phase !== null || busy !== null}
+              title={imageChoices.length === 0
+                ? '设置 → AI 创意工作室 → ComfyUI 工作流绑定 → 配图（文生图）'
+                : undefined}
+              onChange={(event) => setImagePick(event.target.value)}
+            >
+              {imageChoices.length === 0 ? (
+                <option value="">（未绑定 · 去设置页添加）</option>
+              ) : imageChoices.map((name, index) => (
+                <option key={name} value={name}>{index === 0 ? name + '（默认）' : name}</option>
+              ))}
+            </select>
+          </label>
           <span className="dcs-spacer" />
           {/* The common case after a partial run: some pictures landed, one
               failed or was added later. Regenerating the lot to fill a hole
