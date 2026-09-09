@@ -335,12 +335,6 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
               <b>{totalChars}</b> 字 / 预算约 {budget}
             </span>
           </span>
-          <span className="dcs-spacer" />
-          <button type="button" className="dcs-btn dcs-btn-small dcs-btn-accent" disabled={phase !== null || busy}
-            onClick={() => void askForScript(hasScript ? 'regenerate' : 'draft')}>
-            <IconSpark className="dcs-btn-icon" />
-            <BusyLabel phase={phase} idle={hasScript ? '重新生成' : '让 Agent 起草'} />
-          </button>
         </div>
         <div className="dcs-card-body">
           {draft.sections.length === 0 && phase === null ? (
@@ -467,6 +461,16 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
           ) : null}
 
           <button type="button" className="dcs-add-section" onClick={addSection}>＋ 加一段</button>
+        </div>
+        {/* Regeneration acts on the whole script, so it sits at the card's
+            bottom-right: read the draft, then decide to roll it again. */}
+        <div className="dcs-card-foot">
+          <span className="dcs-spacer" />
+          <button type="button" className="dcs-btn dcs-btn-small dcs-btn-accent" disabled={phase !== null || busy}
+            onClick={() => void askForScript(hasScript ? 'regenerate' : 'draft')}>
+            <IconSpark className="dcs-btn-icon" />
+            <BusyLabel phase={phase} idle={hasScript ? '重新生成' : '让 Agent 起草'} />
+          </button>
         </div>
       </section>
 

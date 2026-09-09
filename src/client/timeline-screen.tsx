@@ -22,8 +22,9 @@
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 
-import { type Cut, type CutSection, type StudioState, api } from './api.ts'
+import { type Cut, type CutSection, type StudioState, api, bindingWorkflows } from './api.ts'
 import { type AgentPhase, BusyLabel, Spinner } from './busy.tsx'
+import { IconClapper, IconPlay, IconSliders } from './icons.tsx'
 import { AdvicePanel } from './advice-panel.tsx'
 import { Strip } from './strip.tsx'
 import { Preview } from './preview.ts'
@@ -161,6 +162,11 @@ export function formatClock(seconds: number): string {
     + '.' + Math.floor((Math.max(0, seconds) % 1) * 10)
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+  return Math.max(1, Math.round(bytes / 1024)) + ' KB'
+}
+
 export function TimelineScreen({
   state, onReload, onSend, onGoToStage, cutId, onSelectCut,
 }: TimelineScreenProps): JSX.Element {
@@ -191,6 +197,14 @@ export function TimelineScreen({
    */
   const [musicWorkflow, setMusicWorkflow] = useState(state.project.music?.workflow ?? '')
   const [musicNote, setMusicNote] = useState('')
+  /* The music binding's candidates, plus whatever this project hand-typed
+     before the binding existed — a stored name must stay visible and selectable,
+     not vanish into a picker that never offered it. */
+  const musicChoices = bindingWorkflows(state.bindings?.music)
+  const storedMusicWorkflow = state.project.music?.workflow ?? ''
+  const musicOptions = storedMusicWorkflow !== '' && !musicChoices.includes(storedMusicWorkflow)
+    ? [...musicChoices, storedMusicWorkflow]
+    : musicChoices
   /**
    * The mix fields as typed, before they are saved.
    *
@@ -259,6 +273,20 @@ export function TimelineScreen({
   const total = state.timeline.reduce((sum, timing) => sum + timing.duration, 0)
   const stage = state.stages.find((entry) => entry.stage === 'compose')
   const recorded = stage?.status === 'completed'
+
+  /* Export footer stats. The last render report describes the film only while
+     its path still matches what this screen is showing — an older cut's file
+     has its own duration on the cut, but no size, so size hides instead of
+     lying. */
+  const filmPath = cut?.output ?? state.film?.path
+  const renderReport = state.artifacts.render_report as
+    | { outputs?: Array<{ path?: unknown; duration_seconds?: number; file_size_bytes?: number; resolution?: string }> }
+    | undefined
+  const filmStat = renderReport?.outputs?.find(
+    (entry) => typeof entry.path === 'string' && entry.path === filmPath,
+  )
+  const filmDuration = cut?.duration_seconds
+    ?? (typeof filmStat?.duration_seconds === 'number' ? filmStat.duration_seconds : undefined)
 
   function say(kind: 'ok' | 'error', text: string): void {
     setResult({ kind, text })
@@ -772,11 +800,6 @@ export function TimelineScreen({
 
   /* ------------------------------------------------------------- 配乐 */
 
-  const musicUrl = musicPath === undefined || musicPath === ''
-    ? undefined
-    : '/studio/media?project=' + encodeURIComponent(state.project.id)
-      + '&path=' + encodeURIComponent(musicPath)
-
   /** Remember the workflow name on the project, so the next film starts there. */
   async function saveMusic(patch: {
     workflow?: string; path?: string
@@ -1267,13 +1290,8 @@ export function TimelineScreen({
   return (
     <div className="dcs-screen dcs-screen-wide">
       <header className="dcs-screen-head">
-        <div>
-          <h2 className="dcs-screen-title">成片</h2>
-          <p className="dcs-screen-sub">
-            {state.timeline.length} 段 · {shotBlocks.length} 镜 · {total.toFixed(1)} 秒
-            {cut === undefined ? ' · 计划版本' : ' · 剪辑「' + cut.name + '」'}
-          </p>
-        </div>
+        <h2 className="dcs-screen-title">合成</h2>
+        <span className="dcs-spacer" />
         <span className={'dcs-pill ' + (recorded ? 'dcs-pill-ok' : '')}>
           {recorded ? '已记录' : filmUrl === undefined ? '未合成' : '未记录'}
         </span>
@@ -1283,206 +1301,300 @@ export function TimelineScreen({
         <p className={'dcs-note ' + (result.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{result.text}</p>
       ) : null}
 
-      {/* Versions. The plan is always the first option and cannot be deleted. */}
-      <div className="dcs-cutbar">
-        <button
-          type="button"
-          className={'dcs-cut' + (cut === undefined ? ' dcs-cut-active' : '')}
-          onClick={() => onSelectCut('')}
-        >计划版本</button>
-        {state.cuts.map((entry) => (
-          <span className={'dcs-cut-wrap' + (entry.id === cutId ? ' dcs-cut-wrap-active' : '')} key={entry.id}>
-            <button
-              type="button"
-              className={'dcs-cut' + (entry.id === cutId ? ' dcs-cut-active' : '')}
-              title={(entry.note ?? '') + '　更新于 ' + entry.updated_at.slice(0, 16).replace('T', ' ')}
-              onClick={() => onSelectCut(entry.id)}
-            >
-              {entry.name}
-              {entry.output === undefined ? <span className="dcs-cut-dot" title="还没出片">·</span> : null}
-            </button>
-            <button
-              type="button"
-              className="dcs-cut-x"
-              aria-label="重命名这一版"
-              title="重命名"
-              disabled={busy !== null}
-              onClick={() => void renameCut(entry)}
-            >✎</button>
-            <button
-              type="button"
-              className="dcs-cut-x"
-              aria-label="删除这一版"
-              disabled={busy !== null}
-              onClick={() => void removeCut(entry)}
-            >×</button>
+      <section className="dcs-card">
+        <div className="dcs-card-head">
+          <IconPlay className="dcs-section-icon" />
+          <h3 className="dcs-card-title">合成</h3>
+          <span className="dcs-card-meta">
+            <span><b>{state.timeline.length}</b> 段 · <b>{shotBlocks.length}</b> 镜 · 全片 <b>{total.toFixed(1)}</b> 秒
+              {cut === undefined ? '' : ' · 剪辑「' + cut.name + '」'}</span>
           </span>
-        ))}
-        <button type="button" className="dcs-cut dcs-cut-new" disabled={busy !== null}
-          onClick={() => void newCut()}>＋ 新版本</button>
-        <span className="dcs-spacer" />
-        {filmUrl === undefined ? null : (
-          <div className="dcs-mode" role="group" aria-label="预览模式">
-            <button
-              type="button"
-              className={'dcs-mode-btn' + (mode === 'film' ? ' dcs-mode-on' : '')}
-              onClick={showFilm}
-              title="播放已合成的成片"
-            >成片</button>
-            <button
-              type="button"
-              className={'dcs-mode-btn' + (mode === 'edit' ? ' dcs-mode-on' : '')}
-              onClick={showEdit}
-              title="回到编辑：改这一版，或另存一版"
-            >编辑</button>
-          </div>
-        )}
-        {filmUrl === undefined ? null : (
-          <a
-            className="dcs-btn dcs-btn-small"
-            href={filmUrl + '&download=1'}
-            download
-            title="导出这一版的成片"
-          >导出</a>
-        )}
-        {subtitlePath === undefined ? null : (
-          <a
-            className="dcs-btn dcs-btn-small"
-            href={'/studio/media?project=' + encodeURIComponent(state.project.id)
-              + '&path=' + encodeURIComponent(subtitlePath) + '&download=1'}
-            download
-            title="导出这一版的字幕"
-          >字幕</a>
-        )}
-        <label className="dcs-inline-pick" title="烧录会重新编码整段视频，并依赖本机中文字体；关掉则字幕只作为旁挂 .srt 导出">
-          <span className="dcs-hint">字幕</span>
-          <select
-            className="dcs-select dcs-select-small"
-            value={burnSubtitles}
-            disabled={phase !== null || busy !== null}
-            onChange={(event) => setBurnSubtitles(event.target.value as 'off' | 'outline' | 'box')}
-          >
-            <option value="off">不烧录（旁挂 .srt）</option>
-            <option value="outline">烧录 · 描边</option>
-            <option value="box">烧录 · 底色块</option>
-          </select>
-        </label>
-        <button
-          type="button"
-          className="dcs-btn dcs-btn-primary"
-          disabled={phase !== null || busy !== null}
-          onClick={() => void compose()}
-        >
-          <BusyLabel phase={phase} idle={filmUrl === undefined ? '合成' : '重新合成'} />
-        </button>
-      </div>
-
-      {/* A render is minutes long and used to show a spinner and nothing else,
-          which is indistinguishable from a stuck one. The label says what is
-          happening; the bar says it is still happening. */}
-      {render === null ? null : (
-        <div className="dcs-render">
-          <div className="dcs-render-head">
-            <Spinner />
-            <span className="dcs-render-label">{render.label}</span>
-            <span className="dcs-spacer" />
-            <span className="dcs-hint dcs-render-clock">
-              {Math.round(render.fraction * 100)}%　已用 {formatClock(render.elapsed)}
-            </span>
-          </div>
-          <div
-            className="dcs-render-bar"
-            role="progressbar"
-            aria-valuenow={Math.round(render.fraction * 100)}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="合成进度"
-          >
-            <div className="dcs-render-fill" style={{ width: (render.fraction * 100).toFixed(1) + '%' }} />
-          </div>
         </div>
-      )}
-
-      {/* Same shell the shots screen uses. It used to render only on a
-          revise/fail verdict, so a clean film showed nothing at all — and
-          "checked and fine" looked exactly like "never checked". */}
-      {risk === null ? null : (
-        <AdvicePanel
-          title="成片检查"
-          action={!risk.blocking ? undefined : (
-            <label className="dcs-inline-pick" title="看过分数仍然要出片">
-              <input
-                type="checkbox"
-                checked={forceRender}
-                onChange={(event) => setForceRender(event.target.checked)}
-              />
-              <span className="dcs-hint">我看过了，照出</span>
-            </label>
+        <div className="dcs-card-body">
+          {/* A render is minutes long and used to show a spinner and nothing else,
+              which is indistinguishable from a stuck one. The label says what is
+              happening; the bar says it is still happening. */}
+          {render === null ? null : (
+            <div className="dcs-render">
+              <div className="dcs-render-head">
+                <Spinner />
+                <span className="dcs-render-label">{render.label}</span>
+                <span className="dcs-spacer" />
+                <span className="dcs-hint dcs-render-clock">
+                  {Math.round(render.fraction * 100)}%　已用 {formatClock(render.elapsed)}
+                </span>
+              </div>
+              <div
+                className="dcs-render-bar"
+                role="progressbar"
+                aria-valuenow={Math.round(render.fraction * 100)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="合成进度"
+              >
+                <div className="dcs-render-fill" style={{ width: (render.fraction * 100).toFixed(1) + '%' }} />
+              </div>
+            </div>
           )}
-          rows={Object.entries(risk.dimensions).map(([name, entry]) => ({
-            label: RISK_LABELS[name] ?? name,
-            clean: entry.score < 2,
-            summary: entry.score < 2 ? '通过' : (entry.short ?? entry.reason),
-            hint: entry.short ?? entry.reason,
-            ...(entry.score >= 4 ? { severity: 'fail' as const } : entry.score >= 2 ? { severity: 'revise' as const } : {}),
-            details: [{ key: name, text: entry.reason }],
-          }))}
-        />
-      )}
 
+          {/* Same shell the shots screen uses. It used to render only on a
+              revise/fail verdict, so a clean film showed nothing at all — and
+              "checked and fine" looked exactly like "never checked". */}
+          {risk === null ? null : (
+            <AdvicePanel
+              title="成片检查"
+              action={!risk.blocking ? undefined : (
+                <label className="dcs-inline-pick" title="看过分数仍然要出片">
+                  <input
+                    type="checkbox"
+                    checked={forceRender}
+                    onChange={(event) => setForceRender(event.target.checked)}
+                  />
+                  <span className="dcs-hint">我看过了，照出</span>
+                </label>
+              )}
+              rows={Object.entries(risk.dimensions).map(([name, entry]) => ({
+                label: RISK_LABELS[name] ?? name,
+                clean: entry.score < 2,
+                summary: entry.score < 2 ? '通过' : (entry.short ?? entry.reason),
+                hint: entry.short ?? entry.reason,
+                ...(entry.score >= 4 ? { severity: 'fail' as const } : entry.score >= 2 ? { severity: 'revise' as const } : {}),
+                details: [{ key: name, text: entry.reason }],
+              }))}
+            />
+          )}
 
-      <div className="dcs-stage">
-        {!showingFilm ? (
-          /* No render yet — play it locally instead. The clips and stills are
-             already here, so waiting on ffmpeg to hear a pause would put a
-             multi-minute round trip inside the one loop that has to be tight. */
-          <div className="dcs-preview">
-            {activeShotPath === undefined
-              ? <div className="dcs-stage-empty"><p className="dcs-note">这一镜还没有画面。</p></div>
-              : <img className="dcs-preview-frame" src={activeShotPath} alt="" />}
-            {activeCue === undefined
-              ? null
-              : <div className="dcs-preview-sub">{activeCue.text}</div>}
-            {filmUrl === undefined ? null : (
-              <div className="dcs-stage-badge">编辑中 · 成片还是上一次合成的</div>
-            )}
-            <button
-              type="button"
-              className={'dcs-preview-play' + (previewing ? ' dcs-preview-play-on' : '')}
-              aria-label={previewing ? '暂停' : '预览播放'}
-              onClick={togglePreview}
-            >{previewing ? '❚❚' : '▶'}</button>
-            {/* Over the picture rather than beside the strip: it reads as part
-                of what is playing, and the strip stops paying for its width. */}
-            <div className="dcs-timecode">
-              <span className="dcs-timecode-now">{formatClock(at)}</span>
-              <span className="dcs-timecode-total">/ {formatClock(total)}</span>
+          {/* Versions left, mode right, one row over the picture they control. */}
+          <div className="dcs-compose-top">
+            <div className="dcs-cutbar">
+              <button
+                type="button"
+                className={'dcs-cut' + (cut === undefined ? ' dcs-cut-active' : '')}
+                onClick={() => onSelectCut('')}
+              >计划版本</button>
+              {state.cuts.map((entry) => (
+                <span className={'dcs-cut-wrap' + (entry.id === cutId ? ' dcs-cut-wrap-active' : '')} key={entry.id}>
+                  <button
+                    type="button"
+                    className={'dcs-cut' + (entry.id === cutId ? ' dcs-cut-active' : '')}
+                    title={(entry.note ?? '') + '　更新于 ' + entry.updated_at.slice(0, 16).replace('T', ' ')}
+                    onClick={() => onSelectCut(entry.id)}
+                  >
+                    {entry.name}
+                    {entry.output === undefined ? <span className="dcs-cut-dot" title="还没出片">·</span> : null}
+                  </button>
+                  {/* Float under the chip, not beside it: the row stays one
+                      chip wide, and the commands read as belonging to it. */}
+                  <span className="dcs-cut-actions">
+                    <button
+                      type="button"
+                      className="dcs-cut-x"
+                      aria-label="重命名这一版"
+                      title="重命名"
+                      disabled={busy !== null}
+                      onClick={() => void renameCut(entry)}
+                    >✎</button>
+                    <button
+                      type="button"
+                      className="dcs-cut-x"
+                      aria-label="删除这一版"
+                      disabled={busy !== null}
+                      onClick={() => void removeCut(entry)}
+                    >×</button>
+                  </span>
+                </span>
+              ))}
+              <button type="button" className="dcs-cut dcs-cut-new" disabled={busy !== null}
+                onClick={() => void newCut()}>＋ 新版本</button>
             </div>
           </div>
-        ) : (
-          <video
-            ref={player}
-            className="dcs-player"
-            src={filmUrl}
-            controls
-            /* Without this the element has no intrinsic ratio before playback,
-               and a portrait render sits letterboxed in a landscape box. */
-            preload="metadata"
-            onLoadedMetadata={(event) => {
-              const to = handover.current
-              if (to === null) return
-              handover.current = null
-              const element = event.currentTarget
-              element.currentTime = Number.isFinite(element.duration)
-                ? Math.min(to, element.duration)
-                : to
-            }}
-            onTimeUpdate={(event) => setAt(event.currentTarget.currentTime)}
-          />
-        )}
-      </div>
 
-      {/* The filmstrip: three lanes over one shared time axis. */}
+          {/* The picture and its facts, 7:3. The mode switch floats over the
+              picture itself: it changes what the picture IS, so it belongs on
+              it, centered where the eye already is. */}
+          <div className="dcs-compose-stage-row">
+            <div className="dcs-stage">
+              {/* One control, two states, no third option: the render is a mode
+                  you can leave, so it reads as a switch rather than as a button
+                  that does something. An empty timeline has no modes to switch. */}
+              {state.timeline.length === 0 ? null : (
+                <div className="dcs-mode dcs-mode-overlay" role="group" aria-label="预览模式">
+                  <button
+                    type="button"
+                    className={'dcs-mode-btn' + (mode === 'edit' ? ' dcs-mode-on' : '')}
+                    onClick={showEdit}
+                    title="回到编辑：改这一版，或另存一版"
+                  >原稿编辑</button>
+                  <button
+                    type="button"
+                    className={'dcs-mode-btn' + (mode === 'film' ? ' dcs-mode-on' : '')}
+                    disabled={filmUrl === undefined}
+                    onClick={showFilm}
+                    title={filmUrl === undefined ? '还没有合成成片' : '播放已合成的成片'}
+                  >成片预览</button>
+                </div>
+              )}
+            {state.timeline.length === 0 ? (
+              /* An empty timeline is not a broken preview — it is an earlier
+                 stage asking to be done. Point at the doors, in order. */
+              <div className="dcs-stage-guide">
+                <p className="dcs-stage-guide-title">时间线还是空的</p>
+                <p className="dcs-stage-guide-hint">先去配音生成解说，再去分镜出画面，回来这里排时间轴。</p>
+                <div className="dcs-stage-guide-actions">
+                  <button type="button" className="dcs-btn dcs-btn-accent"
+                    onClick={() => onGoToStage('assets_audio')}>去配音</button>
+                  <button type="button" className="dcs-btn dcs-btn-accent"
+                    onClick={() => onGoToStage('assets_shots')}>去分镜</button>
+                </div>
+              </div>
+            ) : !showingFilm ? (
+              /* No render yet — play it locally instead. The clips and stills are
+                 already here, so waiting on ffmpeg to hear a pause would put a
+                 multi-minute round trip inside the one loop that has to be tight. */
+              <div className="dcs-preview">
+                {activeShotPath === undefined ? (
+                  <div className="dcs-stage-guide">
+                    <p className="dcs-stage-guide-title">这一镜还没有画面</p>
+                    <p className="dcs-stage-guide-hint">分镜还缺这一张，生成后预览会自动接上。</p>
+                    <div className="dcs-stage-guide-actions">
+                      <button type="button" className="dcs-btn dcs-btn-accent"
+                        onClick={() => onGoToStage('assets_shots')}>去分镜生成</button>
+                    </div>
+                  </div>
+                ) : (
+                  <img className="dcs-preview-frame" src={activeShotPath} alt="" />
+                )}
+                {activeCue === undefined
+                  ? null
+                  : <div className="dcs-preview-sub">{activeCue.text}</div>}
+                {filmUrl === undefined ? null : (
+                  <div className="dcs-stage-badge">编辑中 · 成片还是上一次合成的</div>
+                )}
+                <button
+                  type="button"
+                  className={'dcs-preview-play' + (previewing ? ' dcs-preview-play-on' : '')}
+                  aria-label={previewing ? '暂停' : '预览播放'}
+                  onClick={togglePreview}
+                >{previewing ? '❚❚' : '▶'}</button>
+                {/* Over the picture rather than beside the strip: it reads as part
+                    of what is playing, and the strip stops paying for its width. */}
+                <div className="dcs-timecode">
+                  <span className="dcs-timecode-now">{formatClock(at)}</span>
+                  <span className="dcs-timecode-total">/ {formatClock(total)}</span>
+                </div>
+              </div>
+            ) : (
+              <video
+                ref={player}
+                className="dcs-player"
+                src={filmUrl}
+                controls
+                /* Without this the element has no intrinsic ratio before playback,
+                   and a portrait render sits letterboxed in a landscape box. */
+                preload="metadata"
+                onLoadedMetadata={(event) => {
+                  const to = handover.current
+                  if (to === null) return
+                  handover.current = null
+                  const element = event.currentTarget
+                  element.currentTime = Number.isFinite(element.duration)
+                    ? Math.min(to, element.duration)
+                    : to
+                }}
+                onTimeUpdate={(event) => setAt(event.currentTarget.currentTime)}
+              />
+            )}
+            </div>
+
+            {activeShot !== undefined && activeTiming !== undefined ? (
+              <aside className="dcs-shot-info">
+                <div className="dcs-col-head"><b>镜头信息</b></div>
+                <div className="dcs-facts-box">
+                  <div className="dcs-facts-title">
+                    {activeTiming.label} · 第 {(activeShot.shotIndex ?? 0) + 1} 镜
+                    <span className="dcs-hint">
+                      　{formatClock(activeShot.start)} – {formatClock(activeShot.start + activeShot.duration)}
+                    </span>
+                  </div>
+                  <dl className="dcs-facts">
+                    {/* Three numbers a person checks while trimming, laid out as
+                        tiles: name above, value below, side by side — the facts
+                        panel is narrow, and stacking them made it a ladder. */}
+                    <div className="dcs-facts-stats">
+                      <div className="dcs-facts-stat"><dt>本镜</dt><dd>{activeShot.duration.toFixed(2)}s</dd></div>
+                      <div className="dcs-facts-stat"><dt>分段</dt><dd>{activeTiming.duration.toFixed(2)}s</dd></div>
+                      <div className="dcs-facts-stat"><dt>配音</dt><dd>{activeTiming.speechSeconds.toFixed(2)}s</dd></div>
+                    </div>
+                    <div className="dcs-fact-wide">
+                      <dt>台词</dt>
+                      <dd>{activeTiming.text === '' ? '（无）' : activeTiming.text}</dd>
+                    </div>
+                    <div className="dcs-fact-wide">
+                      <dt>音频</dt>
+                      <dd className="dcs-mono">{fileNameOf(activeTiming.narrationPath) ?? '（未生成）'}</dd>
+                    </div>
+                    <div className="dcs-fact-wide">
+                      <dt>画面</dt>
+                      <dd className="dcs-mono">{fileNameOf(activeShotPathRaw) ?? '（未生成）'}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </aside>
+            ) : (
+              <aside className="dcs-shot-info">
+                <div className="dcs-col-head"><b>镜头信息</b></div>
+                <p className="dcs-note">时间线还没有片段。</p>
+              </aside>
+            )}
+          </div>
+
+          {/* Subtitle tools centered under the picture; the render pair hugs
+              the right edge, because it acts on the whole cut. */}
+          <div className="dcs-compose-actions">
+            <span aria-hidden="true" />
+            <div className="dcs-compose-subtools">
+              <label className="dcs-inline-pick" title="烧录会重新编码整段视频，并依赖本机中文字体；关掉则字幕只作为旁挂 .srt 导出">
+                <span className="dcs-hint">字幕</span>
+                <select
+                  className="dcs-select dcs-select-small"
+                  value={burnSubtitles}
+                  disabled={phase !== null || busy !== null}
+                  onChange={(event) => setBurnSubtitles(event.target.value as 'off' | 'outline' | 'box')}
+                >
+                  <option value="off">不烧录（旁挂 .srt）</option>
+                  <option value="outline">烧录 · 描边</option>
+                  <option value="box">烧录 · 底色块</option>
+                </select>
+              </label>
+              {subtitlePath === undefined ? null : (
+                <a
+                  className="dcs-btn dcs-btn-small"
+                  href={'/studio/media?project=' + encodeURIComponent(state.project.id)
+                    + '&path=' + encodeURIComponent(subtitlePath) + '&download=1'}
+                  download
+                  title="导出这一版的字幕"
+                >下载字幕</a>
+              )}
+            </div>
+            <div className="dcs-compose-run">
+              <button
+                type="button"
+                className="dcs-btn dcs-btn-accent"
+                disabled={phase !== null || busy !== null}
+                onClick={() => void compose()}
+              >
+                <IconClapper className="dcs-btn-icon" />
+                <BusyLabel phase={phase} idle={filmUrl === undefined ? '合成' : '重新合成'} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* The filmstrip: three lanes over one shared time axis. An empty
+          timeline has no axis to show — the guide in the stage points forward
+          instead, and a black empty strip would only say "broken". */}
+      {total > 0 ? (
       <div className="dcs-film" ref={film}>
         <div className="dcs-film-perf" aria-hidden="true" />
         <div className="dcs-film-body">
@@ -1558,141 +1670,25 @@ export function TimelineScreen({
         </div>
         <div className="dcs-film-perf" aria-hidden="true" />
       </div>
+      ) : null}
 
-      {/* 配乐. Always here, whether or not there is a bed yet: an empty screen
-          cannot tell you that a music track is something this film can have. */}
-      <section className="dcs-panel dcs-music">
-        <div className="dcs-group-head">
-          <h3 className="dcs-group-title">配乐</h3>
-          <span className="dcs-hint">
-            {musicPath === undefined || musicPath === ''
-              ? '整片一条音乐床，合成时自动压在解说下面'
-              : '已铺满全片 · ' + fileNameOf(musicPath)}
-          </span>
-          <span className="dcs-spacer" />
-          {musicPath === undefined || musicPath === '' ? null : (
-            <button
-              type="button"
-              className="dcs-btn dcs-btn-small"
-              disabled={busy !== null || phase !== null}
-              title="从成片里去掉配乐。文件留在项目里，随时可以换回来"
-              onClick={() => void removeMusic()}
-            >去掉</button>
-          )}
-        </div>
-
-        <div className="dcs-music-form">
-          <label className="dcs-inline-pick">
-            <span className="dcs-hint">工作流</span>
-            <input
-              className="dcs-input dcs-input-small"
-              value={musicWorkflow}
-              placeholder="ComfyUI 里的配乐工作流名称"
-              disabled={phase !== null}
-              onChange={(event) => setMusicWorkflow(event.target.value)}
-            />
-          </label>
-          <input
-            className="dcs-input"
-            value={musicNote}
-            placeholder="想要什么样的音乐（可留空，Agent 会按风格和语速自己定）"
-            disabled={phase !== null}
-            onChange={(event) => setMusicNote(event.target.value)}
-          />
-          <button
-            type="button"
-            className="dcs-btn dcs-btn-primary"
-            disabled={phase !== null || busy !== null || musicWorkflow.trim() === ''}
-            title="交给 Agent：先读配乐技能选曲，再用这条工作流生成，然后搬进项目"
-            onClick={() => void addMusic()}
-          >
-            <BusyLabel
-              phase={phase}
-              idle={musicPath === undefined || musicPath === '' ? '添加音乐' : '换一首'}
-            />
-          </button>
-        </div>
-
-        {/* The three numbers a person can judge by listening. Everything else in
-            the mix — the carve, the duck ratio, the loudness target — answers a
-            question listening does not ask, and stays fixed. */}
-        <div className="dcs-music-form">
-          <label className="dcs-inline-pick" title={
-            '音乐床相对解说的音量。规范值 ' + MIX_BOUNDS.gainDb.default
-            + ' dB（W3C：音乐要比人声低 20dB）。解说一响还会再自动压低 ' + (-DUCK_DB) + ' dB'
-          }>
-            <span className="dcs-hint">音量</span>
-            <input
-              className="dcs-input dcs-input-tiny"
-              type="number"
-              step={1}
-              min={MIX_BOUNDS.gainDb.min}
-              max={MIX_BOUNDS.gainDb.max}
-              value={musicFields.gain}
-              disabled={phase !== null}
-              onChange={(event) => editMusic({ gain: event.target.value })}
-            />
-            <span className="dcs-hint">dB</span>
-          </label>
-          <label className="dcs-inline-pick" title="开头music淡入的秒数">
-            <span className="dcs-hint">淡入</span>
-            <input
-              className="dcs-input dcs-input-tiny"
-              type="number"
-              step={0.5}
-              min={MIX_BOUNDS.fadeInSeconds.min}
-              max={MIX_BOUNDS.fadeInSeconds.max}
-              value={musicFields.fadeIn}
-              disabled={phase !== null}
-              onChange={(event) => editMusic({ fadeIn: event.target.value })}
-            />
-            <span className="dcs-hint">s</span>
-          </label>
-          <label className="dcs-inline-pick" title="结尾淡出的秒数">
-            <span className="dcs-hint">淡出</span>
-            <input
-              className="dcs-input dcs-input-tiny"
-              type="number"
-              step={0.5}
-              min={MIX_BOUNDS.fadeOutSeconds.min}
-              max={MIX_BOUNDS.fadeOutSeconds.max}
-              value={musicFields.fadeOut}
-              disabled={phase !== null}
-              onChange={(event) => editMusic({ fadeOut: event.target.value })}
-            />
-            <span className="dcs-hint">s</span>
-          </label>
-          <span className="dcs-spacer" />
-          {musicDirty ? <span className="dcs-hint dcs-music-dirty">未保存</span> : null}
-          <button
-            type="button"
-            className={'dcs-btn dcs-btn-small' + (musicDirty ? ' dcs-btn-dirty' : '')}
-            disabled={phase !== null || busy !== null || !musicDirty}
-            title="保存工作流名称和这三项设置。合成与试听都按保存后的值走"
-            onClick={() => void commitMusic()}
-          >{busy === 'music' ? '保存中…' : '保存'}</button>
-        </div>
-
-        {/* The bed itself, playable. A filename is not a preview. */}
-        {musicUrl === undefined ? null : <audio className="dcs-audio" src={musicUrl} controls preload="metadata" />}
-
-        <p className="dcs-hint">
-          音量、压制、EQ 和响度由合成时的 ffmpeg 处理——音乐床压 20dB、解说一响再让 8dB、
-          挖掉 2–4kHz 给人声让路、整体压到目标平台的响度。这些不用你调，也不用 Agent 调。
-        </p>
-      </section>
-
-      {/* Editing, in the environment the judgement was made in. */}
+      {/* Editing, in the environment the judgement was made in. Music lives in
+          the right column: it is an editor's knob like a pause is, and the
+          facts box has moved up beside the picture it describes. */}
       {activeShot !== undefined && activeTiming !== undefined ? (
-        <div className="dcs-bottom">
-          <section className="dcs-panel dcs-edit">
-            <div className="dcs-group-head">
-              <h3 className="dcs-group-title">片段编辑</h3>
-              {cut === undefined
-                ? <span className="dcs-hint">改动会自动开一个新版本</span>
-                : null}
-            </div>
-            <div className="dcs-row dcs-row-tight">
+        <section className="dcs-card">
+          <div className="dcs-card-head">
+            <IconSliders className="dcs-section-icon" />
+            <h3 className="dcs-card-title">片段编辑</h3>
+            {cut === undefined
+              ? <span className="dcs-hint">改动会自动开一个新版本</span>
+              : null}
+          </div>
+          <div className="dcs-card-body">
+            <div className="dcs-duo-split">
+              <div className="dcs-duo-col">
+                <div className="dcs-col-head"><b>本段节奏</b></div>
+                <div className="dcs-row dcs-row-tight">
               <label className="dcs-inline-pick">
                 <span className="dcs-hint">← 留白</span>
                 <input
@@ -1754,8 +1750,8 @@ export function TimelineScreen({
 
             <div className="dcs-divider" />
 
-            <div className="dcs-group-head">
-              <h3 className="dcs-group-title">字幕编辑</h3>
+            <div className="dcs-col-head">
+              <b>字幕编辑</b>
               <span className="dcs-hint">
                 {activeCue === undefined
                   ? '播放头不在任何一条字幕上'
@@ -1795,46 +1791,168 @@ export function TimelineScreen({
                   || activeCue.index >= activeCue.total - 1}
                 title="和本段后一条合并" onClick={() => void mergeCue(1)}>合并 →</button>
               <span className="dcs-spacer" />
-              <button type="button" className="dcs-btn dcs-btn-small dcs-btn-primary"
+              <button type="button" className="dcs-btn dcs-btn-small"
                 disabled={cueDraft === null || busy !== null}
                 onClick={() => { const text = cueDraft; setCueDraft(null); if (text !== null) void editCue(text) }}>
                 保存
               </button>
             </div>
-          </section>
-
-          <section className="dcs-panel dcs-info">
-            <div className="dcs-group-head">
-              <h3 className="dcs-group-title">镜头信息</h3>
-            </div>
-            <div className="dcs-facts-box">
-              <div className="dcs-facts-title">
-                {activeTiming.label} · 第 {(activeShot.shotIndex ?? 0) + 1} 镜
-                <span className="dcs-hint">
-                  　{formatClock(activeShot.start)} – {formatClock(activeShot.start + activeShot.duration)}
-                </span>
               </div>
-              <dl className="dcs-facts">
-                <div><dt>本镜</dt><dd>{activeShot.duration.toFixed(2)}s</dd></div>
-                <div><dt>本段</dt><dd>{activeTiming.duration.toFixed(2)}s</dd></div>
-                <div><dt>配音</dt><dd>{activeTiming.speechSeconds.toFixed(2)}s</dd></div>
-                <div className="dcs-fact-wide">
-                  <dt>台词</dt>
-                  <dd>{activeTiming.text === '' ? '（无）' : activeTiming.text}</dd>
+
+              <div className="dcs-duo-col">
+                <div className="dcs-col-head">
+                  <b>配乐</b>
+                  <span className="dcs-hint">
+                    {musicPath === undefined || musicPath === ''
+                      ? '整片一条音乐床，合成时自动压在解说下面'
+                      : '已铺满全片 · ' + fileNameOf(musicPath)}
+                  </span>
+                  <span className="dcs-spacer" />
+                  {musicPath === undefined || musicPath === '' ? null : (
+                    <button
+                      type="button"
+                      className="dcs-btn dcs-btn-small"
+                      disabled={busy !== null || phase !== null}
+                      title="从成片里去掉配乐。文件留在项目里，随时可以换回来"
+                      onClick={() => void removeMusic()}
+                    >去掉</button>
+                  )}
                 </div>
-                <div className="dcs-fact-wide">
-                  <dt>音频</dt>
-                  <dd className="dcs-mono">{fileNameOf(activeTiming.narrationPath) ?? '（未生成）'}</dd>
+
+                <div className="dcs-music-form">
+                  <label
+                    className="dcs-inline-pick"
+                    title={musicChoices.length === 0
+                      ? '设置 → AI 创意工作室 → ComfyUI 工作流绑定 → 配乐（文生音乐）里可添加候选'
+                      : '从绑定的工作流里选一条，交给 Agent 选曲生成'}
+                  >
+                    <span className="dcs-hint">工作流</span>
+                    <select
+                      className="dcs-select dcs-select-small"
+                      value={musicWorkflow}
+                      disabled={phase !== null}
+                      onChange={(event) => setMusicWorkflow(event.target.value)}
+                    >
+                      {musicOptions.length === 0 ? <option value="">（未绑定 · 去设置页添加）</option> : null}
+                      {musicOptions.map((name, index) => (
+                        <option key={name} value={name}>
+                          {index === 0 && name === musicChoices[0] ? name + '（默认）' : name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <input
+                    className="dcs-input"
+                    value={musicNote}
+                    placeholder="想要什么样的音乐（可留空，Agent 会按风格和语速自己定）"
+                    disabled={phase !== null}
+                    onChange={(event) => setMusicNote(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="dcs-btn dcs-btn-accent"
+                    disabled={phase !== null || busy !== null || musicWorkflow.trim() === ''}
+                    title="交给 Agent：先读配乐技能选曲，再用这条工作流生成，然后搬进项目"
+                    onClick={() => void addMusic()}
+                  >
+                    <BusyLabel
+                      phase={phase}
+                      idle={musicPath === undefined || musicPath === '' ? '添加音乐' : '换一首'}
+                    />
+                  </button>
                 </div>
-                <div className="dcs-fact-wide">
-                  <dt>画面</dt>
-                  <dd className="dcs-mono">{fileNameOf(activeShotPathRaw) ?? '（未生成）'}</dd>
+
+                {/* The three numbers a person can judge by listening. Everything else in
+                    the mix — the carve, the duck ratio, the loudness target — answers a
+                    question listening does not ask, and stays fixed. */}
+                <div className="dcs-music-form">
+                  <label className="dcs-inline-pick" title={
+                    '音乐床相对解说的音量。规范值 ' + MIX_BOUNDS.gainDb.default
+                    + ' dB（W3C：音乐要比人声低 20dB）。解说一响还会再自动压低 ' + (-DUCK_DB) + ' dB'
+                  }>
+                    <span className="dcs-hint">音量</span>
+                    <input
+                      className="dcs-input dcs-input-tiny"
+                      type="number"
+                      step={1}
+                      min={MIX_BOUNDS.gainDb.min}
+                      max={MIX_BOUNDS.gainDb.max}
+                      value={musicFields.gain}
+                      disabled={phase !== null}
+                      onChange={(event) => editMusic({ gain: event.target.value })}
+                    />
+                    <span className="dcs-hint">dB</span>
+                  </label>
+                  <label className="dcs-inline-pick" title="开头music淡入的秒数">
+                    <span className="dcs-hint">淡入</span>
+                    <input
+                      className="dcs-input dcs-input-tiny"
+                      type="number"
+                      step={0.5}
+                      min={MIX_BOUNDS.fadeInSeconds.min}
+                      max={MIX_BOUNDS.fadeInSeconds.max}
+                      value={musicFields.fadeIn}
+                      disabled={phase !== null}
+                      onChange={(event) => editMusic({ fadeIn: event.target.value })}
+                    />
+                    <span className="dcs-hint">s</span>
+                  </label>
+                  <label className="dcs-inline-pick" title="结尾淡出的秒数">
+                    <span className="dcs-hint">淡出</span>
+                    <input
+                      className="dcs-input dcs-input-tiny"
+                      type="number"
+                      step={0.5}
+                      min={MIX_BOUNDS.fadeOutSeconds.min}
+                      max={MIX_BOUNDS.fadeOutSeconds.max}
+                      value={musicFields.fadeOut}
+                      disabled={phase !== null}
+                      onChange={(event) => editMusic({ fadeOut: event.target.value })}
+                    />
+                    <span className="dcs-hint">s</span>
+                  </label>
                 </div>
-              </dl>
+
+                {/* Save on its own bottom-right row: in a half-width column the
+                    number fields wrap, and a spacer inside that row cannot be
+                    trusted to push anything anywhere. */}
+                <div className="dcs-music-save">
+                  {musicDirty ? <span className="dcs-hint dcs-music-dirty">未保存</span> : null}
+                  <button
+                    type="button"
+                    className={'dcs-btn dcs-btn-small' + (musicDirty ? ' dcs-btn-dirty' : '')}
+                    disabled={phase !== null || busy !== null || !musicDirty}
+                    title="保存工作流名称和这三项设置。合成与试听都按保存后的值走"
+                    onClick={() => void commitMusic()}
+                  >{busy === 'music' ? '保存中…' : '保存'}</button>
+                </div>
+              </div>
             </div>
-          </section>
-        </div>
+          </div>
+        </section>
       ) : null}
+
+      {/* The last step of the whole flow, so it gets the page's one loud
+          button: nothing left to tune, take the film. */}
+      {filmUrl === undefined ? null : (
+        <div className="dcs-cta">
+          <a
+            className="dcs-cta-primary"
+            href={filmUrl + '&download=1'}
+            download
+            title="导出这一版的成片"
+          >
+            <IconPlay className="dcs-cta-icon" />
+            导出成片
+          </a>
+          <p className="dcs-cta-hint">
+            导出的是{cut === undefined ? '计划版本' : '「' + cut.name + '」'}的成片
+            {filmDuration === undefined ? '' : ' · ' + filmDuration.toFixed(1) + ' 秒'}
+            {filmStat?.resolution === undefined ? '' : ' · ' + filmStat.resolution}
+            {filmStat?.file_size_bytes === undefined ? '' : ' · ' + formatBytes(filmStat.file_size_bytes)}
+          </p>
+        </div>
+      )}
     </div>
   )
 }

@@ -553,8 +553,18 @@ const CSS = `
 
 .dcs-screen-wide { max-width: 1080px; }
 
-/* Version bar: the plan first, then saved cuts, then a way to add one. */
-.dcs-cutbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* Version bar: the plan first, then saved cuts, then a way to add one. Many
+   versions scroll on ONE line instead of stacking rows — and the bar reserves
+   30px below the chips (paid back by a negative margin) so the hover actions
+   floating under a chip stay inside the scroll box instead of being clipped. */
+.dcs-cutbar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+  min-width: 0; flex: 1 1 auto;
+  overflow-x: auto; overflow-y: hidden;
+  padding: 2px 2px 30px; margin-bottom: -26px;
+  scrollbar-width: thin;
+}
+.dcs-cutbar > * { flex: none; }
 .dcs-cut-wrap { position: relative; display: inline-flex; }
 .dcs-cut {
   font: inherit; font-size: 12px; padding: 5px 12px; border-radius: 7px; cursor: pointer;
@@ -563,8 +573,9 @@ const CSS = `
 }
 .dcs-cut:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .dcs-cut-active {
-  border-color: var(--dsw-alias-brand-primary);
-  color: var(--dsw-alias-label-primary);
+  border-color: var(--dcs-accent);
+  color: var(--dcs-accent);
+  background: var(--dcs-accent-soft);
 }
 .dcs-cut-new { border-style: dashed; }
 
@@ -575,27 +586,28 @@ const CSS = `
 .dcs-mode {
   display: inline-flex;
   flex: none;
-  padding: 2px;
-  border: 1px solid var(--dsw-alias-border-secondary);
+  padding: 3px;
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
-  background: var(--dsw-alias-background-tertiary);
+  background: var(--dsw-alias-bg-layer-1);
 }
 .dcs-mode-btn {
-  padding: 3px 12px;
+  padding: 3px 14px;
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 18px;
   cursor: pointer;
   transition: background .12s ease, color .12s ease;
 }
-.dcs-mode-btn:hover { color: var(--dsw-alias-label-primary); }
+.dcs-mode-btn:hover:not(:disabled) { color: var(--dsw-alias-label-primary); }
+.dcs-mode-btn:disabled { opacity: .45; cursor: default; }
 .dcs-mode-on {
-  background: var(--dsw-alias-background-primary);
-  color: var(--dsw-alias-label-primary);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+  background: var(--dcs-accent-soft);
+  color: var(--dcs-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dcs-accent) 45%, transparent);
 }
 
 /* Only shown when a render exists but is not what is playing - the one case
@@ -614,21 +626,89 @@ const CSS = `
   pointer-events: none;
 }
 .dcs-cut-dot { color: var(--dsw-alias-state-warn-primary); margin-left: 4px; }
-.dcs-cut-x {
-  width: 16px; padding: 0; border: none; background: transparent; cursor: pointer;
-  color: var(--dsw-alias-label-tertiary); font-size: 13px; opacity: 0;
+/* Rename / delete float UNDER the chip on hover, centered: the bar stays one
+   chip tall and the commands read as owned by the chip above them. */
+.dcs-cut-actions {
+  position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  display: flex; gap: 4px; z-index: 6;
+  opacity: 0; pointer-events: none; transition: opacity .12s ease;
 }
-.dcs-cut-wrap:hover .dcs-cut-x { opacity: 1; }
-.dcs-cut-x:hover { color: var(--dsw-alias-state-error-primary); }
+.dcs-cut-wrap:hover .dcs-cut-actions,
+.dcs-cut-wrap:focus-within .dcs-cut-actions { opacity: 1; pointer-events: auto; }
+.dcs-cut-x {
+  width: 24px; height: 20px; padding: 0; cursor: pointer; font-size: 12px; line-height: 1;
+  border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary);
+}
+.dcs-cut-x:hover { color: var(--dsw-alias-state-error-primary); border-color: currentColor; }
 
-/* The screen. Black surround so the picture is the only bright thing. */
+/* The screen. Black surround so the picture is the only bright thing. The mode
+   switch floats over it, top center: it changes what the picture IS. */
 .dcs-stage {
+  position: relative;
   border-radius: 12px; overflow: hidden; background: #000;
   border: 1px solid var(--dsw-alias-border-l2);
   display: grid; place-items: center; min-height: 240px;
 }
+.dcs-mode-overlay {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 4;
+  background: rgba(10, 12, 16, .42);
+  border-color: rgba(255, 255, 255, .12);
+  backdrop-filter: blur(6px);
+}
+.dcs-mode-overlay .dcs-mode-btn { color: rgba(255, 255, 255, .62); }
+.dcs-mode-overlay .dcs-mode-btn:hover:not(:disabled) { color: #fff; }
+.dcs-mode-overlay .dcs-mode-on {
+  background: rgba(124, 92, 255, .3);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(164, 148, 255, .5);
+}
+
+/* Picture and its facts, 7:3. The facts panel is an inset card next to the
+   stage, so the numbers sit where the judgement is made. */
+.dcs-compose-stage-row {
+  display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+  gap: 12px; align-items: stretch;
+}
+.dcs-shot-info {
+  display: flex; flex-direction: column; gap: 10px; min-width: 0;
+  padding: 12px; border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1);
+}
+.dcs-shot-info .dcs-facts-box {
+  flex: 1; padding: 0; border: none; background: transparent;
+}
+@media (max-width: 1080px) {
+  .dcs-compose-stage-row { grid-template-columns: 1fr; }
+}
+
+/* The merged compose card's inner rows: versions above, toolbar below. */
+.dcs-compose-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dcs-compose-actions {
+  display: grid; align-items: center; gap: 10px;
+  grid-template-columns: 1fr auto 1fr;
+  padding: 8px 12px; border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  border: 1px solid var(--dsw-alias-border-l1);
+}
+.dcs-compose-subtools { display: flex; align-items: center; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.dcs-compose-run { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+@media (max-width: 880px) {
+  .dcs-compose-actions { grid-template-columns: 1fr; }
+  .dcs-compose-actions > [aria-hidden] { display: none; }
+  .dcs-compose-run { justify-content: center; }
+}
 .dcs-player { width: 100%; max-height: 60vh; display: block; }
-.dcs-stage-empty { padding: 40px 20px; text-align: center; }
+
+/* Empty states that point forward: a title, one line of why, and the doors
+   to walk through — "这一镜还没有画面" as a dead end helped nobody. */
+.dcs-stage-guide {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 40px 24px; text-align: center;
+}
+.dcs-stage-guide-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.dcs-stage-guide-hint { margin: 0; font-size: 12px; color: var(--dsw-alias-label-tertiary); }
+.dcs-stage-guide-actions { display: flex; gap: 8px; margin-top: 10px; }
 
 /* Local preview: the current still, its cue, and one play control. */
 .dcs-preview { position: relative; width: 100%; display: grid; place-items: center; }
@@ -727,7 +807,7 @@ const CSS = `
   border: 1px solid rgba(255, 255, 255, .1);
   background: rgba(255, 255, 255, .04); color: rgba(255, 255, 255, .55);
 }
-.dcs-cue-live { border-color: #f4d58d; color: #fff; background: rgba(244, 213, 141, .16); }
+.dcs-cue-live { border-color: var(--dcs-accent); color: #fff; background: rgba(124, 92, 255, .2); }
 .dcs-cue { display: flex; align-items: center; }
 .dcs-cue-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Narrower than the audio pads: a cue block is often only a few pixels wide. */
@@ -759,6 +839,8 @@ const CSS = `
 .dcs-music { gap: 9px; }
 /* The workflow field stays narrow; the brief takes the rest of the row. */
 .dcs-music-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* The music column's save row: always hugs the right edge, wrap or not. */
+.dcs-music-save { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 .dcs-music-form > .dcs-input { flex: 1 1 220px; min-width: 0; }
 .dcs-input-small { width: 190px; }
 .dcs-input-tiny { width: 58px; }
@@ -889,15 +971,15 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
    scoping the transition to them makes the reset instant and the bounce
    impossible. */
 .dcs-block-shoved {
-  border-color: rgba(244, 213, 141, .5);
+  border-color: color-mix(in srgb, var(--dcs-accent) 55%, transparent);
   transition: transform .14s ease;
 }
 @media (prefers-reduced-motion: reduce) {
   .dcs-block-shoved, .dcs-block-landing { transition: none; }
 }
 .dcs-block-live {
-  border-color: #f4d58d;
-  background: rgba(244, 213, 141, .18);
+  border-color: var(--dcs-accent);
+  background: rgba(124, 92, 255, .2);
   color: #fff;
 }
 .dcs-block-name {
@@ -918,11 +1000,11 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
   flex: 1 1 0; min-width: 0; border-radius: 1px;
   background: rgba(255, 255, 255, .22);
 }
-.dcs-block-live .dcs-block-wave i { background: rgba(244, 213, 141, .38); }
+.dcs-block-live .dcs-block-wave i { background: rgba(164, 148, 255, .45); }
 /* The playhead spans every lane, because the lanes share one axis. */
 .dcs-playhead {
   position: absolute; bottom: 0; top: 19px; width: 2px; pointer-events: none;
-  background: #f4d58d; box-shadow: 0 0 6px rgba(244, 213, 141, .6);
+  background: var(--dcs-accent); box-shadow: 0 0 6px rgba(124, 92, 255, .6);
 }
 
 /* ------------------------------------------------------- asset picker */
@@ -1003,6 +1085,20 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
   font-size: 12px; font-weight: 600;
   color: var(--dsw-alias-label-primary);
   padding-bottom: 6px; border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+/* Name above, value below, three across, spread over the full width: the
+   facts panel is narrow, and one stacked row per number turned it into a
+   ladder. */
+.dcs-facts-stats {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+  justify-items: center; text-align: center;
+  padding-bottom: 8px; border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+.dcs-facts-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dcs-facts-stat dt { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.dcs-facts-stat dd {
+  font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary);
 }
 
 /* Five buttons in one row; they wrap rather than squeeze on a narrow panel. */
@@ -1179,14 +1275,14 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
   background: var(--dsw-alias-bg-layer-2); overflow: hidden;
 }
 .dcs-card-head {
-  display: flex; align-items: center; gap: 8px; padding: 11px 16px;
+  display: flex; align-items: center; gap: 8px; padding: 7px 12px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
   position: relative;
 }
 /* One violet-to-teal hairline under every card head — the quietest possible
    echo of the poster, so a wall of cards still reads as one instrument. */
 .dcs-card-head::after {
-  content: ''; position: absolute; left: 16px; right: 16px; bottom: -1px; height: 1px;
+  content: ''; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 1px;
   background: linear-gradient(90deg, var(--dcs-accent), var(--dcs-accent-2) 42%, transparent 85%);
   opacity: .5;
 }
@@ -1195,7 +1291,7 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
   font-size: 11px; padding: 2px 8px; border-radius: 999px;
   background: var(--dcs-accent-soft); color: var(--dcs-accent);
 }
-.dcs-card-body { display: flex; flex-direction: column; gap: 13px; padding: 14px 16px; }
+.dcs-card-body { display: flex; flex-direction: column; gap: 11px; padding: 8px 12px; }
 /* Stats on a card head: quiet metadata between the title and its action. */
 .dcs-card-meta { display: flex; gap: 12px; flex-wrap: wrap; margin-left: 6px; font-size: 12px; color: var(--dsw-alias-label-tertiary); }
 .dcs-card-meta b { font-weight: 600; color: var(--dsw-alias-label-secondary); }
@@ -1206,7 +1302,7 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
 }
 .dcs-add-section:hover { border-color: var(--dcs-accent); color: var(--dcs-accent); }
 .dcs-card-foot {
-  display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+  display: flex; align-items: center; gap: 10px; padding: 6px 12px;
   border-top: 1px solid var(--dsw-alias-border-l1);
 }
 .dcs-btn-icon { flex: none; }
@@ -1234,6 +1330,7 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
 .dcs-cta-primary {
   display: inline-flex; align-items: center; gap: 9px; cursor: pointer; font: inherit;
   font-size: 15px; font-weight: 650; letter-spacing: .02em; color: #fff;
+  text-decoration: none;
   padding: 13px 44px; border: none; border-radius: 12px;
   background: linear-gradient(135deg, #8b5cf6 0%, #7c5cff 45%, #5a3df0 100%);
   box-shadow: 0 10px 26px -10px rgba(124, 92, 255, 0.6);

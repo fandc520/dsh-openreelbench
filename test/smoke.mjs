@@ -4065,6 +4065,75 @@ async function main() {
 
 
 
+
+  console.log('\n== 文档备份：同步脚本与边界 ==')
+  {
+    const { readFileSync: readDoc, existsSync, readdirSync } = await import('node:fs')
+    const { execFileSync } = await import('node:child_process')
+
+    // The backup exists because these four had no version control at all, and
+    // a scripted edit removed 114 lines of one of them with nothing to restore
+    // from. Recovered from a transcript; there is no second time.
+    const wanted = ['CLAUDE.md', 'CONVENTIONS.md', 'DEVELOPMENT.md', '页面记录.md']
+    const absent = wanted.filter((name) => !existsSync('docs/workspace/' + name))
+    if (absent.length === 0) ok('all four workspace documents are backed up in the package')
+    else bad('missing backup', absent.join(', '))
+
+    // THE BOUNDARY. OpenMontage is input to this project, not part of it: the
+    // clone, the four analysis pages, and 290 KB of extracted tool/pipeline
+    // JSON. None of it belongs in a plugin's history.
+    const strays = readdirSync('docs/workspace').filter((name) => /^om-|OpenMontage/i.test(name))
+    if (strays.length === 0) ok('no upstream analysis leaked into the backup')
+    else bad('upstream in the package', strays.join(', '))
+
+    // --check is what makes the backup trustworthy: a stale copy that nobody
+    // notices is worse than no copy, because it reads as a backup.
+    let checkExit = 0
+    try {
+      execFileSync(process.execPath, ['scripts/sync-docs.mjs', '--check'], { encoding: 'utf-8' })
+    } catch (error) {
+      checkExit = error.status ?? 1
+    }
+    if (checkExit === 0) ok('the backup is current (--check passes)')
+    else bad('stale backup', 'run node scripts/sync-docs.mjs')
+
+    // The guard is not decoration: it has to refuse an OM path even when one
+    // is added to the source list, which is how it would actually happen.
+    const script = readDoc('scripts/sync-docs.mjs', 'utf-8')
+    const patched = script.replace(
+      /const SOURCES = \[[^\]]*\]/,
+      "const SOURCES = ['CLAUDE.md', 'docs/om-05-blueprint.md']",
+    )
+    if (patched === script) {
+      bad('could not patch the script', 'SOURCES no longer matches the expected shape')
+    } else {
+      const tmp = 'tmp/sync-docs-probe.mjs'
+      const { mkdirSync, writeFileSync, rmSync } = await import('node:fs')
+      mkdirSync('tmp', { recursive: true })
+      // Keep it importable from the same directory depth the real one runs at.
+      writeFileSync('scripts/.probe.mjs', patched, 'utf-8')
+      let refused = ''
+      try {
+        execFileSync(process.execPath, ['scripts/.probe.mjs', '--check'], { encoding: 'utf-8' })
+      } catch (error) {
+        refused = String(error.stderr ?? '') + String(error.stdout ?? '')
+      }
+      rmSync('scripts/.probe.mjs', { force: true })
+      rmSync(tmp, { force: true })
+      if (refused.includes('REFUSED') && refused.includes('om-05'))
+        ok('the guard refuses an OpenMontage path added to the source list')
+      else bad('guard does not bite', refused.slice(0, 200) || 'it copied it without complaint')
+    }
+
+    // And the backup must not ship in the npm package -- it is history, not
+    // something an installer needs.
+    const pkg = JSON.parse(readDoc('package.json', 'utf-8'))
+    if (!pkg.files.includes('docs')) ok('the backup is not published to npm')
+    else bad('docs published', 'the files whitelist ships docs/')
+    if (pkg.scripts['sync-docs'] !== undefined) ok('the sync has an npm script')
+    else bad('no script', 'package.json has no sync-docs entry')
+  }
+
   console.log('\n== usage 技能与真实工具表对齐 ==')
   {
     const { STUDIO_USAGE_SKILL } = await import('../lib/skill-usage.js')

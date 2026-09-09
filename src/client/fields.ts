@@ -80,6 +80,14 @@ export const FIELD_GROUPS: FieldGroup[] = [
         kind: 'list',
       },
       {
+        path: ['bindings', 'music', 'workflows'],
+        label: '配乐（文生音乐）',
+        hint: '整片音乐床交给 Agent 选曲并用这条工作流生成。可选——不绑定时，合成页配乐栏仍会显示项目里手填过的名称。'
+          + '第一条是默认，其余作为候选出现在合成页的下拉菜单里。',
+        placeholder: 'Music-Gen',
+        kind: 'list',
+      },
+      {
         path: ['bindings', 'voice_query', 'workflows'],
         label: '音色查询',
         hint: '输出所选音色的参考音频，供配音页试听。不绑定时「试听」按钮是灰的。'

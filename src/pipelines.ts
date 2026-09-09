@@ -104,7 +104,7 @@ export const PIPELINES: Record<string, Pipeline> = {
         ],
       },
       {
-        id: 'compose', screen: 'timeline', gated: false, label: '成片',
+        id: 'compose', screen: 'timeline', gated: false, label: '合成',
         hint: '合成时间轴、字幕、导出',
         review_focus: [
           '字幕断行在语义边界上，不出现孤字',

@@ -29,7 +29,8 @@
     "test": "node test/smoke.mjs",
     "build:host": "tsc -p tsconfig.json",
     "build:client": "tsdown -c tsdown.config.mjs",
-    "inspect": "node test/inspect.mjs"
+    "inspect": "node test/inspect.mjs",
+    "sync-docs": "node scripts/sync-docs.mjs"
   },
   "keywords": [
     "deepseek",

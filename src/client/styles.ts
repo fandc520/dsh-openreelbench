@@ -92,6 +92,7 @@ const CSS = `
   border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
+  text-decoration: none;
   cursor: pointer;
 }
 .dcs-btn:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
