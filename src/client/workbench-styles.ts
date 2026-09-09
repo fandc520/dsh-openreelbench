@@ -276,20 +276,27 @@ const CSS = `
   width: 100%; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden;
   background: var(--dsw-alias-bg-layer-1);
   border: 1px solid var(--dsw-alias-border-l2);
+  box-shadow: 0 16px 34px -22px rgba(0, 0, 0, .65);
   display: grid; place-items: center;
 }
 .dcs-shot-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .dcs-shot-empty { font-size: 12px; color: var(--dsw-alias-label-tertiary); }
 .dcs-shot-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 
-/* The strip's toolbar: shot-level commands on one line above the timeline,
-   and the single generate action parked under it, right-aligned. */
-.dcs-shot-tools { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-.dcs-shot-foot { display: flex; align-items: center; gap: 10px; margin-top: -2px; }
+/* The strip's toolbar: one contained bar, its commands centered — the row
+   acts on the timeline right under it. The generate pair sits below the
+   strip, right-aligned, batch left of single. */
+.dcs-shot-tools {
+  display: flex; align-items: center; justify-content: center; gap: 7px; flex-wrap: wrap;
+  padding: 8px 12px; border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1);
+}
+.dcs-shot-foot { display: flex; align-items: center; gap: 8px; }
 
 .dcs-btn-hero {
   border-color: rgba(244, 213, 141, .55);
   color: rgb(244, 213, 141);
+  background: rgba(244, 213, 141, .12);
 }
 
 /* -- 创作建议 --------------------------------------------------------------- */
@@ -486,11 +493,12 @@ const CSS = `
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px 8px;
-  border: 1px solid var(--dsw-alias-border-secondary);
-  border-radius: 6px;
-  background: var(--dsw-alias-background-tertiary);
+  align-content: flex-start;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 9px;
+  background: var(--dsw-alias-bg-layer-1);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -509,8 +517,12 @@ const CSS = `
 }
 .dcs-shot-head { display: flex; align-items: baseline; gap: 10px; }
 .dcs-shot-where { font-size: 13px; font-weight: 600; }
+/* 台词 as a quote block: inset on layer-1 with a teal spine, so the one
+   thing nobody edits reads as source material, not as another field. */
 .dcs-shot-text {
-  margin: 0; font-size: 13px; line-height: 1.7; flex: none;
+  margin: 0; padding: 9px 12px; font-size: 13px; line-height: 1.7;
+  border-radius: 9px; background: var(--dsw-alias-bg-layer-1);
+  border-left: 2px solid var(--dcs-accent-2);
   color: var(--dsw-alias-label-secondary);
 }
 .dcs-shot-text-label { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
@@ -1141,6 +1153,14 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
 .dcs-card-head {
   display: flex; align-items: center; gap: 8px; padding: 11px 16px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
+  position: relative;
+}
+/* One violet-to-teal hairline under every card head — the quietest possible
+   echo of the poster, so a wall of cards still reads as one instrument. */
+.dcs-card-head::after {
+  content: ''; position: absolute; left: 16px; right: 16px; bottom: -1px; height: 1px;
+  background: linear-gradient(90deg, var(--dcs-accent), var(--dcs-accent-2) 42%, transparent 85%);
+  opacity: .5;
 }
 .dcs-card-title { margin: 0; font-size: 13px; font-weight: 600; }
 .dcs-card-mark {

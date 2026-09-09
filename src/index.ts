@@ -23,7 +23,8 @@ import type {} from '@deepseek-ai/dsh-settings'
 import { Config } from './config.js'
 import { probeDuration } from './compose.js'
 import { resolveWorkspaceRoot } from './project.js'
-import { buildStudioSkill } from './skill.js'
+import { buildPipelineSkills } from './pipeline-skill.js'
+import { buildStageSkills } from './stage-skills.js'
 import { STUDIO_CINEMATOGRAPHY_SKILL } from './skill-cinematography.js'
 import { STUDIO_STORYTELLING_SKILL } from './skill-storytelling.js'
 import { STUDIO_REVIEWER_SKILL } from './skill-reviewer.js'
@@ -117,7 +118,11 @@ export function apply(ctx: Context, config: Config): void {
     const skills = ctx.get('skills') as SkillsService | undefined
     if (skills === undefined) return
     skillDisposers = [
-      skills.register(buildStudioSkill(resolved)),
+      // One map per pipeline, one detail sheet per stage, and the craft skills
+      // that several pipelines share. See `pipeline-skill.ts` for why those are
+      // three lifetimes rather than one document.
+      ...buildPipelineSkills(resolved).map((skill) => skills.register(skill)),
+      ...buildStageSkills(resolved).map((skill) => skills.register(skill)),
       skills.register(STUDIO_STORYTELLING_SKILL),
       skills.register(STUDIO_CINEMATOGRAPHY_SKILL),
       skills.register(STUDIO_REVIEWER_SKILL),

@@ -27,7 +27,7 @@ export interface RuntimeSkill {
 
 const CONTENT = `# dsh-creative-studio 工具契约
 
-管线怎么走看 \`dsh-creative-studio-explainer\`。这份讲**工具本身怎么表现**——
+管线怎么走看那条管线自己的技能（如 \`dsh-creative-studio-explainer-stills\`），某一段具体怎么做看 \`dsh-creative-studio-stage-*\`。这份讲**工具本身怎么表现**——
 它会不会改你的输入、报错了怎么办、重试安不安全、和 ComfyUI 插件怎么分工。
 
 ## 三个工具的职责边界

@@ -286,14 +286,19 @@ async function testApply() {
   const skillNames = [...host.skills.values()].map((s) => s.name).sort()
   const expectedSkills = [
     'dsh-creative-studio-cinematography',
-    'dsh-creative-studio-explainer',
+    'dsh-creative-studio-explainer-stills',
     'dsh-creative-studio-reviewer',
     'dsh-creative-studio-sound-design',
+    'dsh-creative-studio-stage-assets-audio',
+    'dsh-creative-studio-stage-assets-shots',
+    'dsh-creative-studio-stage-brief',
+    'dsh-creative-studio-stage-compose',
+    'dsh-creative-studio-stage-script',
     'dsh-creative-studio-storytelling',
     'dsh-creative-studio-usage',
   ]
   if (skillNames.join(',') === expectedSkills.join(','))
-    ok('apply registers all 6 skills')
+    ok('apply registers all 11 skills')
   else bad('skill registration', skillNames.join(','))
 
   const section = host.section()
@@ -302,7 +307,7 @@ async function testApply() {
   if (section?.base === entry) ok('the cordis.yml entry is passed as the settings base layer')
   else bad('settings base', 'entry config was not handed to the settings service')
 
-  const before = [...host.skills.values()].find((s) => s.name === 'dsh-creative-studio-explainer')
+  const before = [...host.skills.values()].find((s) => s.name === 'dsh-creative-studio-explainer-stills')
   if (before.content.includes('Alpha-TTS')) ok('the skill renders the configured binding')
   else bad('skill binding', 'Alpha-TTS missing from the instruction text')
 
@@ -312,13 +317,13 @@ async function testApply() {
     bindings: { tts: { workflow: 'Beta-TTS', notes: '' }, image: { workflow: 'Alpha-Image', notes: '' } },
   }))
 
-  const after = [...host.skills.values()].find((s) => s.name === 'dsh-creative-studio-explainer')
+  const after = [...host.skills.values()].find((s) => s.name === 'dsh-creative-studio-explainer-stills')
   if (after.content.includes('Beta-TTS') && !after.content.includes('Alpha-TTS')) {
     ok('a settings change re-renders the skill with the new binding')
   } else {
     bad('skill re-render', 'still naming the old workflow after the settings change')
   }
-  if ([...host.skills.values()].length === 6) ok('re-rendering replaces the skills instead of stacking them')
+  if ([...host.skills.values()].length === 11) ok('re-rendering replaces the skills instead of stacking them')
   else bad('skill leak', [...host.skills.values()].length + ' skills registered')
 
   host.disposeAll()
@@ -3644,6 +3649,113 @@ async function main() {
       !(kind === 'action' ? actionsOf(tool) : paramsOf(tool)).includes(name))
     if (unreachable.length === 0) ok('every panel action the agent needs has a tool path (' + reachable.length + ')')
     else bad('panel-only action', unreachable.map(([label]) => label).join(', '))
+  }
+
+
+  console.log('\n== 管线技能：地图与地形分开 ==')
+  {
+    const { buildPipelineSkills, buildPipelineSkill } = await import('../lib/pipeline-skill.js')
+    const { buildStageSkills, stageSkillName } = await import('../lib/stage-skills.js')
+    const { PIPELINES } = await import('../lib/pipelines.js')
+    const { Config: SkillConfig } = await import('../lib/config.js')
+
+    const cfg = SkillConfig({ bindings: { tts: { workflow: 'Alpha-TTS' }, image: { workflow: 'Alpha-Image' } } })
+    const pipeSkills = buildPipelineSkills(cfg)
+    const stageSkills = buildStageSkills(cfg)
+    const registered = new Set([
+      ...pipeSkills.map((s) => s.name),
+      ...stageSkills.map((s) => s.name),
+      'dsh-creative-studio-storytelling',
+      'dsh-creative-studio-cinematography',
+      'dsh-creative-studio-sound-design',
+      'dsh-creative-studio-reviewer',
+      'dsh-creative-studio-usage',
+    ])
+
+    // A pipeline with no skill is a pipeline the model has no map for, and
+    // nothing else would say so -- it would just work worse.
+    if (pipeSkills.length === Object.keys(PIPELINES).length)
+      ok('every pipeline gets a skill, rendered from its own data')
+    else bad('pipeline skills', pipeSkills.length + ' skills for ' + Object.keys(PIPELINES).length + ' pipelines')
+
+    // THE FAILURE THIS SECTION EXISTS FOR. The node map cites a /gesture per
+    // stage. A gesture naming a skill that is not registered does not error:
+    // the message sends, nothing loads, and the model does that step with no
+    // instructions at all.
+    const cited = []
+    for (const skill of pipeSkills) {
+      for (const match of skill.content.matchAll(/`\/([a-z0-9-]+)`/g)) cited.push([skill.name, match[1]])
+    }
+    const dangling = cited.filter(([, name]) => !registered.has(name))
+    if (cited.length > 0 && dangling.length === 0)
+      ok('every /gesture the node map cites names a registered skill (' + cited.length + ')')
+    else if (cited.length === 0) bad('node map cites nothing', 'the map has no gestures at all')
+    else bad('dangling gesture', dangling.map(([from, name]) => from + ' -> /' + name).join(', '))
+
+    // And the other direction: a stage with no detail sheet.
+    const missing = []
+    for (const pipeline of Object.values(PIPELINES)) {
+      for (const stage of pipeline.stages) {
+        const wanted = stageSkillName(stage.id.replace(/_/g, '-'))
+        if (!registered.has(wanted)) missing.push(pipeline.id + '/' + stage.id)
+      }
+    }
+    if (missing.length === 0) ok('every stage of every pipeline has a detail sheet')
+    else bad('stage with no skill', missing.join(', '))
+
+    // The map has to actually list the stages, in order. A table rendered from
+    // the wrong source would still look like a table.
+    const explainer = pipeSkills.find((s) => s.name === 'dsh-creative-studio-explainer-stills')
+    const order = PIPELINES['explainer-stills'].stages.map((s) => s.id)
+    const positions = order.map((id) => explainer.content.indexOf('`' + id + '`'))
+    if (positions.every((at, i) => at > 0 && (i === 0 || at > positions[i - 1])))
+      ok('the node map lists every stage in pipeline order')
+    else bad('node map order', JSON.stringify(positions))
+
+    // A map that also carried the terrain would be the monolith this replaced.
+    // The brief field table is the bulkiest piece of stage detail; if it is
+    // back in the pipeline skill, the split has quietly undone itself.
+    if (!explainer.content.includes('key_points') && !explainer.content.includes('core_message'))
+      ok('the pipeline skill stayed a map -- no stage field tables in it')
+    else bad('terrain in the map', 'the brief field table is back in the pipeline skill')
+
+    // ...and the terrain has to still exist somewhere. Extraction by line range
+    // is exactly the operation that silently drops a table row.
+    const carries = [
+      ['brief', 'core_message'],
+      ['script', 'visual'],
+      ['assets-audio', 'asset_manifest_audio'],
+      ['assets-shots', 'shot_index'],
+      ['compose', 'render_report'],
+    ]
+    const lost = carries.filter(([key, needle]) =>
+      !(stageSkills.find((s) => s.name === stageSkillName(key))?.content ?? '').includes(needle))
+    if (lost.length === 0) ok('each stage sheet still carries its own subject matter')
+    else bad('content lost in the split', lost.map(([k, n]) => k + ' lost ' + n).join(', '))
+
+    // Both asset stages share the landing rules, and both need them: each is
+    // read on its own, so a rule in only one of them is missing from the other.
+    const audio = stageSkills.find((s) => s.name === stageSkillName('assets-audio')).content
+    const shots = stageSkills.find((s) => s.name === stageSkillName('assets-shots')).content
+    if (audio.includes('两段共同的落盘规则') && shots.includes('两段共同的落盘规则'))
+      ok('both asset stages carry the shared landing rules')
+    else bad('landing rules', 'only one asset stage has them')
+
+    // The whole point: reading one node must cost less than reading everything.
+    const worst = Math.max(...stageSkills.map((s) => s.content.length))
+    const monolith = 12678 // measured on the skill this replaced, at HEAD~1
+    if (explainer.content.length + worst < monolith)
+      ok('map + worst stage is ' + (explainer.content.length + worst) + ' chars against the old ' + monolith)
+    else bad('no saving', 'the split costs as much as the monolith did')
+
+    // Live config still reaches the split bodies. A stage sheet quoting a
+    // documented example instead of the bound workflow is worse than silent --
+    // it is confidently wrong.
+    const rebound = SkillConfig({ bindings: { tts: { workflow: 'Beta-TTS' }, image: { workflow: 'Beta-Image' } } })
+    const after = buildPipelineSkill(PIPELINES['explainer-stills'], rebound)
+    if (after.content.includes('Beta-TTS') && !after.content.includes('Alpha-TTS'))
+      ok('the pipeline skill renders the bindings actually in force')
+    else bad('stale bindings', 'the map still names the old workflow')
   }
 
   console.log('\n== 配乐技能 ==')

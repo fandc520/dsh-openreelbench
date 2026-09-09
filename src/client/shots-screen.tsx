@@ -719,14 +719,6 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
               <BusyLabel phase={phase} idle={'生成缺失（' + missing.length + '）'} />
             </button>
           )}
-          <button
-            type="button"
-            className="dcs-btn dcs-btn-small"
-            disabled={phase !== null || busy !== null || shots.length === 0}
-            onClick={() => void generate(shots)}
-          >
-            <BusyLabel phase={phase} idle="全部生成" />
-          </button>
         </div>
         <div className="dcs-card-body">
           {/* One shell for both quality checks, shared with the compose screen.
@@ -790,12 +782,14 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                   <span className="dcs-shot-text-label">台词：</span>
                   {active.text || '（这一段没有台词）'}
                 </p>
+              </div>
 
+              <div className="dcs-shot-meta">
                 <div className="dcs-shot-block">
                   <span
                     className="dcs-shot-block-title"
-                    title="这一镜拍什么，只写主体。相机 / 镜头 / 光线 / 风格由右边的镜头语言和 playbook 分层拼上——右下「最终提示词」就是拼好的结果。"
-                  >画面</span>
+                    title="这一镜拍什么，只写主体。相机 / 镜头 / 光线 / 风格由下面的镜头语言和 playbook 分层拼上——「最终提示词」就是拼好的结果。"
+                  >画面提示词</span>
                   <textarea
                     className="dcs-input dcs-textarea"
                     rows={3}
@@ -806,9 +800,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                     onChange={(event) => setDraftPrompt(event.target.value)}
                   />
                 </div>
-              </div>
 
-              <div className="dcs-shot-meta">
                 <div className="dcs-shot-block dcs-shot-block-lang">
                   <span className="dcs-shot-block-title" title="这四层逐镜变化，是让十张图真的不一样的地方">
                     镜头语言
@@ -905,7 +897,6 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                 onClick={() => void addShot()} title="给这一段再加一镜，时长从本段切分">+ 加一镜</button>
               <button type="button" className="dcs-btn dcs-btn-small dcs-btn-quiet-danger" disabled={busy !== null}
                 onClick={() => void removeShot()}>删除</button>
-              <span className="dcs-spacer" />
               {draftPrompt !== null ? (
                 <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
                   onClick={() => void savePrompt()}>保存提示词</button>
@@ -968,6 +959,15 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
         {active !== undefined ? (
           <div className="dcs-shot-foot">
             <span className="dcs-spacer" />
+            <button
+              type="button"
+              className="dcs-btn dcs-btn-small"
+              disabled={phase !== null || busy !== null || shots.length === 0}
+              onClick={() => void generate(shots)}
+              title="整批重新生成，已有图会被替换"
+            >
+              <BusyLabel phase={phase} idle="全部生成" />
+            </button>
             <button
               type="button"
               className="dcs-btn dcs-btn-small dcs-btn-primary"
