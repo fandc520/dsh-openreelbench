@@ -57,9 +57,6 @@ const STARS: ReadonlyArray<{ x: number; y: number; r: number; delay: number; dur
   { x: 590, y: 60, r: 0.7, delay: 1.7, dur: 4.0 },
 ]
 
-/** Film-strip sprocket holes: 14 of them, 16px margins, evenly spaced. */
-const STRIP_HOLES: ReadonlyArray<number> = Array.from({ length: 14 }, (_, index) => 16 + index * 52)
-
 /**
  * One glyph per pipeline, looked up by the pipeline's stable id. A pipeline
  * without an entry falls back to the generic spark — adding a pipeline must
@@ -148,7 +145,7 @@ export function Welcome({
           <svg
             className="dcs-poster-art"
             viewBox="0 0 720 240"
-            preserveAspectRatio="xMidYMid slice"
+            preserveAspectRatio="xMidYMax slice"
             aria-hidden="true"
             focusable="false"
           >
@@ -201,15 +198,11 @@ export function Welcome({
             </g>
 
             <rect width="720" height="240" fill="url(#dcs-poster-vignette)" />
-
-            <g>
-              <rect x="0" y="206" width="720" height="34" fill="#04050c" opacity="0.72" />
-              <rect x="0" y="206" width="720" height="1" fill="#8f9bff" opacity="0.22" />
-              {STRIP_HOLES.map((x) => (
-                <rect key={x} x={x} y="216" width="12" height="14" rx="2.5" fill="#111537" opacity="0.9" />
-              ))}
-            </g>
           </svg>
+          {/* The film strip is HTML, not SVG: inside the poster it would scale
+              with the banner's width, and a wide window widened the sprocket
+              holes. Fixed pixels keep the strip identical at every size. */}
+          <div className="dcs-poster-strip" aria-hidden="true" />
           <div className="dcs-poster-body">
             <span className="dcs-hero-sub">ComfyUI Creative Studio</span>
             <h1 className="dcs-hero-title">ComfyUI 创意工作室</h1>

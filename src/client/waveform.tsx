@@ -102,6 +102,11 @@ export function Waveform({
 
     const wave = cssVar(canvas, '--dsw-alias-label-tertiary', '#888')
     const brand = cssVar(canvas, '--dsw-alias-brand-primary', '#4a9')
+    // The wave carries the panel's second hue: cyan easing into green across
+    // the clip. A gradient object, so every bar samples its own slice of it.
+    const waveGrad = context.createLinearGradient(0, 0, width, 0)
+    waveGrad.addColorStop(0, cssVar(canvas, '--dcs-wave-from', '#22d3ee'))
+    waveGrad.addColorStop(1, cssVar(canvas, '--dcs-wave-to', '#34d399'))
     const middle = height / 2
 
     if (buffer === null) {
@@ -119,8 +124,8 @@ export function Waveform({
     // would do without anyone reading a number.
     const toX = (seconds: number): number => (seconds / buffer.duration) * width
     if (selection !== null) {
-      context.fillStyle = brand
-      context.globalAlpha = 0.12
+      context.fillStyle = waveGrad
+      context.globalAlpha = 0.14
       context.fillRect(toX(selection.start), 0, toX(selection.end) - toX(selection.start), height)
       context.globalAlpha = 1
     }
@@ -129,7 +134,7 @@ export function Waveform({
     peaks.forEach(([min, max], x) => {
       const inSelection = selection === null
         || (x >= toX(selection.start) && x <= toX(selection.end))
-      context.strokeStyle = inSelection ? brand : wave
+      context.strokeStyle = inSelection ? waveGrad : wave
       context.globalAlpha = inSelection ? 0.9 : 0.3
       context.beginPath()
       context.moveTo(x + 0.5, middle - max * middle * 0.92)

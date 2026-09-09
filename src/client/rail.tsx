@@ -6,11 +6,16 @@
  * rail does not invent that rule; it projects it, so a locked step in the UI
  * and a `PREREQUISITE VIOLATION` from the API can never disagree.
  *
- * Gate state is drawn separately from completion because they are different
- * facts: a stage can be completed without approval (an ungated one), and a
- * gated stage sitting at `awaiting_human` is the one place the run stops for
- * a person.
+ * Each step leads with its stage glyph; a completed step swaps the glyph for a
+ * check. Thin links between the cards carry the "one line" reading a pipeline
+ * should have. Gate state is drawn separately from completion because they are
+ * different facts: a stage can be completed without approval (an ungated one),
+ * and a gated stage sitting at `awaiting_human` is the one place the run stops
+ * for a person.
  */
+import { Fragment, type ComponentType } from 'react'
+
+import { IconClapper, IconImage, IconMic, IconPen, IconPlay, type IconProps } from './icons.tsx'
 import type { PipelineStage, StageView } from './api.ts'
 
 export interface RailStep {
@@ -19,6 +24,15 @@ export interface RailStep {
   status: StageView['status']
   reachable: boolean
   current: boolean
+}
+
+/** One glyph per stage, keyed by the stage id the host defines. */
+const STAGE_ICONS: Record<string, ComponentType<IconProps>> = {
+  brief: IconClapper,
+  script: IconPen,
+  assets_audio: IconMic,
+  assets_shots: IconImage,
+  compose: IconPlay,
 }
 
 /**
@@ -87,21 +101,30 @@ export function Rail({ steps, onSelect }: RailProps): JSX.Element {
         classes.push('dcs-step-' + step.status)
         const locked = !step.reachable && !step.current
         const status = statusText(step)
+        const Icon = STAGE_ICONS[step.stage.id]
         return (
-          <button
-            key={step.stage.id}
-            type="button"
-            className={classes.join(' ')}
-            disabled={locked}
-            title={locked ? '前一步没完成，这一步进不去' : step.stage.hint}
-            onClick={() => onSelect(step.stage.id)}
-          >
-            <span className="dcs-step-index">{index + 1}</span>
-            <span className="dcs-step-body">
-              <span className="dcs-step-label">{step.stage.label}</span>
-              <span className={'dcs-step-status dcs-tone-' + status.tone}>{status.label}</span>
-            </span>
-          </button>
+          <Fragment key={step.stage.id}>
+            {index > 0 ? <span className="dcs-rail-link" aria-hidden="true" /> : null}
+            <button
+              type="button"
+              className={classes.join(' ')}
+              disabled={locked}
+              title={locked ? '前一步没完成，这一步进不去' : step.stage.hint}
+              onClick={() => onSelect(step.stage.id)}
+            >
+              <span className="dcs-step-index">
+                {step.status === 'completed'
+                  ? '✓'
+                  : Icon !== undefined
+                    ? <Icon className="dcs-step-glyph" />
+                    : index + 1}
+              </span>
+              <span className="dcs-step-body">
+                <span className="dcs-step-label">{step.stage.label}</span>
+                <span className={'dcs-step-status dcs-tone-' + status.tone}>{status.label}</span>
+              </span>
+            </button>
+          </Fragment>
         )
       })}
     </nav>

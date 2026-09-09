@@ -12,7 +12,7 @@
  */
 import type { ReactNode } from 'react'
 
-interface IconProps {
+export interface IconProps {
   className?: string | undefined
 }
 
@@ -86,6 +86,105 @@ export function IconPlay({ className }: IconProps): JSX.Element {
   return (
     <Glyph className={className}>
       <path d="M7 4.8v14.4a.6.6 0 0 0 .9.5l11.5-7.2a.6.6 0 0 0 0-1L7.9 4.3a.6.6 0 0 0-.9.5Z" />
+    </Glyph>
+  )
+}
+
+/** 钢笔 — 脚本。 */
+export function IconPen({ className }: IconProps): JSX.Element {
+  return (
+    <Glyph className={className}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </Glyph>
+  )
+}
+
+/** 麦克风 — 配音。 */
+export function IconMic({ className }: IconProps): JSX.Element {
+  return (
+    <Glyph className={className}>
+      <rect x="9" y="2" width="6" height="12" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0" />
+      <path d="M12 19v3" />
+    </Glyph>
+  )
+}
+
+/** 图片 — 分镜。 */
+export function IconImage({ className }: IconProps): JSX.Element {
+  return (
+    <Glyph className={className}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
+    </Glyph>
+  )
+}
+
+/** 调节杆 — 项目设置。 */
+export function IconSliders({ className }: IconProps): JSX.Element {
+  return (
+    <Glyph className={className}>
+      <path d="M20 7h-9" />
+      <path d="M14 17H5" />
+      <circle cx="17" cy="17" r="3" />
+      <circle cx="7" cy="7" r="3" />
+    </Glyph>
+  )
+}
+
+/** 文档 — 创意简报。 */
+export function IconDoc({ className }: IconProps): JSX.Element {
+  return (
+    <Glyph className={className}>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
+    </Glyph>
+  )
+}
+
+/** 时钟 — 时长。 */
+export function IconClock({ className }: IconProps): JSX.Element {
+  return (
+    <Glyph className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </Glyph>
+  )
+}
+
+/** 地球 — 投放平台。 */
+export function IconGlobe({ className }: IconProps): JSX.Element {
+  return (
+    <Glyph className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3a15 15 0 0 1 4 9 15 15 0 0 1-4 9 15 15 0 0 1-4-9 15 15 0 0 1 4-9Z" />
+    </Glyph>
+  )
+}
+
+/** 调色板 — 风格。 */
+export function IconPalette({ className }: IconProps): JSX.Element {
+  return (
+    <Glyph className={className}>
+      <circle cx="13.5" cy="6.5" r=".8" />
+      <circle cx="17.5" cy="10.5" r=".8" />
+      <circle cx="8.5" cy="7.5" r=".8" />
+      <circle cx="6.5" cy="12.5" r=".8" />
+      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1-.3-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16c3.3 0 6-2.7 6-6-.1-4.9-4.6-8.8-10-8.8Z" />
+    </Glyph>
+  )
+}
+
+/** 对勾 — 保存 / 完成。 */
+export function IconCheck({ className }: IconProps): JSX.Element {
+  return (
+    <Glyph className={className}>
+      <path d="M20 6 9 17l-5-5" />
     </Glyph>
   )
 }

@@ -1,6 +1,5 @@
 /**
- * 配音 — the third gate, laid out as a triangle: voice on the left, voice
- * design on the right, and the whole lower half given to generating takes.
+ * 配音 — the third gate: generate takes on top, voice on the bottom.
  *
  * Three things are worth knowing before reading the code.
  *
@@ -21,14 +20,17 @@
  * is never ambiguous — and compose, which reads the manifest, cannot pick up
  * the wrong one.
  *
- * **The card strip is the timeline.** Card width tracks measured duration, so a
- * missing take is a visible hole and an overlong one is a wide block. A
- * separate "audio loader" bar would show the same thing twice.
+ * **The card strip is a picker, not a timeline.** One uniform line per
+ * section — ordinal, id, duration. A missing take is a dashed card, and the
+ * count lives on the 全部 card at the end; stretching cards by duration would
+ * duplicate what the waveform already shows and push later sections off
+ * screen.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { type StudioState, api, bindingWorkflows } from './api.ts'
 import { type AgentPhase, BusyLabel } from './busy.tsx'
+import { IconMic, IconPlay, IconSpark } from './icons.tsx'
 import { Strip } from './strip.tsx'
 import { ComfyError, comfy, resolveWorkflowId, runAndWait } from './comfy.ts'
 import { type AssetFile, AssetPicker, inputAssetUrl, useAssetUrls } from './asset-picker.tsx'
@@ -509,10 +511,8 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
   return (
     <div className="dcs-screen">
       <header className="dcs-screen-head">
-        <div>
-          <h2 className="dcs-screen-title">配音</h2>
-          <p className="dcs-screen-sub">选音色、逐段生成、听过再放行。{done}/{sections.length} 段已生成。</p>
-        </div>
+        <h2 className="dcs-screen-title">配音</h2>
+        <span className="dcs-spacer" />
         <span className={'dcs-pill ' + (approved ? 'dcs-pill-ok' : 'dcs-pill-wait')}>
           {approved ? '已审核' : '待确认'}
         </span>
@@ -524,9 +524,14 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
         </p>
       ) : null}
 
-      <section className="dcs-panel dcs-takes">
-        <div className="dcs-group-head">
-          <h3 className="dcs-group-title">配音生成</h3>
+      <section className="dcs-card">
+        <div className="dcs-card-head">
+          <IconSpark className="dcs-section-icon" />
+          <h3 className="dcs-card-title">配音生成</h3>
+          <span className="dcs-card-meta">
+            <span><b>{done}</b>/{sections.length} 段已生成</span>
+          </span>
+          <span className="dcs-spacer" />
           {ttsChoices.length > 1 ? (
             <label className="dcs-inline-pick">
               <span className="dcs-hint">工作流</span>
@@ -545,7 +550,6 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
           ) : (
             <span className="dcs-hint">工作流 {ttsWorkflow === '' ? '（未绑定）' : ttsWorkflow}</span>
           )}
-          <span className="dcs-spacer" />
           <button
             type="button"
             className="dcs-btn dcs-btn-small"
@@ -555,7 +559,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
             <BusyLabel phase={phase} idle="全部生成" />
           </button>
         </div>
-
+        <div className="dcs-card-body">
         {active !== undefined ? (
           <div className="dcs-take-detail">
             <div className="dcs-line">
@@ -635,179 +639,181 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
             <span className="dcs-take-time">{done}/{sections.length} 段</span>
           </button>
         </Strip>
+        </div>
       </section>
 
-      <div className="dcs-triangle">
-        <section className="dcs-panel">
-          <h3 className="dcs-group-title">音色</h3>
-          <select
-            className="dcs-select"
-            value={voice}
-            disabled={working !== null}
-            onChange={(event) => void saveVoice(event.target.value)}
-          >
-            <option value="">（未选）</option>
-            {voices.map((name) => <option key={name} value={name}>{name}</option>)}
-          </select>
-          <span className="dcs-hint">
-            {voices.length > 0
-              ? '来自 ComfyUI 音色库的 ' + voices.length + ' 个音色'
-              : comfyUp === true ? '读不到音色库' : ''}
+      <section className="dcs-card">
+        <div className="dcs-card-head">
+          <IconMic className="dcs-section-icon" />
+          <h3 className="dcs-card-title">音色</h3>
+          <span className="dcs-card-meta">
+            <span>{voices.length > 0 ? '音色库 ' + voices.length + ' 个' : comfyUp === true ? '读不到音色库' : ''}</span>
+            <span>{queryWorkflow === '' ? '试听需先绑定「音色查询」工作流' : '试听工作流 ' + queryWorkflow}</span>
           </span>
-          <div className="dcs-actions">
-            <span className="dcs-hint">
-              {queryWorkflow === ''
-                ? '试听需要先在设置页绑定「音色查询」工作流'
-                : '试听工作流 ' + queryWorkflow}
-            </span>
-            <span className="dcs-spacer" />
-            <button
-              type="button"
-              className="dcs-btn dcs-btn-small"
-              disabled={working !== null || comfyUp !== true}
-              title="重新读一遍 ComfyUI 的音色库，并同步两条工作流保存的参数清单"
-              onClick={() => void refreshVoices()}
-            >
-              {working === 'voices' ? <><Spinner />刷新中…</> : '刷新列表'}
-            </button>
-            <button
-              type="button"
-              className="dcs-btn dcs-btn-small"
-              disabled={working !== null || comfyUp !== true || voice === '' || queryWorkflow === ''}
-              title={queryWorkflow === '' ? '设置 → AI 创意工作室 → 绑定「音色查询」工作流' : '播放这个音色的参考片段'}
-              onClick={() => void audition()}
-            >
-              {working === 'audition' ? <><Spinner />试听中…</> : '试听'}
-            </button>
-          </div>
-          {auditionUrl !== undefined ? <audio className="dcs-audio" src={auditionUrl} controls autoPlay /> : null}
-
-          {/* Reference audio lives here rather than in a panel of its own.
-              It is not a separate subject: picking a library voice and cloning
-              one from a sample are two answers to the same question, and a
-              third container made them look like two unrelated features. */}
-          <div className="dcs-subhead">
-            <span className="dcs-subhead-label">参考音频</span>
-            <span className="dcs-hint">
-              {voiceReferences.length === 0
-                ? '声音克隆用，整个项目共用'
-                : '整个项目共用 · ' + voiceReferences.length + ' 段'}
-            </span>
-          </div>
-
-          {/* Slots, like the reference images on the shots screen: position
-              matters, because a workflow's loaders take them in order. */}
-          <div className="dcs-slots">
-            {voiceReferences.map((name, index) => (
-              <div className="dcs-slot" key={name + index}>
-                <span className="dcs-slot-index">{index + 1}</span>
-                <button
-                  type="button"
-                  className={'dcs-slot-media dcs-slot-audio'
-                    + (playingRef === name ? ' dcs-slot-audio-on' : '')}
-                  title={playingRef === name ? '停止' : '试听这一段'}
-                  onClick={() => setPlayingRef(playingRef === name ? null : name)}
-                >{playingRef === name ? '■' : '▶'}</button>
-                {playingRef === name ? (
-                  <audio
-                    src={referenceUrl(name)}
-                    autoPlay
-                    onEnded={() => setPlayingRef(null)}
-                    onError={() => {
-                      setPlayingRef(null)
-                      say('error', '播放不了 ' + name + '。它可能已经不在 ComfyUI 的输入目录里了。')
-                    }}
-                    hidden
-                  />
-                ) : null}
-                <span className="dcs-slot-name" title={name}>{name}</span>
-                <button
-                  type="button"
-                  className="dcs-slot-x"
-                  aria-label="移除这一槽"
-                  disabled={working !== null}
-                  onClick={() => void removeVoiceReference(name)}
-                >×</button>
-              </div>
-            ))}
-            <button
-              type="button"
-              className="dcs-slot dcs-slot-empty"
-              disabled={working !== null}
-              title="从 ComfyUI 的素材里指定一段；浏览器里也可以上传新的"
-              onClick={() => setPickerOpen(true)}
-            >
-              <span className="dcs-slot-index">{voiceReferences.length + 1}</span>
-              <span className="dcs-slot-add">＋ 指定参考音频</span>
-            </button>
-          </div>
-
-                    <p className="dcs-hint">
-            槽位按顺序对应工作流的加载参数，顺序有意义。记的是 ComfyUI 里的文件名。
-          </p>
-        </section>
-
-        <section className="dcs-panel">
-          <div className="dcs-group-head">
-            <h3 className="dcs-group-title">音色设计</h3>
-            <span className="dcs-spacer" />
-            <button
-              type="button"
-              className="dcs-btn dcs-btn-small"
-              disabled={working !== null}
-              title="让 Agent 看着项目题材和风格，提一个音色方案"
-              onClick={() => {
-                void onSend('看看这个项目的题材和风格，给我一个合适的解说音色方案：'
-                  + '用 studio_project 的 set_voice，把 voice_design_name 和 voice_design_prompt '
-                  + '写到项目 ' + state.project.id + ' 上，我在创意工作台里看。')
-                say('ok', '已经让 Agent 想一个，写好后这里会自动填上。')
-              }}
-            >自动生成</button>
-          </div>
-          <span className="dcs-hint">
-            工作流 {designWorkflow === '' ? '（未绑定）' : designWorkflow} · 交给 Agent 去跑
-          </span>
-          <input
-            className="dcs-input"
-            value={designName}
-            placeholder="音色名称，例如 jiangshuo_male"
-            onChange={(event) => setDesignName(event.target.value)}
-          />
-          <textarea
-            className="dcs-input dcs-textarea"
-            rows={3}
-            value={designPrompt}
-            placeholder="想要什么样的声音，例如：沉稳中年男声，语速偏慢，略带磁性"
-            onChange={(event) => setDesignPrompt(event.target.value)}
-          />
+          <span className="dcs-spacer" />
           <button
             type="button"
-            className="dcs-btn"
-            disabled={designName.trim() === '' || designPrompt.trim() === ''}
-            onClick={() => {
-              void onSend([
-                '请用音色设计工作流 ' + (designWorkflow === '' ? '（设置页里还没绑定）' : '`' + designWorkflow + '`')
-                  + ' 做一个新音色。',
-                '',
-                '- 音色名称：`' + designName.trim() + '`',
-                '- 音色提示词：' + designPrompt.trim(),
-                '',
-                '保存进音色库后，刷新音色库快照与音色库数据，并确认新音色可用。'
-                + ([ttsWorkflow, queryWorkflow].filter((name) => name.trim() !== '').length === 0
-                  ? '（配音与音色查询工作流都还没绑定，刷新完提醒我去设置页填上。）'
-                  : '涉及的工作流：'
-                    + [ttsWorkflow, queryWorkflow]
-                      .filter((name) => name.trim() !== '')
-                      .map((name) => '`' + name + '`')
-                      .join('、')
-                    + '。'),
-              ].join('\n'))
-              say('ok', '已经交给 Agent。做好之后按它的提示刷新一次工作流快照，再回来选音色。')
-            }}
-          >创建音色</button>
-        </section>
+            className="dcs-btn dcs-btn-small"
+            disabled={working !== null || comfyUp !== true}
+            title="重新读一遍 ComfyUI 的音色库，并同步两条工作流保存的参数清单"
+            onClick={() => void refreshVoices()}
+          >
+            {working === 'voices' ? <><Spinner />刷新中…</> : '刷新列表'}
+          </button>
+          <button
+            type="button"
+            className="dcs-btn dcs-btn-small"
+            disabled={working !== null || comfyUp !== true || voice === '' || queryWorkflow === ''}
+            title={queryWorkflow === '' ? '设置 → AI 创意工作室 → 绑定「音色查询」工作流' : '播放这个音色的参考片段'}
+            onClick={() => void audition()}
+          >
+            {working === 'audition' ? <><Spinner />试听中…</> : '试听'}
+          </button>
+        </div>
+        <div className="dcs-card-body">
+          <div className="dcs-audio-split">
+            <div className="dcs-audio-col">
+              <label className="dcs-field">
+                <span className="dcs-label">音色库</span>
+                <select
+                  className="dcs-select"
+                  value={voice}
+                  disabled={working !== null}
+                  onChange={(event) => void saveVoice(event.target.value)}
+                >
+                  <option value="">（未选）</option>
+                  {voices.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </label>
+              {auditionUrl !== undefined ? <audio className="dcs-audio" src={auditionUrl} controls autoPlay /> : null}
 
-      </div>
+              {/* Reference audio lives here rather than in a panel of its own.
+                  It is not a separate subject: picking a library voice and cloning
+                  one from a sample are two answers to the same question, and a
+                  third container made them look like two unrelated features. */}
+              <div className="dcs-subhead">
+                <span className="dcs-subhead-label">参考音频</span>
+                <span className="dcs-hint">
+                  {voiceReferences.length === 0
+                    ? '声音克隆用，整个项目共用'
+                    : '整个项目共用 · ' + voiceReferences.length + ' 段'}
+                </span>
+              </div>
+
+              {/* Slots, like the reference images on the shots screen: position
+                  matters, because a workflow's loaders take them in order. */}
+              <div className="dcs-slots">
+                {voiceReferences.map((name, index) => (
+                  <div className="dcs-slot" key={name + index}>
+                    <span className="dcs-slot-index">{index + 1}</span>
+                    <button
+                      type="button"
+                      className={'dcs-slot-media dcs-slot-audio'
+                        + (playingRef === name ? ' dcs-slot-audio-on' : '')}
+                      title={playingRef === name ? '停止' : '试听这一段'}
+                      onClick={() => setPlayingRef(playingRef === name ? null : name)}
+                    >{playingRef === name ? '■' : '▶'}</button>
+                    {playingRef === name ? (
+                      <audio
+                        src={referenceUrl(name)}
+                        autoPlay
+                        onEnded={() => setPlayingRef(null)}
+                        onError={() => {
+                          setPlayingRef(null)
+                          say('error', '播放不了 ' + name + '。它可能已经不在 ComfyUI 的输入目录里了。')
+                        }}
+                        hidden
+                      />
+                    ) : null}
+                    <span className="dcs-slot-name" title={name}>{name}</span>
+                    <button
+                      type="button"
+                      className="dcs-slot-x"
+                      aria-label="移除这一槽"
+                      disabled={working !== null}
+                      onClick={() => void removeVoiceReference(name)}
+                    >×</button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="dcs-slot dcs-slot-empty"
+                  disabled={working !== null}
+                  title="从 ComfyUI 的素材里指定一段；浏览器里也可以上传新的"
+                  onClick={() => setPickerOpen(true)}
+                >
+                  <span className="dcs-slot-index">{voiceReferences.length + 1}</span>
+                  <span className="dcs-slot-add">指定参考音频</span>
+                </button>
+              </div>
+              <p className="dcs-hint">槽位按顺序对应工作流的加载参数。</p>
+            </div>
+
+            <div className="dcs-audio-col">
+              <div className="dcs-col-head">
+                <b>音色设计</b>
+                <span className="dcs-hint">
+                  工作流 {designWorkflow === '' ? '（未绑定）' : designWorkflow} · 交给 Agent 去跑
+                </span>
+                <span className="dcs-spacer" />
+                <button
+                  type="button"
+                  className="dcs-btn dcs-btn-small"
+                  disabled={working !== null}
+                  title="让 Agent 看着项目题材和风格，提一个音色方案"
+                  onClick={() => {
+                    void onSend('看看这个项目的题材和风格，给我一个合适的解说音色方案：'
+                      + '用 studio_project 的 set_voice，把 voice_design_name 和 voice_design_prompt '
+                      + '写到项目 ' + state.project.id + ' 上，我在创意工作台里看。')
+                    say('ok', '已经让 Agent 想一个，写好后这里会自动填上。')
+                  }}
+                ><IconSpark className="dcs-btn-icon" />自动生成</button>
+              </div>
+              <input
+                className="dcs-input"
+                value={designName}
+                placeholder="音色名称，例如 jiangshuo_male"
+                onChange={(event) => setDesignName(event.target.value)}
+              />
+              <textarea
+                className="dcs-input dcs-textarea"
+                rows={3}
+                value={designPrompt}
+                placeholder="想要什么样的声音，例如：沉稳中年男声，语速偏慢，略带磁性"
+                onChange={(event) => setDesignPrompt(event.target.value)}
+              />
+              <div className="dcs-col-foot">
+                <span className="dcs-spacer" />
+                <button
+                  type="button"
+                  className="dcs-btn"
+                  disabled={designName.trim() === '' || designPrompt.trim() === ''}
+                  onClick={() => {
+                    void onSend([
+                      '请用音色设计工作流 ' + (designWorkflow === '' ? '（设置页里还没绑定）' : '`' + designWorkflow + '`')
+                        + ' 做一个新音色。',
+                      '',
+                      '- 音色名称：`' + designName.trim() + '`',
+                      '- 音色提示词：' + designPrompt.trim(),
+                      '',
+                      '保存进音色库后，刷新音色库快照与音色库数据，并确认新音色可用。'
+                      + ([ttsWorkflow, queryWorkflow].filter((name) => name.trim() !== '').length === 0
+                        ? '（配音与音色查询工作流都还没绑定，刷新完提醒我去设置页填上。）'
+                        : '涉及的工作流：'
+                          + [ttsWorkflow, queryWorkflow]
+                            .filter((name) => name.trim() !== '')
+                            .map((name) => '`' + name + '`')
+                            .join('、')
+                          + '。'),
+                    ].join('\n'))
+                    say('ok', '已经交给 Agent。做好之后按它的提示刷新一次工作流快照，再回来选音色。')
+                  }}
+                >创建音色</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {pickerOpen ? (
         <AssetPicker
@@ -817,25 +823,25 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
         />
       ) : null}
 
-      <div className="dcs-actions">
-        <span className="dcs-hint">
-          {done < sections.length
-            ? '还有 ' + (sections.length - done) + ' 段没生成，补齐才能通过。'
-            : approved
-              ? '这一版已经确认过了。再提交一次会替换配音，配图和成片要重做。'
-              : '确认之后 Agent 才会开始配图。'}
-        </span>
-        <span className="dcs-spacer" />
-        <button type="button" className="dcs-btn dcs-btn-primary"
+      <div className="dcs-cta">
+        <button type="button" className="dcs-cta-primary"
           disabled={working !== null || done < sections.length || sections.length === 0}
+          title={done < sections.length ? '还有 ' + (sections.length - done) + ' 段没生成，补齐才能提交' : undefined}
           onClick={() => void submit()}>
+          <IconPlay className="dcs-cta-icon" />
           {working === 'submit' ? '提交中…' : approved ? '重新提交配音' : '确认配音，进入配图'}
         </button>
+        <p className="dcs-cta-hint">
+          {done < sections.length
+            ? '还有 ' + (sections.length - done) + ' 段没生成，补齐才能提交。'
+            : approved
+              ? '这一版已经确认过了。再提交一次会替换配音，配图和成片要重做。'
+              : '这一页所有段落听过之后的下一步——之后才会开始配图。'}
+        </p>
+        {result !== null ? (
+          <p className={'dcs-note ' + (result.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{result.text}</p>
+        ) : null}
       </div>
-
-      {result !== null ? (
-        <p className={'dcs-note ' + (result.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{result.text}</p>
-      ) : null}
     </div>
   )
 }

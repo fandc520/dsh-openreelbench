@@ -27,6 +27,10 @@ const CSS = `
   --dcs-accent: #7c5cff;
   --dcs-accent-2: #2dd4bf;
   --dcs-accent-soft: rgba(124, 92, 255, 0.16);
+  /* The waveform's own gradient: cyan easing into green, read left to right
+     so a clip tints slightly greener as it plays on. */
+  --dcs-wave-from: #22d3ee;
+  --dcs-wave-to: #34d399;
 }
 .dcs-centered { align-items: center; justify-content: center; }
 .dcs-empty { display: flex; flex-direction: column; gap: 12px; align-items: center; }
@@ -45,53 +49,70 @@ const CSS = `
 
 /* ----------------------------------------------------------- step rail */
 
-.dcs-rail { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+/* Thin links between the cards carry the "one line" reading; hover and the
+   current state light the border only — a fill change would fight the
+   card-eats-card look every other surface here uses. */
+.dcs-rail { display: flex; align-items: stretch; overflow-x: auto; padding-bottom: 2px; }
+.dcs-rail-link { flex: 0 0 12px; align-self: center; height: 1px; background: var(--dsw-alias-border-l2); }
 .dcs-step {
-  display: flex; align-items: center; gap: 9px; flex: 1 1 0; min-width: 128px;
-  padding: 9px 12px; border-radius: 10px; cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: 10px; flex: 1 1 0; min-width: 132px;
+  padding: 10px 13px; border-radius: 11px; cursor: pointer; text-align: left;
   font: inherit; border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary);
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
-.dcs-step:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.dcs-step:hover:not(:disabled) { border-color: var(--dcs-accent); }
 .dcs-step:disabled { opacity: .45; cursor: not-allowed; }
-.dcs-step-current { border-color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-interactive-bg-hover); }
-.dcs-step-index {
-  flex: none; width: 22px; height: 22px; border-radius: 50%;
-  display: grid; place-items: center; font-size: 12px;
-  background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
+.dcs-step-current {
+  border-color: var(--dcs-accent);
+  box-shadow: 0 0 0 1px var(--dcs-accent-soft), 0 0 18px -8px var(--dcs-accent);
 }
+.dcs-step-index {
+  flex: none; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 600;
+  background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-tertiary);
+}
+.dcs-step-glyph { display: block; }
 .dcs-step-completed .dcs-step-index {
-  background: var(--dsw-alias-state-success-primary); border-color: transparent; color: var(--dsw-alias-label-primary-foreground);
+  background: var(--dcs-accent-soft); border-color: transparent; color: var(--dcs-accent);
 }
 .dcs-step-awaiting_human .dcs-step-index {
-  background: var(--dsw-alias-state-warn-primary); border-color: transparent; color: var(--dsw-alias-label-primary-foreground);
+  background: var(--dsw-alias-state-warn-primary); border-color: transparent;
+  color: var(--dsw-alias-label-primary-foreground);
 }
 .dcs-step-failed .dcs-step-index {
-  background: var(--dsw-alias-state-error-primary); border-color: transparent; color: var(--dsw-alias-label-primary-foreground);
+  background: var(--dsw-alias-state-error-primary); border-color: transparent;
+  color: var(--dsw-alias-label-primary-foreground);
 }
-.dcs-step-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.dcs-step-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .dcs-step-label { font-size: 13px; display: flex; align-items: center; gap: 5px; }
 .dcs-step-status { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
 .dcs-tone-wait { color: var(--dsw-alias-state-warn-primary); font-weight: 550; }
 .dcs-tone-ok { color: var(--dsw-alias-state-success-primary); font-weight: 550; }
 .dcs-tone-bad { color: var(--dsw-alias-state-error-primary); font-weight: 550; }
-.dcs-tone-active { color: var(--dsw-alias-brand-primary); }
+.dcs-tone-active { color: var(--dcs-accent); }
 
 /* ------------------------------------------------------------- welcome */
 
 .dcs-welcome {
   display: flex; flex-direction: column; gap: 26px;
-  max-width: 780px; margin: 0 auto; width: 100%;
+  max-width: 980px; margin: 0 auto; width: 100%;
 }
+/* The banner spans the workbench edge-to-edge; everything that is content —
+   composer, notices, sections — keeps the reading column. The -24px must
+   match .dcs-workbench's inline padding. */
+.dcs-welcome > :not(.dcs-hero) { width: 100%; max-width: 780px; margin-inline: auto; }
+
 /* The poster hero: a dark screening-room band behind the title. It keeps its
    own palette on purpose — a screen reads as a screen in both app themes —
    while everything below it stays on the theme's tokens. */
 .dcs-hero { text-align: center; padding-top: 0; display: flex; flex-direction: column; }
 .dcs-poster {
   position: relative; overflow: hidden; border-radius: 18px;
-  min-height: clamp(190px, 26vw, 252px);
-  border: 1px solid rgba(126, 130, 255, 0.16);
-  box-shadow: 0 18px 48px -22px rgba(6, 8, 24, 0.55);
+  margin-inline: -24px;
+  min-height: clamp(200px, 28vw, 290px);
+  box-shadow: 0 14px 40px -26px rgba(6, 8, 24, 0.55);
 }
 .dcs-poster-art { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .dcs-poster-drift-a, .dcs-poster-drift-b, .dcs-poster-drift-c {
@@ -101,6 +122,18 @@ const CSS = `
 .dcs-poster-drift-b { animation: dcs-poster-drift 34s ease-in-out infinite reverse; }
 .dcs-poster-drift-c { animation: dcs-poster-drift 22s ease-in-out infinite; animation-delay: -8s; }
 .dcs-poster-star { opacity: 0.2; animation: dcs-poster-twinkle 4s ease-in-out infinite; }
+/* Film strip — fixed-pixel HTML layer rather than part of the scaled SVG, so
+   the sprocket holes keep their size no matter how wide the banner gets. */
+.dcs-poster-strip {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 32px;
+  background: rgba(4, 5, 12, 0.72);
+  border-top: 1px solid rgba(143, 155, 255, 0.22);
+}
+.dcs-poster-strip::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 14px;
+  transform: translateY(-50%);
+  background: repeating-linear-gradient(90deg, rgba(17, 21, 55, 0.9) 0 12px, transparent 12px 52px);
+}
 .dcs-poster-body {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -133,14 +166,12 @@ const CSS = `
   .dcs-poster-star { opacity: 0.45; }
 }
 
-/* The composer rides up over the poster's bottom edge — one card on the art. */
+/* The composer sits in the reading column below the banner, with the
+   welcome gap giving it air rather than riding on the art. */
 .dcs-composer {
-  position: relative; z-index: 1;
   display: flex; flex-direction: column; gap: 8px; padding: 12px;
-  margin-top: -26px;
   border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px;
   background: var(--dsw-alias-bg-layer-2);
-  box-shadow: 0 14px 36px -18px rgba(6, 8, 24, 0.4);
 }
 .dcs-composer:focus-within { border-color: var(--dcs-accent); }
 .dcs-composer-input {
@@ -210,7 +241,12 @@ const CSS = `
   background: transparent; border: none;
   color: var(--dsw-alias-label-tertiary);
 }
-.dcs-kebab:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+/* Mixed toward the label colour so the fill reads a step deeper than the card
+   in both themes — the plain hover tint sat too close to the card's own ground. */
+.dcs-kebab:hover {
+  background: color-mix(in srgb, var(--dsw-alias-interactive-bg-hover) 86%, var(--dsw-alias-label-primary) 14%);
+  color: var(--dsw-alias-label-primary);
+}
 
 .dcs-menu {
   position: absolute; top: calc(100% - 4px); right: 4px; z-index: 20;
@@ -935,8 +971,14 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
   border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
 }
-.dcs-slot-empty { border-style: dashed; align-items: center; justify-content: center; min-height: 92px; }
-.dcs-slot-empty:hover { border-color: var(--dsw-alias-brand-primary); }
+/* The empty slot is a command, not a tile: a full-width flat row under the
+   square media slots, ordinal first so the position stays readable. */
+.dcs-slot-empty {
+  border-style: dashed; width: 100%; min-height: 0;
+  flex-direction: row; align-items: center; justify-content: flex-start;
+  gap: 8px; padding: 9px 11px; color: var(--dsw-alias-label-secondary);
+}
+.dcs-slot-empty:hover { border-color: var(--dcs-accent); color: var(--dcs-accent); }
 .dcs-slot-busy { cursor: progress; }
 .dcs-slot-index {
   position: absolute; top: 3px; left: 4px; z-index: 1;
@@ -949,7 +991,7 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
   font-size: 10px; color: var(--dsw-alias-label-tertiary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.dcs-slot-add { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.dcs-slot-add { font-size: 12px; color: inherit; }
 .dcs-slot-x {
   position: absolute; top: 3px; right: 3px; width: 17px; height: 17px; padding: 0;
   border: none; border-radius: 50%; cursor: pointer; font-size: 12px; line-height: 1;
@@ -967,8 +1009,8 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
 }
-.dcs-slot-audio:hover { border-color: var(--dsw-alias-brand-primary); }
-.dcs-slot-audio-on { color: var(--dsw-alias-brand-primary); border-color: var(--dsw-alias-brand-primary); }
+.dcs-slot-audio:hover { border-color: var(--dcs-accent); color: var(--dcs-accent); }
+.dcs-slot-audio-on { color: var(--dcs-accent); border-color: var(--dcs-accent); background: var(--dcs-accent-soft); }
 
 .dcs-derived {
   font-size: 12px; padding: 4px 9px; border-radius: 6px;
@@ -1070,12 +1112,85 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
 
 .dcs-style-card {
   display: flex; flex-direction: column; gap: 7px; padding: 12px;
-  border-radius: 10px; background: var(--dsw-alias-bg-layer-2);
+  border-radius: 10px; background: var(--dsw-alias-bg-layer-1);
   border: 1px solid var(--dsw-alias-border-l1); font-size: 12px;
 }
 .dcs-style-line { display: flex; gap: 10px; color: var(--dsw-alias-label-secondary); }
-.dcs-style-line > b { flex: none; width: 68px; font-weight: 550; color: var(--dsw-alias-label-tertiary); }
+.dcs-style-line > b { flex: none; width: 84px; font-weight: 550; color: var(--dsw-alias-label-tertiary); }
+.dcs-style-glyph { color: var(--dcs-accent); margin-right: 5px; vertical-align: -2px; }
 .dcs-anchors { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
+
+/* -- cards ---------------------------------------------------------------- */
+/* One bordered container with head / body / foot rows: the screen reads as
+   three stacked decisions instead of a loose column of bare fields. */
+
+.dcs-card {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2); overflow: hidden;
+}
+.dcs-card-head {
+  display: flex; align-items: center; gap: 8px; padding: 11px 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+.dcs-card-title { margin: 0; font-size: 13px; font-weight: 600; }
+.dcs-card-mark {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: var(--dcs-accent-soft); color: var(--dcs-accent);
+}
+.dcs-card-body { display: flex; flex-direction: column; gap: 13px; padding: 14px 16px; }
+/* Stats on a card head: quiet metadata between the title and its action. */
+.dcs-card-meta { display: flex; gap: 12px; flex-wrap: wrap; margin-left: 6px; font-size: 12px; color: var(--dsw-alias-label-tertiary); }
+.dcs-card-meta b { font-weight: 600; color: var(--dsw-alias-label-secondary); }
+.dcs-add-section {
+  font: inherit; font-size: 13px; cursor: pointer; color: var(--dsw-alias-label-secondary);
+  padding: 9px; border-radius: 9px; border: 1px dashed var(--dsw-alias-border-l2);
+  background: transparent; transition: border-color .14s ease, color .14s ease;
+}
+.dcs-add-section:hover { border-color: var(--dcs-accent); color: var(--dcs-accent); }
+.dcs-card-foot {
+  display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+.dcs-btn-icon { flex: none; }
+.dcs-card-foot .dcs-btn { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Settings row: the three identity choices side by side. */
+.dcs-setgrid {
+  display: grid; gap: 13px 14px;
+  grid-template-columns: minmax(0, 1.8fr) 110px minmax(0, 1.25fr);
+}
+@media (max-width: 880px) {
+  .dcs-setgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Style row: the picker on the left, its preview card filling the right. */
+.dcs-style-row {
+  display: grid; gap: 14px; align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+}
+@media (max-width: 880px) {
+  .dcs-style-row { grid-template-columns: 1fr; }
+}
+
+/* The page's one commitment. Accent gradient, centered, loud on purpose —
+   every field above funnels into this one button. */
+.dcs-cta { display: flex; flex-direction: column; align-items: center; gap: 9px; padding-top: 2px; }
+.dcs-cta-primary {
+  display: inline-flex; align-items: center; gap: 9px; cursor: pointer; font: inherit;
+  font-size: 15px; font-weight: 650; letter-spacing: .02em; color: #fff;
+  padding: 13px 44px; border: none; border-radius: 12px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c5cff 45%, #5a3df0 100%);
+  box-shadow: 0 10px 26px -10px rgba(124, 92, 255, 0.6);
+  transition: filter .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.dcs-cta-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 12px 30px -10px rgba(124, 92, 255, 0.72);
+}
+.dcs-cta-primary:active:not(:disabled) { transform: translateY(1px); }
+.dcs-cta-primary:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.dcs-cta-icon { flex: none; }
+.dcs-cta-hint { margin: 0; font-size: 12px; color: var(--dsw-alias-label-tertiary); text-align: center; }
 
 /* Agent-working indicator: one ring, reused by every phase. */
 .dcs-busy { display: inline-flex; align-items: center; gap: 7px; }
@@ -1097,18 +1212,13 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
 
 /* -------------------------------------------------------- script editor */
 
-.dcs-summary {
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  padding: 9px 13px; border-radius: 9px; font-size: 12px;
-  background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary);
-}
-.dcs-summary b { color: var(--dsw-alias-label-primary); font-weight: 600; }
-
 .dcs-sections { display: flex; flex-direction: column; gap: 10px; }
+/* Rows sit on layer-1: inside the layer-2 card they read as inset material,
+   one step deeper than the container that holds them. */
 .dcs-section-row {
   display: flex; flex-direction: column; gap: 7px; padding: 11px 13px;
-  border-radius: 10px; border: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-layer-2);
+  border-radius: 10px; border: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
 }
 /* Amber is advice, red is a blocker — the border says which before the text does. */
 .dcs-section-advised { border-color: var(--dsw-alias-state-warn-primary); }
@@ -1163,10 +1273,21 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
 
 /* ------------------------------------------------------------ audio stage */
 
-/* Two panels above, the takes below — the triangle. Collapses to one column
-   when the view is too narrow for two readable halves. */
-.dcs-triangle { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-/* A panel that owns its own row: slots wrap, so half a row is half the slots. */
+/* The voice card's two halves: library + reference audio left, design right.
+   Collapses to one column when there is no room for two readable halves. */
+.dcs-audio-split { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dcs-audio-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.dcs-audio-col + .dcs-audio-col { padding-left: 16px; border-left: 1px solid var(--dsw-alias-border-l1); }
+@media (max-width: 880px) {
+  .dcs-audio-split { grid-template-columns: 1fr; }
+  .dcs-audio-col + .dcs-audio-col {
+    padding-left: 0; border-left: none;
+    padding-top: 14px; border-top: 1px solid var(--dsw-alias-border-l1);
+  }
+}
+.dcs-col-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dcs-col-head > b { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.dcs-col-foot { display: flex; align-items: center; gap: 10px; }
 
 /* A divider inside a panel, for a second subject that belongs to the same
    question rather than to a container of its own. */
@@ -1176,14 +1297,12 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
   border-top: 1px solid var(--dsw-alias-border-l1);
 }
 .dcs-subhead-label { font-size: 12px; font-weight: 600; color: var(--dsw-alias-text-l1); }
-@media (max-width: 720px) { .dcs-triangle { grid-template-columns: 1fr; } }
 
 .dcs-panel {
   display: flex; flex-direction: column; gap: 8px; padding: 13px;
   border-radius: 10px; border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-2);
 }
-.dcs-takes { gap: 12px; }
 
 .dcs-take-detail {
   display: flex; flex-direction: column; gap: 9px; padding: 12px;
@@ -1224,23 +1343,28 @@ body.dcs-dragging { user-select: none; cursor: grabbing; }
 .dcs-strip-arrow-right { right: -6px; }
 .dcs-strip-arrow:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .dcs-take-card {
-  /* Compact and uniform: this row picks a section, it does not measure time. */
-  flex: none; width: 76px; display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
-  padding: 7px 9px; border-radius: 9px; cursor: pointer; font: inherit; text-align: left;
+  /* One line per card — ordinal, id, then the duration behind a hairline.
+     This row picks a section; it does not measure time, so no card is wider
+     than another and the long ones do not push the rest off screen. */
+  flex: none; min-width: 96px; display: flex; align-items: center; gap: 7px;
+  padding: 8px 11px; border-radius: 9px; cursor: pointer; font: inherit; text-align: left;
   border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
 }
 .dcs-take-card:hover { background: var(--dsw-alias-interactive-bg-hover); }
-.dcs-take-current { border-color: var(--dsw-alias-brand-primary); }
+.dcs-take-current { border-color: var(--dcs-accent); box-shadow: 0 0 0 1px var(--dcs-accent-soft); }
 .dcs-take-empty { border-style: dashed; opacity: .75; }
 .dcs-take-all { border-color: var(--dsw-alias-border-l3); }
 .dcs-take-all:disabled { opacity: .4; cursor: default; }
-.dcs-take-index { font-size: 10px; color: var(--dsw-alias-label-tertiary); }
+.dcs-take-index { font-size: 10px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
 .dcs-take-id {
   font-size: 12px; font-family: ui-monospace, monospace;
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.dcs-take-time { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.dcs-take-time {
+  font-size: 11px; color: var(--dsw-alias-label-tertiary); white-space: nowrap;
+  margin-left: auto; padding-left: 8px; border-left: 1px solid var(--dsw-alias-border-l1);
+}
 
 .dcs-problems {
   margin: 0; padding: 9px 12px 9px 28px; border-radius: 8px; font-size: 12px;

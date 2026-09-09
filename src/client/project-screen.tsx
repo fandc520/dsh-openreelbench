@@ -6,6 +6,15 @@
  * together, in one look; splitting them into three approvals would be honest to
  * the state machine and hostile to the user.
  *
+ * The page reads as three stacked decisions, each in its own card:
+ *
+ *   项目设置  — two columns: identity (title / duration / platform) on the
+ *              left, look (style + its preview card) on the right. One
+ *              保存设置 serves both, because they are one save.
+ *   创意简报  — the writing surface, with 重新生成 parked in its own corner.
+ *   the CTA  — the page's single commitment, centered and loud, because it
+ *              submits every field above at once.
+ *
  * Two kinds of write leave this screen, and they are deliberately different:
  *
  *   - Marker fields (title, duration, style) go to `POST /studio/project`.
@@ -20,6 +29,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { PLATFORM_FRAMES, type Brief, type StudioState, api } from './api.ts'
 import { type AgentPhase, BusyLabel } from './busy.tsx'
+import { IconCheck, IconDoc, IconMic, IconPalette, IconPlay, IconSliders, IconSpark } from './icons.tsx'
 
 export interface ProjectScreenProps {
   state: StudioState
@@ -38,6 +48,8 @@ interface Draft {
   tone: string
 }
 
+type Note = { kind: 'ok' | 'error'; text: string }
+
 function draftFrom(state: StudioState): Draft {
   const brief = state.artifacts.brief ?? {}
   return {
@@ -45,7 +57,7 @@ function draftFrom(state: StudioState): Draft {
     duration: String(state.project.target_duration_seconds),
     style: state.project.style,
     // Marker first, brief second, then the neutral default - the same order
-    // the renderer resolves it in, so the box shows what would actually happen.
+    // the host resolves it in, so the box shows what would actually happen.
     platform: state.project.target_platform
       ?? (typeof brief.target_platform === 'string' ? brief.target_platform : 'generic'),
     hook: typeof brief.hook === 'string' ? brief.hook : '',
@@ -59,7 +71,11 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
   const [draft, setDraft] = useState<Draft>(() => draftFrom(state))
   const [busy, setBusy] = useState<'idle' | 'saving' | 'submitting'>('idle')
   const [phase, setPhase] = useState<AgentPhase | null>(null)
-  const [result, setResult] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  // One note per card, so a save result lands where the save button is and a
+  // brief result lands inside the brief card.
+  const [saveNote, setSaveNote] = useState<Note | null>(null)
+  const [briefNote, setBriefNote] = useState<Note | null>(null)
+  const [submitNote, setSubmitNote] = useState<Note | null>(null)
 
   // Reload replaces the draft only when the user has nothing staged, so a
   // background refresh cannot eat what they are typing.
@@ -105,14 +121,16 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
   const platformChanged = draft.platform !== (state.project.target_platform ?? 'generic')
 
   function set<K extends keyof Draft>(key: K, value: Draft[K]): void {
-    setResult(null)
+    setSaveNote(null)
+    setBriefNote(null)
+    setSubmitNote(null)
     setDraft((previous) => ({ ...previous, [key]: value }))
   }
 
   /** Persist the marker fields without touching pipeline state. */
   async function saveSettings(): Promise<void> {
     setBusy('saving')
-    setResult(null)
+    setSaveNote(null)
     try {
       await api.updateProject({
         project: state.project.id,
@@ -122,9 +140,9 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
         target_platform: draft.platform,
       })
       await onReload()
-      setResult({ kind: 'ok', text: '项目设置已保存。' })
+      setSaveNote({ kind: 'ok', text: '已保存。' })
     } catch (error) {
-      setResult({ kind: 'error', text: (error as Error).message })
+      setSaveNote({ kind: 'error', text: (error as Error).message })
     } finally {
       setBusy('idle')
     }
@@ -139,7 +157,7 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
    */
   async function askForBrief(kind: 'draft' | 'regenerate'): Promise<void> {
     if (phase !== null || busy !== 'idle') return
-    setResult(null)
+    setBriefNote(null)
     setPhase('sending')
     const before = JSON.stringify(state.artifacts.brief ?? null)
     try {
@@ -155,22 +173,22 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
         if (next !== undefined && JSON.stringify(next.artifacts.brief ?? null) !== before) {
           await onReload()
           setPhase(null)
-          setResult({ kind: 'ok', text: kind === 'draft' ? 'Agent 起草好了，看看要不要改。' : '换了一版，看看这个方向。' })
+          setBriefNote({ kind: 'ok', text: kind === 'draft' ? 'Agent 起草好了，看看要不要改。' : '换了一版，看看这个方向。' })
           return
         }
       }
       setPhase(null)
-      setResult({ kind: 'error', text: '等了两分钟没等到新简报，去对话里看看 Agent 的进度。' })
+      setBriefNote({ kind: 'error', text: '等了两分钟没等到新简报，去对话里看看 Agent 的进度。' })
     } catch (error) {
       setPhase(null)
-      setResult({ kind: 'error', text: (error as Error).message })
+      setBriefNote({ kind: 'error', text: (error as Error).message })
     }
   }
 
   async function submit(): Promise<void> {
     if (problems.length > 0) return
     setBusy('submitting')
-    setResult(null)
+    setSubmitNote(null)
     const brief: Brief = {
       version: '1.0',
       title: draft.title.trim(),
@@ -202,9 +220,9 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
       })
       await onReload()
       await onSend('我在创意工作台确认了简报「' + brief.title + '」，brief 闸已通过，请继续写脚本。')
-      setResult({ kind: 'ok', text: '简报已通过，已通知 Agent 继续写脚本。' })
+      setSubmitNote({ kind: 'ok', text: '简报已通过，已通知 Agent 继续写脚本。' })
     } catch (error) {
-      setResult({ kind: 'error', text: (error as Error).message })
+      setSubmitNote({ kind: 'error', text: (error as Error).message })
     } finally {
       setBusy('idle')
     }
@@ -213,96 +231,162 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
   return (
     <div className="dcs-screen">
       <header className="dcs-screen-head">
-        <div>
-          <h2 className="dcs-screen-title">项目详情</h2>
-          <p className="dcs-screen-sub">定题目、时长、平台、风格和创意简报。确认之后 Agent 才会去写脚本。</p>
-        </div>
-        <span className={'dcs-pill ' + (approved ? 'dcs-pill-ok' : parked ? 'dcs-pill-wait' : 'dcs-pill-idle')}>
+        <h2 className="dcs-screen-title">项目详情</h2>
+        <span className="dcs-spacer" />
+        <span className={'dcs-pill ' + (approved ? 'dcs-pill-ok' : parked ? 'dcs-pill-wait' : '')}>
           {approved ? '已通过' : parked ? '等你确认' : stage?.status === 'pending' ? '未开始' : (stage?.status ?? '未开始')}
         </span>
       </header>
 
-      <section className="dcs-group">
-        <h3 className="dcs-group-title">项目设置</h3>
-        <div className="dcs-row">
-          <label className="dcs-field">
-            <span className="dcs-label">标题</span>
-            <input className="dcs-input" value={draft.title} onChange={(e) => set('title', e.target.value)} />
-          </label>
-          <label className="dcs-field dcs-field-narrow">
-            <span className="dcs-label">目标时长（秒）</span>
-            <input
-              className="dcs-input"
-              inputMode="numeric"
-              value={draft.duration}
-              onChange={(e) => set('duration', e.target.value)}
-            />
-          </label>
+      <section className="dcs-card">
+        <div className="dcs-card-head">
+          <IconSliders className="dcs-section-icon" />
+          <h3 className="dcs-card-title">项目设置</h3>
+          {dirty ? <span className="dcs-card-mark">未保存</span> : null}
         </div>
+        <div className="dcs-card-body">
+          <div className="dcs-setgrid">
+            <label className="dcs-field">
+              <span className="dcs-label">标题</span>
+              <input className="dcs-input" value={draft.title} onChange={(e) => set('title', e.target.value)} />
+            </label>
+            <label className="dcs-field">
+              <span className="dcs-label">时长（秒）</span>
+              <input
+                className="dcs-input"
+                inputMode="numeric"
+                value={draft.duration}
+                onChange={(e) => set('duration', e.target.value)}
+              />
+            </label>
+            <label className="dcs-field">
+              <span className="dcs-label">投放平台</span>
+              <select
+                className="dcs-select"
+                value={draft.platform}
+                onChange={(e) => set('platform', e.target.value)}
+              >
+                {PLATFORM_FRAMES.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label} — {option.frame}
+                  </option>
+                ))}
+              </select>
+              <span className="dcs-hint">
+                {/* Said before rendering, not after: the frame is the one setting
+                    whose consequence is invisible until the film comes out wrong. */}
+                成片按这个出画幅，
+                {platformFrame?.id === 'generic'
+                  ? '现在用设置里的默认值。'
+                  : <b>{platformFrame?.frame}</b>}
+                {platformChanged ? <b className="dcs-note-warn">　（预览中，保存后生效）</b> : null}
+              </span>
+            </label>
+          </div>
 
-        <label className="dcs-field">
-          <span className="dcs-label">投放平台</span>
-          <select
-            className="dcs-select"
-            value={draft.platform}
-            onChange={(e) => set('platform', e.target.value)}
-          >
-            {PLATFORM_FRAMES.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label} — {option.frame}
-              </option>
-            ))}
-          </select>
-          <span className="dcs-hint">
-            {/* Said before rendering, not after: the frame is the one setting
-                whose consequence is invisible until the film comes out wrong. */}
-            成片按这个出画幅，
-            {platformFrame?.id === 'generic'
-              ? '现在用设置里的默认值。'
-              : <b>{platformFrame?.frame}</b>}
-            {platformChanged ? <b className="dcs-note-warn">　（预览中，保存后生效）</b> : null}
-          </span>
-        </label>
+          <div className="dcs-style-row">
+            <label className="dcs-field">
+              <span className="dcs-label">风格</span>
+              <select className="dcs-select" value={draft.style} onChange={(e) => set('style', e.target.value)}>
+                {state.style.options.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}（{option.id}）— {option.mood}
+                  </option>
+                ))}
+              </select>
+              <span className="dcs-hint">
+                {playbook.best_for} · 语速约 {playbook.narration.chars_per_second} 字/秒 ·
+                单段 {playbook.pacing.minSectionSeconds}–{playbook.pacing.maxSectionSeconds} 秒
+                {styleChanged ? <b className="dcs-note-warn">　（预览中，保存后生效）</b> : null}
+              </span>
+            </label>
 
-        <label className="dcs-field">
-          <span className="dcs-label">风格</span>
-          <select className="dcs-select" value={draft.style} onChange={(e) => set('style', e.target.value)}>
-            {state.style.options.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}（{option.id}）— {option.mood}
-              </option>
-            ))}
-          </select>
-          <span className="dcs-hint">
-            {playbook.best_for} · 语速约 {playbook.narration.chars_per_second} 字/秒 ·
-            单段 {playbook.pacing.minSectionSeconds}–{playbook.pacing.maxSectionSeconds} 秒
-            {styleChanged ? <b className="dcs-note-warn">　（预览中，保存后生效）</b> : null}
-          </span>
-        </label>
-
-        <div className="dcs-style-card">
-          <div className="dcs-style-line"><b>画面基调</b>{playbook.mood}</div>
-          <div className="dcs-style-line"><b>旁白语气</b>{playbook.narration.voice_style}</div>
-          <div className="dcs-style-line">
-            <b>一致性锚点</b>
-            <ul className="dcs-anchors">
-              {playbook.visual.consistency_anchors.map((anchor) => <li key={anchor}>{anchor}</li>)}
-            </ul>
+            <div className="dcs-style-card">
+            <div className="dcs-style-line">
+              <b><IconPalette className="dcs-style-glyph" />画面基调</b>{playbook.mood}
+            </div>
+            <div className="dcs-style-line">
+              <b><IconMic className="dcs-style-glyph" />旁白语气</b>{playbook.narration.voice_style}
+            </div>
+            <div className="dcs-style-line">
+              <b><IconSpark className="dcs-style-glyph" />一致性锚点</b>
+              <ul className="dcs-anchors">
+                {playbook.visual.consistency_anchors.map((anchor) => <li key={anchor}>{anchor}</li>)}
+              </ul>
+            </div>
+            </div>
           </div>
         </div>
-
-        <div className="dcs-actions">
-          <span className="dcs-hint">改标题、时长、风格不会影响已有的脚本和素材。</span>
+        <div className="dcs-card-foot">
+          {saveNote !== null ? (
+            <span className={'dcs-note ' + (saveNote.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{saveNote.text}</span>
+          ) : null}
           <span className="dcs-spacer" />
           <button type="button" className="dcs-btn" disabled={busy !== 'idle'} onClick={() => void saveSettings()}>
+            <IconCheck className="dcs-btn-icon" />
             {busy === 'saving' ? '保存中…' : '保存设置'}
           </button>
         </div>
       </section>
 
-      <section className="dcs-group">
-        <div className="dcs-group-head">
-          <h3 className="dcs-group-title">创意简报</h3>
+      <section className="dcs-card">
+        <div className="dcs-card-head">
+          <IconDoc className="dcs-section-icon" />
+          <h3 className="dcs-card-title">创意简报</h3>
+        </div>
+        <div className="dcs-card-body">
+          {!hasBrief && phase === null ? (
+            <p className="dcs-note">
+              还没有简报。可以自己写，也可以让 Agent 先起一版——它知道项目标题、时长和风格。
+            </p>
+          ) : null}
+
+          <label className="dcs-field">
+            <span className="dcs-label">开场钩子</span>
+            <input
+              className="dcs-input"
+              value={draft.hook}
+              placeholder="开场三秒抓人的那一句，不是标题的复述"
+              onChange={(e) => set('hook', e.target.value)}
+            />
+          </label>
+
+          <label className="dcs-field">
+            <span className="dcs-label">关键要点</span>
+            <textarea
+              className="dcs-input dcs-textarea"
+              rows={5}
+              value={draft.keyPoints}
+              placeholder={'一行一条，三到五条。\n每条是一个能独立成段的信息点，不是关键词。'}
+              onChange={(e) => set('keyPoints', e.target.value)}
+            />
+          </label>
+
+          <div className="dcs-row">
+            <label className="dcs-field">
+              <span className="dcs-label">受众（可选）</span>
+              <input className="dcs-input" value={draft.audience} onChange={(e) => set('audience', e.target.value)} />
+            </label>
+            <label className="dcs-field">
+              <span className="dcs-label">调性（可选）</span>
+              <input className="dcs-input" value={draft.tone} onChange={(e) => set('tone', e.target.value)} />
+            </label>
+          </div>
+
+          {problems.length > 0 ? (
+            <ul className="dcs-problems">
+              {problems.map((problem) => <li key={problem}>{problem}</li>)}
+            </ul>
+          ) : null}
+
+          {briefNote !== null ? (
+            <p className={'dcs-note ' + (briefNote.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{briefNote.text}</p>
+          ) : null}
+        </div>
+        <div className="dcs-card-foot">
+          <span className="dcs-hint">
+            {keyPoints.length} 条 · {durationValue > 0 ? '按当前风格约 ' + budget + ' 字' : ''}
+          </span>
           <span className="dcs-spacer" />
           <button
             type="button"
@@ -311,78 +395,32 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
             title="让 Agent 换一个方向重写，你可以多要几版再挑"
             onClick={() => void askForBrief(hasBrief ? 'regenerate' : 'draft')}
           >
+            <IconSpark className="dcs-btn-icon" />
             <BusyLabel phase={phase} idle={hasBrief ? '重新生成' : '让 Agent 起草'} />
           </button>
         </div>
-
-        {!hasBrief && phase === null ? (
-          <p className="dcs-note">
-            还没有简报。可以自己写，也可以让 Agent 先起一版——它知道项目标题、时长和风格。
-          </p>
-        ) : null}
-
-        <label className="dcs-field">
-          <span className="dcs-label">开场钩子</span>
-          <input
-            className="dcs-input"
-            value={draft.hook}
-            placeholder="开场三秒抓人的那一句，不是标题的复述"
-            onChange={(e) => set('hook', e.target.value)}
-          />
-        </label>
-
-        <label className="dcs-field">
-          <span className="dcs-label">关键要点</span>
-          <textarea
-            className="dcs-input dcs-textarea"
-            rows={5}
-            value={draft.keyPoints}
-            placeholder={'一行一条，三到五条。\n每条是一个能独立成段的信息点，不是关键词。'}
-            onChange={(e) => set('keyPoints', e.target.value)}
-          />
-          <span className="dcs-hint">
-            {keyPoints.length} 条 · {durationValue > 0 ? '按当前风格约 ' + budget + ' 字' : ''}
-          </span>
-        </label>
-
-        <div className="dcs-row">
-          <label className="dcs-field">
-            <span className="dcs-label">受众（可选）</span>
-            <input className="dcs-input" value={draft.audience} onChange={(e) => set('audience', e.target.value)} />
-          </label>
-          <label className="dcs-field">
-            <span className="dcs-label">调性（可选）</span>
-            <input className="dcs-input" value={draft.tone} onChange={(e) => set('tone', e.target.value)} />
-          </label>
-        </div>
-
-        {problems.length > 0 ? (
-          <ul className="dcs-problems">
-            {problems.map((problem) => <li key={problem}>{problem}</li>)}
-          </ul>
-        ) : null}
-
-        <div className="dcs-actions">
-          <span className="dcs-hint">
-            {approved
-              ? '这一版已经确认过了。再提交一次会替换简报，后面所有阶段都要重做。'
-              : '确认之后 Agent 才会开始写脚本。之后想改也可以回来重新提交。'}
-          </span>
-          <span className="dcs-spacer" />
-          <button
-            type="button"
-            className="dcs-btn dcs-btn-primary"
-            disabled={busy !== 'idle' || problems.length > 0}
-            onClick={() => void submit()}
-          >
-            {busy === 'submitting' ? '提交中…' : approved ? '重新提交简报' : '确认简报，进入脚本'}
-          </button>
-        </div>
-
-        {result !== null ? (
-          <p className={'dcs-note ' + (result.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{result.text}</p>
-        ) : null}
       </section>
+
+      <div className="dcs-cta">
+        <button
+          type="button"
+          className="dcs-cta-primary"
+          disabled={busy !== 'idle' || problems.length > 0}
+          title={problems.length > 0 ? problems[0] : undefined}
+          onClick={() => void submit()}
+        >
+          <IconPlay className="dcs-cta-icon" />
+          {busy === 'submitting' ? '提交中…' : approved ? '重新提交简报' : '确认简报，进入脚本'}
+        </button>
+        <p className="dcs-cta-hint">
+          {approved
+            ? '这一版已经确认过了。再提交会替换简报，后面所有阶段都要重做。'
+            : '这一页所有信息确认后的下一步——之后 Agent 才会开始写脚本。'}
+        </p>
+        {submitNote !== null ? (
+          <p className={'dcs-note ' + (submitNote.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{submitNote.text}</p>
+        ) : null}
+      </div>
     </div>
   )
 }

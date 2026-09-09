@@ -23,6 +23,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { type StudioState, api } from './api.ts'
 import { type AgentPhase, BusyLabel } from './busy.tsx'
+import { IconPen, IconPlay, IconSpark } from './icons.tsx'
 
 const NEWLINE = String.fromCharCode(10)
 
@@ -314,41 +315,44 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
   return (
     <div className="dcs-screen">
       <header className="dcs-screen-head">
-        <div>
-          <h2 className="dcs-screen-title">脚本</h2>
-          <p className="dcs-screen-sub">一段一句解说、一张配图。段落顺序就是分镜顺序。</p>
-        </div>
+        <h2 className="dcs-screen-title">脚本</h2>
+        <span className="dcs-spacer" />
         <span className={'dcs-pill ' + (approved ? 'dcs-pill-ok' : 'dcs-pill-wait')}>
           {approved ? '已审核' : '待确认'}
         </span>
       </header>
 
-      <div className="dcs-summary">
-        <span><b>{draft.sections.length}</b> 段</span>
-        <span>预估 <b>{totalSeconds.toFixed(1)}</b> 秒 / 目标 {state.project.target_duration_seconds} 秒</span>
-        <span className={totalChars > budget * 1.15 ? 'dcs-tone-wait' : undefined}>
-          <b>{totalChars}</b> 字 / 预算约 {budget}
-        </span>
-        <span className="dcs-spacer" />
-        <button type="button" className="dcs-btn dcs-btn-small" disabled={phase !== null || busy}
-          onClick={() => void askForScript(hasScript ? 'regenerate' : 'draft')}>
-          <BusyLabel phase={phase} idle={hasScript ? '重新生成' : '让 Agent 起草'} />
-        </button>
-      </div>
-
       <p className="dcs-hint">
-        这里填的时长是<b>预估</b>：合成时会按 ffprobe 量出的真实配音重排时间轴，字幕也按实测走。
-        它的用处是帮你判断分段合不合理。
+        以下段落时长为<b>预估值</b>，最终由实际生成片段的时长决定。
         {adviceCount > 0
           ? <>　<span className="dcs-tone-wait">黄框</span>是风格建议，不影响提交；红框才是必须改的。</>
           : null}
       </p>
 
-      {draft.sections.length === 0 && phase === null ? (
-        <p className="dcs-note">还没有脚本。可以让 Agent 按简报起草一版，也可以自己加段。</p>
-      ) : null}
+      <section className="dcs-card">
+        <div className="dcs-card-head">
+          <IconPen className="dcs-section-icon" />
+          <h3 className="dcs-card-title">脚本分段</h3>
+          <span className="dcs-card-meta">
+            <span><b>{draft.sections.length}</b> 段</span>
+            <span>预估 <b>{totalSeconds.toFixed(1)}</b> 秒 / 目标 {state.project.target_duration_seconds} 秒</span>
+            <span className={totalChars > budget * 1.15 ? 'dcs-tone-wait' : undefined}>
+              <b>{totalChars}</b> 字 / 预算约 {budget}
+            </span>
+          </span>
+          <span className="dcs-spacer" />
+          <button type="button" className="dcs-btn dcs-btn-small" disabled={phase !== null || busy}
+            onClick={() => void askForScript(hasScript ? 'regenerate' : 'draft')}>
+            <IconSpark className="dcs-btn-icon" />
+            <BusyLabel phase={phase} idle={hasScript ? '重新生成' : '让 Agent 起草'} />
+          </button>
+        </div>
+        <div className="dcs-card-body">
+          {draft.sections.length === 0 && phase === null ? (
+            <p className="dcs-note">还没有脚本。可以让 Agent 按简报起草一版，也可以自己加段。</p>
+          ) : null}
 
-      <div className="dcs-sections">
+          <div className="dcs-sections">
         {draft.sections.map((section, index) => {
           const issues = rowIssues[index] ?? { blocking: [], advice: [] }
           const dup = duplicateIds.has(section.id.trim())
@@ -456,38 +460,36 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
             </div>
           )
         })}
-      </div>
+          </div>
 
-      <div className="dcs-actions">
-        <button type="button" className="dcs-btn dcs-btn-small" onClick={addSection}>+ 加一段</button>
-        <span className="dcs-spacer" />
-      </div>
+          {schemaIssues.length > 0 ? (
+            <ul className="dcs-problems">
+              {schemaIssues.slice(0, 6).map((issue) => (
+                <li key={issue.path + issue.message}>{issue.path}：{issue.message}</li>
+              ))}
+              {schemaIssues.length > 6 ? <li>…还有 {schemaIssues.length - 6} 条</li> : null}
+            </ul>
+          ) : null}
 
-      {schemaIssues.length > 0 ? (
-        <ul className="dcs-problems">
-          {schemaIssues.slice(0, 6).map((issue) => (
-            <li key={issue.path + issue.message}>{issue.path}：{issue.message}</li>
-          ))}
-          {schemaIssues.length > 6 ? <li>…还有 {schemaIssues.length - 6} 条</li> : null}
-        </ul>
-      ) : null}
+          <button type="button" className="dcs-add-section" onClick={addSection}>＋ 加一段</button>
+        </div>
+      </section>
 
-      <div className="dcs-actions">
-        <span className="dcs-hint">
-          {approved
-            ? '这一版已经确认过了。再提交一次会替换脚本，配音、配图和成片都要重做。'
-            : '确认之后 Agent 才会开始配音。之后想改也可以回来重新提交。'}
-        </span>
-        <span className="dcs-spacer" />
-        <button type="button" className="dcs-btn dcs-btn-primary" disabled={busy || phase !== null || blocking}
+      <div className="dcs-cta">
+        <button type="button" className="dcs-cta-primary" disabled={busy || phase !== null || blocking}
           onClick={() => void submit()}>
+          <IconPlay className="dcs-cta-icon" />
           {busy ? '提交中…' : approved ? '重新提交脚本' : '确认脚本，进入配音'}
         </button>
+        <p className="dcs-cta-hint">
+          {approved
+            ? '这一版已经确认过了。再提交一次会替换脚本，配音、配图和成片都要重做。'
+            : '这一页所有段落确认后的下一步——之后才会开始配音。'}
+        </p>
+        {result !== null ? (
+          <p className={'dcs-note ' + (result.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{result.text}</p>
+        ) : null}
       </div>
-
-      {result !== null ? (
-        <p className={'dcs-note ' + (result.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{result.text}</p>
-      ) : null}
     </div>
   )
 }
