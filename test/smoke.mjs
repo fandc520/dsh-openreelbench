@@ -2557,6 +2557,7 @@ async function main() {
         if (!sheets.includes('.' + name)) unstyled.push(file + ' → .' + name)
       }
     }
+
     if (unstyled.length === 0) ok('every dcs- class the panels use is defined in a stylesheet')
     else bad('unstyled classes', JSON.stringify(unstyled))
 
@@ -3651,6 +3652,97 @@ async function main() {
     else bad('panel-only action', unreachable.map(([label]) => label).join(', '))
   }
 
+
+
+  console.log('\n== 请求的共用收尾约定 ==')
+  {
+    const { buildShotJob } = await import('../lib/shot-job.js')
+    const { buildVoiceJob } = await import('../lib/voice-job.js')
+    const { buildMusicJob } = await import('../lib/music-job.js')
+
+    const shots = buildShotJob({
+      workflow: 'Alpha-Image',
+      negativePrompt: 'text, watermark',
+      references: [],
+      shots: [{ sectionId: 's1', index: 0, seconds: 3, text: '台词', fallbackPrompt: 'a cat' }],
+    })
+    const voice = buildVoiceJob({
+      workflow: 'Alpha-TTS',
+      voice: 'v1',
+      voiceReferences: [],
+      sections: [{ id: 's1', text: '台词', deliveryNote: '' }],
+    })
+    const music = buildMusicJob({
+      projectId: 'p', workflow: 'Alpha-Music', styleName: 's',
+      pacingProfile: 'conversational', totalSeconds: 60,
+    })
+
+    // THE DRIFT THIS MODULE EXISTS FOR. All three name a workflow; only two of
+    // them said which tool runs one. The shots request never mentioned
+    // comfyui_workflow at all -- it named a workflow and left the model to
+    // remember where workflows are run, which it did, most of the time.
+    const missingTool = [['分镜', shots], ['配音', voice], ['配乐', music]]
+      .filter(([, text]) => !text.includes('comfyui_workflow'))
+    if (missingTool.length === 0) ok('every request naming a workflow also names the tool that runs one')
+    else bad('workflow without a tool', missingTool.map(([label]) => label).join(', '))
+
+    // Batches submit incrementally: waiting for the whole thing means a failure
+    // on the last item throws away every earlier one, and the panel -- which
+    // watches the manifest -- shows nothing until the very end.
+    if (shots.includes('异步') && voice.includes('异步')) ok('both batch requests ask for incremental submission')
+    else bad('async line', 'a batch request lost it')
+    // The bed is one file. An async line there would be instructions for a loop
+    // that does not exist.
+    if (!music.includes('异步')) ok('the single-item request does not ask for a loop it has no items for')
+    else bad('async on music', 'the bed request talks about submitting one at a time')
+
+    // Governance, not preference: studio_stage refuses a completed without
+    // human_approved, so a model that submits one gets a GATE VIOLATION and has
+    // to be told why. Saying it up front turns the refusal into a known rule.
+    if (shots.includes('不要提交 completed') && voice.includes('不要提交 completed'))
+      ok('both gated batches are told to leave the gate shut')
+    else bad('gate line', 'a gated request lost it')
+    // Importing music advances no stage, so there is no gate to hold.
+    if (!music.includes('不要提交 completed')) ok('the ungated request has no gate line to carry')
+    else bad('gate on music', 'the bed request talks about a gate it does not touch')
+
+    // The bed belongs to the film, not a section. A fabricated scene_id is
+    // rejected as an orphan, so the request has to say so rather than leave the
+    // model to guess a section for it.
+    if (music.includes('不要填') && music.includes('scene_id')) ok('the bed request says it takes no scene_id')
+    else bad('music scene_id', music)
+
+    // Several pictures can share a section; takes cannot. Only the shots
+    // request should carry shot_index -- this is the part that IS per-screen,
+    // and folding it into the shared module would make it the union of three
+    // requests rather than their intersection.
+    if (shots.includes('shot_index') && !voice.includes('shot_index'))
+      ok('the per-screen clause stayed per-screen')
+    else bad('shot_index', 'it leaked into the takes request, or left the shots one')
+
+    // Counted in the unit each screen actually deals in.
+    if (shots.includes('逐张') && voice.includes('逐段')) ok('each batch is counted in its own unit')
+    else bad('unit', 'a request counts in the wrong unit')
+
+    // And the wording is now ONE definition: the same sentence, not two
+    // spellings that happen to agree today.
+    const { asyncLine, holdGateLine } = await import('../lib/job-conventions.js')
+    if (shots.includes(asyncLine('张')) && voice.includes(asyncLine('段')))
+      ok('both requests carry the shared sentence verbatim, not a copy of it')
+    else bad('async drift', 'a builder has its own wording again')
+    if (shots.includes(holdGateLine('看过')) && voice.includes(holdGateLine('听过')))
+      ok('the gate line is the shared one in both')
+    else bad('gate drift', 'a builder has its own wording again')
+
+    // Wording assertions catch a builder that inlines DIFFERENT text. One that
+    // inlines identical text drifts only on the next edit, so the import is
+    // pinned too -- the same "one list, several places" rule as §5.4.
+    const { readFileSync: readSource } = await import('node:fs')
+    const inlined = ['shot-job', 'voice-job', 'music-job'].filter((name) =>
+      !readSource('src/' + name + '.ts', 'utf-8').includes("from './job-conventions.js'"))
+    if (inlined.length === 0) ok('every job builder takes its closing lines from the shared module')
+    else bad('builder stopped sharing', inlined.join(', '))
+  }
 
   console.log('\n== 管线技能：地图与地形分开 ==')
   {

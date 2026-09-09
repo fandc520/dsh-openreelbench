@@ -40,6 +40,8 @@ export interface MusicJobInput {
   note?: string | undefined
 }
 
+import { importLine, workflowLine } from './job-conventions.js'
+
 const NEWLINE = String.fromCharCode(10)
 /** The skill the request opens with. Exported so the panel can check it loads. */
 export const MUSIC_SKILL = 'dsh-creative-studio-sound-design'
@@ -71,7 +73,7 @@ export function buildMusicJob(input: MusicJobInput): string {
   }
 
   lines.push('')
-  lines.push('工作流：`' + input.workflow + '`（用 `comfyui_workflow` 的 `action: run`）')
+  lines.push(workflowLine(input.workflow))
   lines.push('')
 
   // The two rules that disqualify a track outright are repeated here rather
@@ -80,11 +82,9 @@ export function buildMusicJob(input: MusicJobInput): string {
   lines.push('两条不能破的：**必须纯器乐**（负向写 vocals, lyrics, singing），'
     + '**动态要平**（不要 drop、不要渐强到高潮）。')
   lines.push('')
-  lines.push(
-    '生成完用 `studio_project` 的 `action: "import"` 搬进项目，'
-    + '`kind` 填 `music`，**不要填 `scene_id`** —— 配乐属于整部片子，不属于某一段。'
-    + '导入会自动记到项目上，不用再写进任何清单。',
-  )
+  // One bed, so no async line and no gate line: nothing to interleave, and
+  // importing music advances no stage.
+  lines.push(importLine({ kind: 'music', unit: '段' }))
   // Levels are not the model's to set. Saying so is cheaper than fielding a
   // request to "mix it a bit quieter", which there is no lever for.
   lines.push(

@@ -33,13 +33,15 @@ export interface VoiceJobInput {
   sections: readonly VoiceJobSection[]
 }
 
+import { closingLines, workflowLine } from './job-conventions.js'
+
 const NEWLINE = String.fromCharCode(10)
 
 export function buildVoiceJob(input: VoiceJobInput): string {
   const lines: string[] = [
     '请用 ComfyUI 生成下面 ' + input.sections.length + ' 段旁白配音。',
     '',
-    '工作流：`' + input.workflow + '`（用 `comfyui_workflow` 的 `action: run`）',
+    workflowLine(input.workflow),
     '音色参数 `voice_name`：`' + input.voice + '`',
   ]
 
@@ -66,14 +68,12 @@ export function buildVoiceJob(input: VoiceJobInput): string {
   // Same protocol as the shots screen. Waiting for the whole batch means a
   // failure on the last segment throws away every earlier one, and the panel —
   // which watches the manifest — shows nothing at all until the very end.
-  lines.push('**请用异步方式逐段提交**，每收到一段返回就立即搬进项目并回填，不要等全部跑完再一起处理。')
-  lines.push(
-    '每段生成完用 `studio_project` 的 `action: "import"` 搬进项目，'
-    + '`scene_id` 填上面的段落编号、`kind` 填 `audio`，'
-    + '然后把这一段写进 `asset_manifest_audio`，用 `studio_stage` 以 `in_progress` 记录——'
-    + '**每段都记一次**，不要攒到最后。',
-  )
-  lines.push('**不要提交 completed** —— 我要在创意工作台里听过再确认。')
+  lines.push(...closingLines({
+    kind: 'audio',
+    manifest: 'asset_manifest_audio',
+    unit: '段',
+    review: '听过',
+  }))
 
   return lines.join(NEWLINE)
 }

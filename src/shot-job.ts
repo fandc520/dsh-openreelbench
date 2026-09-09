@@ -37,6 +37,8 @@ export interface ShotJobInput {
   shots: readonly ShotJobItem[]
 }
 
+import { closingLines, workflowLine } from './job-conventions.js'
+
 const NEWLINE = String.fromCharCode(10)
 
 /**
@@ -51,7 +53,7 @@ export function buildShotJob(input: ShotJobInput): string {
   const lines: string[] = [
     '请用 ComfyUI 生成下面 ' + input.shots.length + ' 张分镜。',
     '',
-    '工作流：`' + input.workflow + '`',
+    workflowLine(input.workflow),
     '负向提示词，一字不改：' + input.negativePrompt,
     '　（工作流没有负向输入就忽略这一条）',
   ]
@@ -99,13 +101,16 @@ export function buildShotJob(input: ShotJobInput): string {
   }
 
   lines.push('')
-  lines.push('**请用异步方式逐张提交**，每收到一张返回就立即回填，不要等全部跑完再一起处理。')
-  lines.push(
-    '每张生成完用 `studio_project` 的 `action: "import"` 搬进项目（`kind: "image"`，'
-    + '`scene_id` 填段落编号），写进 `asset_manifest_shots` 并用 `studio_stage` 以 `in_progress` 记录；'
-    + '同一段有多张时按顺序写 `shot_index`。',
-  )
-  lines.push('**不要提交 completed** —— 我要在创意工作台看过再确认。')
+  // The four closing conventions live in `job-conventions.ts`. Only the part
+  // that is true of THIS batch is passed in: several pictures can share a
+  // section, so this is the one request that needs `shot_index`.
+  lines.push(...closingLines({
+    kind: 'image',
+    manifest: 'asset_manifest_shots',
+    unit: '张',
+    extra: '同一段有多张时按顺序写 `shot_index`。',
+    review: '看过',
+  }))
 
   return lines.join(NEWLINE)
 }
