@@ -1,5 +1,7 @@
 # dsh-creative-studio
 
+English: [README.en.md](README.en.md)
+
 DeepSeek Harness 插件：把一句话需求变成一条带配音、配图和字幕的解说片。
 
 四段状态机，两个人工审批闸：

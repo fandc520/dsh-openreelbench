@@ -19,6 +19,7 @@
     "client",
     "cordis.patch.yml",
     "README.md",
+    "README.en.md",
     "LICENSE"
   ],
   "scripts": {
@@ -43,6 +44,14 @@
     "pipeline"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fandc520/dsh-creative-studio.git"
+  },
+  "homepage": "https://github.com/fandc520/dsh-creative-studio#readme",
+  "bugs": {
+    "url": "https://github.com/fandc520/dsh-creative-studio/issues"
+  },
   "engines": {
     "node": ">=22.19"
   },
