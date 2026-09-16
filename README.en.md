@@ -41,7 +41,14 @@ measured values.
 
 ## Install
 
-Requires Node ≥ 22.19 and `ffmpeg` / `ffprobe` on PATH.
+**Version requirement**: DeepSeek Harness **≥ 0.1.2** (the settings-service API generation;
+the 0.1.5-rc line recommended), Node ≥ 22.19, and `ffmpeg` / `ffprobe` on PATH.
+
+**Companion plugin**: install the sister plugin
+[`dsh-comfyui`](https://github.com/fandc520/dsh-comfyui) (≥ 0.4.0) alongside. OpenReelbench
+never talks to ComfyUI itself — every image, narration and music generation runs through its
+`comfyui_workflow`. Set up dsh-comfyui and its workflow library first, then fill the workflow
+**names** into the binding table below.
 
 ```sh
 npx -p @deepseek-ai/dsh dsh plugin --profile <your profile> add github:fandc520/dsh-openreelbench

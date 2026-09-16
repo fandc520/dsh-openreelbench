@@ -33,7 +33,12 @@ brief ──[闸]──> script ──[闸]──> assets ──> compose
 
 ## 安装
 
-需要 Node ≥ 22.19 和 PATH 上的 `ffmpeg` / `ffprobe`。
+**版本要求**：DeepSeek Harness **≥ 0.1.2**（新版 settings 服务 API；建议直接用 0.1.5-rc 线）、
+Node ≥ 22.19，以及 PATH 上的 `ffmpeg` / `ffprobe`。
+
+**搭配插件**：强烈建议与姊妹插件 [`dsh-comfyui`](https://github.com/fandc520/dsh-comfyui)（≥ 0.4.0）
+一同安装。OpenReelbench 自己不连 ComfyUI——图像、配音、配乐的生成全部经由它的 `comfyui_workflow`
+执行。先装好 dsh-comfyui 并在其面板里备好工作流，再把工作流**名称**填进下面的绑定表。
 
 ```sh
 npx -p @deepseek-ai/dsh dsh plugin --profile <你的 profile> add github:fandc520/dsh-openreelbench
