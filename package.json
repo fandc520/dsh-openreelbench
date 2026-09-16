@@ -1,6 +1,6 @@
 {
   "name": "dsh-openreelbench",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.1",
   "description": "OpenReelbench, the open video creative bench for DeepSeek Harness: a gated four-stage pipeline (brief -> script -> assets -> compose) that turns one sentence into a narrated explainer video; generation via ComfyUI workflows, assembly with FFmpeg. / DSH 开源视频创意台：四段带审批闸的管线，把一句话变成一条带配音、配图和字幕的解说片；生成走 ComfyUI，合成走 FFmpeg。",
   "type": "module",
   "main": "lib/index.js",
