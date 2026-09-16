@@ -92,6 +92,8 @@ const CONTENT = `# dsh-openreelbench 工具契约
 - 想把外部文件弄进来只有一条路：\`openreel_project action: "import"\`。
   它接受**绝对本地路径**或 **http(s) URL**（比如 ComfyUI 的 \`/view?filename=...\`），
   返回的就是可以直接写进 manifest 的相对路径
+  返回体在 **\`imported[]\`**（每项含 \`path\`），不是 \`items\`；
+  manifest 条目必填 \`id\`/\`type\`/\`source_tool\`/\`path\`/\`scene_id\`，且**没有 \`kind\` 字段**——那是 import 的入参，写进 manifest 就是 SCHEMA INVALID
 - \`checkpoints/\` 和 \`artifacts/\` 是状态机私有存储，**不要用文件工具直接读写**
 
 ## 和 dsh-comfyui 的分工

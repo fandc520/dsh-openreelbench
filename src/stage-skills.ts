@@ -302,6 +302,15 @@ ${PROMPT_CONVENTION}
 - 该段的**每个 section 都要有素材**，缺一个就 \`COVERAGE_INCOMPLETE\`
 - \`duration_seconds\` 不用你填，写了也会被 ffprobe 的实测值覆盖
 
+### asset 条目的字段（两个 manifest 同一套 schema）
+
+- **必填五个**：\`id\`（整个清单里唯一，重复直接拒）、\`type\`（枚举：image / narration / audio / music / sfx / video / subtitle——配音段用 \`narration\`）、\`path\`（import 返回的项目相对路径）、\`source_tool\`（生成工具名，如 \`comfyui_workflow\`）、\`scene_id\`
+- **可选**：\`workflow_id\`、\`format\`、\`resolution\`、\`model\`、\`seed\`、\`prompt\`、\`shot_index\`（同段内从 0 连号，断号会报错）、\`weight\`（同段镜头的时长配比）
+- **没有 \`kind\` 字段**——\`kind\` 是 \`openreel_project action: "import"\` 的入参，不是 manifest 的字段；顺手写进去就是一排「未识别字段」的 \`SCHEMA INVALID\`
+- manifest 是**整份替换**：你发什么存什么。逐段 \`in_progress\` 时要把之前段落的条目一起带上，只发新段等于把旧段从清单里挤掉
+- \`import\` 的返回体里清单在 **\`imported[]\`**（每项含 \`path\`），不是 \`items\`——从错的键里取，写进 manifest 的就是 undefined
+- \`SCHEMA INVALID\` 的报错会逐条列出未识别字段和缺的必填字段，照着改，不用猜
+
 素材还没齐但想记录进度，可以写 \`status: "in_progress"\` 带上部分 manifest——
 它会**当场校验路径和 scene_id**，只跳过覆盖检查。路径写错能提前报出来。
 `,
@@ -461,6 +470,15 @@ ${PROMPT_CONVENTION}
 - \`assets[].scene_id\` 必须是脚本里真实的 section id
 - 该段的**每个 section 都要有素材**，缺一个就 \`COVERAGE_INCOMPLETE\`
 - \`duration_seconds\` 不用你填，写了也会被 ffprobe 的实测值覆盖
+
+### asset 条目的字段（两个 manifest 同一套 schema）
+
+- **必填五个**：\`id\`（整个清单里唯一，重复直接拒）、\`type\`（枚举：image / narration / audio / music / sfx / video / subtitle——配音段用 \`narration\`）、\`path\`（import 返回的项目相对路径）、\`source_tool\`（生成工具名，如 \`comfyui_workflow\`）、\`scene_id\`
+- **可选**：\`workflow_id\`、\`format\`、\`resolution\`、\`model\`、\`seed\`、\`prompt\`、\`shot_index\`（同段内从 0 连号，断号会报错）、\`weight\`（同段镜头的时长配比）
+- **没有 \`kind\` 字段**——\`kind\` 是 \`openreel_project action: "import"\` 的入参，不是 manifest 的字段；顺手写进去就是一排「未识别字段」的 \`SCHEMA INVALID\`
+- manifest 是**整份替换**：你发什么存什么。逐段 \`in_progress\` 时要把之前段落的条目一起带上，只发新段等于把旧段从清单里挤掉
+- \`import\` 的返回体里清单在 **\`imported[]\`**（每项含 \`path\`），不是 \`items\`——从错的键里取，写进 manifest 的就是 undefined
+- \`SCHEMA INVALID\` 的报错会逐条列出未识别字段和缺的必填字段，照着改，不用猜
 
 素材还没齐但想记录进度，可以写 \`status: "in_progress"\` 带上部分 manifest——
 它会**当场校验路径和 scene_id**，只跳过覆盖检查。路径写错能提前报出来。

@@ -201,6 +201,11 @@ ${renderBinding('配图（txt2img）', config.bindings.image)}
 - 带 \`options\` 的参数传值必须落在选项内，否则会报错
 - 清单里找不到绑定的那条工作流（用户改了名或删了）→ **告诉用户，不要顺手换一条跑**
 
+调用的姿势也别自己猜：action 一律用 \`id\`（不是工作流名称）；run 的覆盖值要包在 
+\`parameters: { ... }\` 对象里，**顶层平铺同名键会被静默忽略**、工作流拿默认值跑——
+不报错，但产物不是你要的东西；音频和视频工作流用 \`mode: "async"\`，sync 必等超时中止。
+完整契约在 \`dsh-comfyui-workflows\` 技能里，本管线跑任何工作流之前先读它。
+
 ## 当前风格的图像契约
 
 ${renderVisualContract(playbook)}
