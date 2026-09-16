@@ -13,5 +13,8 @@
 /tmp/
 
 node_modules/
+
+# Creative drafts: workspace material, never published.
+/drafts/
 .DS_Store
 Thumbs.db
