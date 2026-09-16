@@ -1,16 +1,16 @@
 /**
  * Talking to dsh-comfyui from the browser.
  *
- * The project rule is that studio's HOST never touches ComfyUI — no second
+ * The project rule is that openreelbench's HOST never touches ComfyUI — no second
  * client, no duplicated workflow library. That rule is intact here: these are
  * same-origin calls from the page to dsh-comfyui's own routes, so the two
- * plugins stay coupled by a URL rather than by code, and studio's server knows
+ * plugins stay coupled by a URL rather than by code, and openreelbench's server knows
  * nothing about ComfyUI.
  *
  * What that buys is directness. Generating a take through the model costs a
  * whole conversational turn; a person auditioning a voice will not wait for
- * that. Once the media exists, `POST /studio/import` pulls it into the project
- * and `studio_stage` records it — so the model still learns what happened, it
+ * that. Once the media exists, `POST /openreel/import` pulls it into the project
+ * and `openreel_stage` records it — so the model still learns what happened, it
  * just does not have to be the one doing it.
  *
  * The coupling is deliberately narrow: four routes, all of which dsh-comfyui

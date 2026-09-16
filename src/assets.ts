@@ -1,7 +1,7 @@
 /**
  * Bringing generated media into a project, and editing it once it is there.
  *
- * Both the `studio_project` tool and the panel's HTTP route land here, which is
+ * Both the `openreel_project` tool and the panel's HTTP route land here, which is
  * the point: file naming is one rule in one place. Callers parse their own
  * input — tool arguments and a JSON body are different shapes — and hand this
  * module an already-typed request.

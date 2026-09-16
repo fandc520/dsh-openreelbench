@@ -1,10 +1,10 @@
 /**
  * The three model-facing tools.
  *
- * `studio_stage` is the only door into the state machine. `studio_project` and
- * `studio_compose` deliberately cannot advance anything: compose renders a file
+ * `openreel_stage` is the only door into the state machine. `openreel_project` and
+ * `openreel_compose` deliberately cannot advance anything: compose renders a file
  * and hands back a report, and the run is only *recorded* when that report
- * survives `studio_stage`'s checks. Keeping one writer is what makes the
+ * survives `openreel_stage`'s checks. Keeping one writer is what makes the
  * governance claim true rather than aspirational.
  *
  * A structural `ToolDefinition` is used instead of importing the harness tool
@@ -60,7 +60,7 @@ interface ToolRunContext {
   signal: AbortSignal
 }
 
-export interface StudioRuntime {
+export interface PluginRuntime {
   getConfig(): Config
   readonly machine: StateMachine
 }
@@ -104,13 +104,13 @@ function pathsOf(layout: ProjectLayout): Record<string, string> {
   }
 }
 
-/* --------------------------------------------------------- studio_project */
+/* --------------------------------------------------------- openreel_project */
 
-function projectDefinition(runtime: StudioRuntime): ToolDefinition {
+function projectDefinition(runtime: PluginRuntime): ToolDefinition {
   return {
-    name: 'studio_project',
+    name: 'openreel_project',
     description:
-      'Manage creative-studio projects and their working files. '
+      'Manage openreelbench projects and their working files. '
       + "`init` creates a project directory and returns the absolute paths to write assets into. "
       + "`status` reports every stage, which one is next, and whether the run is parked at an approval gate — call it before doing anything to an existing project. "
       + "`list` enumerates projects. `get` reads back one artifact (brief, script, asset_manifest, render_report). "
@@ -118,7 +118,7 @@ function projectDefinition(runtime: StudioRuntime): ToolDefinition {
       + "`bindings` shows which ComfyUI workflow currently backs TTS and txt2img. "
       + "`style` lists the style playbooks and returns the exact image prompt prefix, suffix, negative prompt and consistency anchors the project must use — read it before writing any image prompt. "
       + "`set_voice` records the narration voice. "
-      + 'This tool never advances pipeline state; only studio_stage does.',
+      + 'This tool never advances pipeline state; only openreel_stage does.',
     parameters: {
       type: 'object',
       properties: {
@@ -378,7 +378,7 @@ function renderProjectResult(value: Record<string, unknown>): string {
   const action = value.action as string
   if (action === 'list') {
     const projects = value.projects as Array<{ id: string; title: string; created_at: string }>
-    if (projects.length === 0) return 'No studio projects yet.'
+    if (projects.length === 0) return 'No openreelbench projects yet.'
     return ['Projects:', ...projects.map((p) => '- ' + p.id + '  ' + p.title + '  (' + p.created_at.slice(0, 10) + ')')].join('\n')
   }
 
@@ -513,7 +513,7 @@ function voiceLine(voice: string): string {
   if (voice.trim() !== '') return 'Narration voice: "' + voice + '"'
   return 'Narration voice: NOT SET — before generating any narration, ask the user which voice to use '
     + '(offer the options from the TTS workflow\'s voice parameter, or ask them to design a 解说 voice in the ComfyUI panel first), '
-    + 'then record it with studio_project action="set_voice".'
+    + 'then record it with openreel_project action="set_voice".'
 }
 
 function renderBindings(bindings: Config['bindings']): string {
@@ -535,11 +535,11 @@ function renderBindings(bindings: Config['bindings']): string {
   return lines.join('\n')
 }
 
-/* ----------------------------------------------------------- studio_stage */
+/* ----------------------------------------------------------- openreel_stage */
 
-function stageDefinition(runtime: StudioRuntime): ToolDefinition {
+function stageDefinition(runtime: PluginRuntime): ToolDefinition {
   return {
-    name: 'studio_stage',
+    name: 'openreel_stage',
     description:
       'Record a pipeline stage and advance the project. This is the ONLY way state moves, and every write is checked: '
       + 'the artifact must match its schema, every earlier stage must be completed (and approved where gated), '
@@ -657,7 +657,7 @@ function stageDefinition(runtime: StudioRuntime): ToolDefinition {
 
       // Writing a scene plan gets its variation report back with it.
       //
-      // The panel reads this off /studio/state, but the model has no way to
+      // The panel reads this off /openreel/state, but the model has no way to
       // call an HTTP route — so without this the check simply did not exist
       // for the model, and it would first learn of a repetitive plan when
       // compose refused, after every picture had been paid for. Returning it
@@ -691,16 +691,16 @@ function stageDefinition(runtime: StudioRuntime): ToolDefinition {
   }
 }
 
-/* --------------------------------------------------------- studio_compose */
+/* --------------------------------------------------------- openreel_compose */
 
-function composeDefinition(runtime: StudioRuntime): ToolDefinition {
+function composeDefinition(runtime: PluginRuntime): ToolDefinition {
   return {
-    name: 'studio_compose',
+    name: 'openreel_compose',
     description:
       'Render the finished video with FFmpeg from the approved script and the recorded asset manifest. '
       + 'Measures every narration clip with ffprobe first, lays the timeline out from those measurements '
       + '(the script timings are treated as intent), writes an SRT from the real timing, and returns a render_report. '
-      + 'It does NOT advance the pipeline: pass the returned report to studio_stage with stage="compose" to record it. '
+      + 'It does NOT advance the pipeline: pass the returned report to openreel_stage with stage="compose" to record it. '
       + 'Requires the assets stage to be completed.',
     parameters: {
       type: 'object',
@@ -762,11 +762,11 @@ function composeDefinition(runtime: StudioRuntime): ToolDefinition {
         }
         for (const warning of data.warnings) lines.push('warning: ' + warning)
         lines.push('')
-        lines.push('Now record it: studio_stage stage="compose" status="completed", passing the render_report object above through UNCHANGED - do not rebuild or tidy it.')
+        lines.push('Now record it: openreel_stage stage="compose" status="completed", passing the render_report object above through UNCHANGED - do not rebuild or tidy it.')
         return text(lines.join('\n'))
       },
       presentationMeta(args, value) {
-        // Same payload shape as studio_show, so one card renders both: a
+        // Same payload shape as openreel_show, so one card renders both: a
         // finished film is worth seeing without asking for it again.
         const data = value as { report: { outputs: Array<{ path: string; duration_seconds: number; file_size_bytes?: number }> } }
         const project = (args as { project?: unknown }).project
@@ -803,11 +803,11 @@ function composeDefinition(runtime: StudioRuntime): ToolDefinition {
   }
 }
 
-/* ----------------------------------------------------------- studio_show */
+/* ----------------------------------------------------------- openreel_show */
 
-function showDefinition(runtime: StudioRuntime): ToolDefinition {
+function showDefinition(runtime: PluginRuntime): ToolDefinition {
   return {
-    name: 'studio_show',
+    name: 'openreel_show',
     description:
       'Put project media into the conversation so the user can look at it without leaving the chat: '
       + 'a rendered film, a take, a shot, anything already inside the project. '
@@ -890,7 +890,7 @@ function showDefinition(runtime: StudioRuntime): ToolDefinition {
 
 /* ------------------------------------------------------------- registration */
 
-export function registerStudioTools(ctx: unknown, runtime: StudioRuntime): Array<() => void> {
+export function registerStudioTools(ctx: unknown, runtime: PluginRuntime): Array<() => void> {
   const tools = (ctx as { tools: { register(definition: ToolDefinition): () => void } }).tools
   return [
     tools.register(projectDefinition(runtime)),

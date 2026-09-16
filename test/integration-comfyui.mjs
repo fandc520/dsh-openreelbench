@@ -5,7 +5,7 @@
  * script names present in the dsh-comfyui library, and it reuses dsh-comfyui's
  * own compiled client so the generation path is the one the agent would drive.
  *
- * What it proves that the offline smoke test cannot: that the three studio
+ * What it proves that the offline smoke test cannot: that the three openreelbench
  * tools work against media a real workflow produced, that `import` handles a
  * ComfyUI /view URL, and — by leaving an mp4 behind — whether the Chinese TTS
  * and the txt2img style are actually good enough to ship.
@@ -140,7 +140,7 @@ async function runWorkflow(client, objectInfo, saved, values, label) {
   return media
 }
 
-/** ComfyUI's own /view URL — exactly the kind of link studio_project import takes. */
+/** ComfyUI's own /view URL — exactly the kind of link openreel_project import takes. */
 function viewUrl(item) {
   const params = new URLSearchParams({
     filename: item.filename,
@@ -169,7 +169,7 @@ async function main() {
   })
   const tools = harness({ getConfig: () => config, machine })
 
-  if (tools.names.join(',') === 'studio_project,studio_stage,studio_compose') ok('three tools registered')
+  if (tools.names.join(',') === 'openreel_project,openreel_stage,openreel_compose') ok('three tools registered')
   else bad('tool registration', tools.names.join(','))
 
   const client = new ComfyUIClient(COMFY_BASE, undefined, 10_000, 64 * 1024 * 1024)
@@ -185,10 +185,10 @@ async function main() {
 
   /* -- project + the two gates ------------------------------------------- */
 
-  const init = await tools.call('studio_project', {
+  const init = await tools.call('openreel_project', {
     action: 'init', id: PROJECT, title: '什么是可执行工作流', target_duration_seconds: 30, voice: VOICE,
   })
-  ok('studio_project init  (voice: ' + init.project.voice + ')')
+  ok('openreel_project init  (voice: ' + init.project.voice + ')')
 
   const brief = {
     version: '1.0',
@@ -200,8 +200,8 @@ async function main() {
     target_platform: 'bilibili',
     target_duration_seconds: 30,
   }
-  await tools.call('studio_stage', { project: PROJECT, stage: 'brief', status: 'awaiting_human', artifacts: { brief } })
-  await tools.call('studio_stage', { project: PROJECT, stage: 'brief', status: 'completed', artifacts: { brief }, human_approved: true })
+  await tools.call('openreel_stage', { project: PROJECT, stage: 'brief', status: 'awaiting_human', artifacts: { brief } })
+  await tools.call('openreel_stage', { project: PROJECT, stage: 'brief', status: 'completed', artifacts: { brief }, human_approved: true })
   ok('brief through the gate')
 
   let cursor = 0
@@ -226,8 +226,8 @@ async function main() {
     }),
   }
   script.total_duration_seconds = cursor
-  await tools.call('studio_stage', { project: PROJECT, stage: 'script', status: 'awaiting_human', artifacts: { script } })
-  await tools.call('studio_stage', { project: PROJECT, stage: 'script', status: 'completed', artifacts: { script }, human_approved: true })
+  await tools.call('openreel_stage', { project: PROJECT, stage: 'script', status: 'awaiting_human', artifacts: { script } })
+  await tools.call('openreel_stage', { project: PROJECT, stage: 'script', status: 'completed', artifacts: { script }, human_approved: true })
   ok('script through the gate  (' + script.sections.length + ' sections)')
 
   /* -- batch 1: all narration -------------------------------------------- */
@@ -240,7 +240,7 @@ async function main() {
       voice_name: VOICE,
     }, 'tts ' + section.id)
     const audio = media.find((item) => item.kind === 'audio') ?? media[0]
-    const imported = await tools.call('studio_project', {
+    const imported = await tools.call('openreel_project', {
       action: 'import', project: PROJECT,
       items: [{ source: viewUrl(audio), kind: 'audio', scene_id: section.id }],
     })
@@ -256,7 +256,7 @@ async function main() {
     ok('narration ' + section.id + ' -> ' + imported.imported[0].path + '  (' + Math.round(imported.imported[0].bytes / 1024) + ' KB)')
   }
 
-  const batch1 = await tools.call('studio_stage', {
+  const batch1 = await tools.call('openreel_stage', {
     project: PROJECT, stage: 'assets_audio', status: 'completed', human_approved: true,
     artifacts: { asset_manifest_audio: { version: '1.0', assets: audioAssets } },
   })
@@ -273,7 +273,7 @@ async function main() {
       height: 720,
     }, 'image ' + section.id)
     const image = media.find((item) => item.kind === 'image') ?? media[0]
-    const imported = await tools.call('studio_project', {
+    const imported = await tools.call('openreel_project', {
       action: 'import', project: PROJECT,
       items: [{ source: viewUrl(image), kind: 'image', scene_id: section.id }],
     })
@@ -290,7 +290,7 @@ async function main() {
     ok('image ' + section.id + ' -> ' + imported.imported[0].path + '  (' + Math.round(imported.imported[0].bytes / 1024) + ' KB)')
   }
 
-  const done = await tools.call('studio_stage', {
+  const done = await tools.call('openreel_stage', {
     project: PROJECT, stage: 'assets_shots', status: 'completed', human_approved: true,
     artifacts: { asset_manifest_shots: { version: '1.0', assets: imageAssets } },
   })
@@ -347,16 +347,16 @@ async function main() {
   /* -- compose ------------------------------------------------------------ */
 
   step('composing')
-  const composed = await tools.call('studio_compose', { project: PROJECT })
-  console.log(tools.render('studio_compose', {}, composed).split('\n').map((l) => '          ' + l).join('\n'))
+  const composed = await tools.call('openreel_compose', { project: PROJECT })
+  console.log(tools.render('openreel_compose', {}, composed).split('\n').map((l) => '          ' + l).join('\n'))
 
-  await tools.call('studio_stage', {
+  await tools.call('openreel_stage', {
     project: PROJECT, stage: 'compose', status: 'completed',
     artifacts: { render_report: composed.report },
   })
   ok('compose recorded')
 
-  const status = await tools.call('studio_project', { action: 'status', project: PROJECT })
+  const status = await tools.call('openreel_project', { action: 'status', project: PROJECT })
   if (status.next_stage === null) ok('pipeline complete')
   else bad('pipeline complete', 'next_stage=' + status.next_stage)
 

@@ -263,7 +263,7 @@ function sliceShots(
  * the browser reimplement it is the point: two copies of a pacing rule drift,
  * and the copy the film is cut from would be the other one.
  *
- * Durations come from the manifest, where `studio_stage` already wrote what
+ * Durations come from the manifest, where `openreel_stage` already wrote what
  * ffprobe measured, so this is a projection of recorded fact rather than an
  * estimate.
  */

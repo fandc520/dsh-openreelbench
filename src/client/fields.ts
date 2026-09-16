@@ -54,7 +54,7 @@ export const FIELD_GROUPS: FieldGroup[] = [
       {
         path: ['workspaceRoot'],
         label: '项目根目录',
-        hint: '成片、素材、状态都落在这里。留空则用 $DSH_HOME/data/dsh-creative-studio/projects（在 C 盘）。',
+        hint: '成片、素材、状态都落在这里。留空则用 $DSH_HOME/data/dsh-openreelbench/projects（在 C 盘）。',
         placeholder: 'D:/AiStudio',
         kind: 'text',
       },
@@ -168,7 +168,7 @@ export const FIELD_GROUPS: FieldGroup[] = [
       {
         path: ['renderTimeoutMs'],
         label: '合成超时（毫秒）',
-        hint: '单次 studio_compose 的上限，默认 900000（15 分钟）。',
+        hint: '单次 openreel_compose 的上限，默认 900000（15 分钟）。',
         kind: 'number',
       },
     ],

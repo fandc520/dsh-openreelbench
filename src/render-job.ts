@@ -1,7 +1,7 @@
 /**
  * Rendering the finished film — the whole act, in one place.
  *
- * This used to live inside `studio_compose`'s `execute`, which was fine while
+ * This used to live inside `openreel_compose`'s `execute`, which was fine while
  * the tool was the only way to reach it. It is not any more: pressing 合成 on
  * the compose screen renders directly rather than asking the model to do it,
  * because the last step of the pipeline has nothing left to decide. Everything
@@ -21,7 +21,7 @@ import { scoreSlideshowRisk } from './slideshow.js'
 import { resolvePlaybook } from './playbooks.js'
 import { type Cut, readCut } from './cuts.js'
 import { StateViolationError } from './state.js'
-import type { StudioRuntime } from './tools.js'
+import type { PluginRuntime } from './tools.js'
 
 export interface ComposeRequest {
   projectId: string
@@ -60,7 +60,7 @@ export interface ComposeResultPayload {
 }
 
 export async function composeProject(
-  runtime: StudioRuntime,
+  runtime: PluginRuntime,
   request: ComposeRequest,
 ): Promise<ComposeResultPayload> {
   const { projectId } = request
@@ -75,7 +75,7 @@ export async function composeProject(
         'PREREQUISITE_VIOLATION',
         'PREREQUISITE VIOLATION: cannot compose; stage ' + JSON.stringify(stage) + ' is '
         + (checkpoint === undefined ? 'never started' : checkpoint.status)
-        + '. Generate those assets and record them with studio_stage first.',
+        + '. Generate those assets and record them with openreel_stage first.',
       )
     }
   }

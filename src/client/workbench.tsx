@@ -1,9 +1,9 @@
 /**
- * 创意工作台 — the session-scoped pipeline panel.
+ * OpenReel 创意台 — the session-scoped pipeline panel.
  *
  * It holds two things and nothing else: which project this session is looking
  * at, and which step of that project is on screen. Everything else is derived
- * from `/studio/state`, so the panel never keeps a second copy of pipeline
+ * from `/openreel/state`, so the panel never keeps a second copy of pipeline
  * state that could drift from the checkpoints on disk.
  *
  * The selected project lives in component state rather than anywhere durable.
@@ -17,7 +17,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { type Catalog, type LibraryProject, type ScreenId, type StudioState, type TrashEntry, api } from './api.ts'
+import { type Catalog, type LibraryProject, type ScreenId, type PluginState, type TrashEntry, api } from './api.ts'
 import { ProjectScreen } from './project-screen.tsx'
 import { ShotsScreen } from './shots-screen.tsx'
 import { TimelineScreen } from './timeline-screen.tsx'
@@ -35,7 +35,7 @@ export interface WorkbenchProps {
 }
 
 interface ScreenProps {
-  state: StudioState
+  state: PluginState
   onReload: () => Promise<void>
   onSend: (text: string) => Promise<void>
   onGoToStage: (stageId: string) => void
@@ -86,7 +86,7 @@ export function Workbench({ send, sessionId }: WorkbenchProps): JSX.Element {
   const [projects, setProjects] = useState<LibraryProject[]>([])
   const [trash, setTrash] = useState<TrashEntry[]>([])
   const [projectId, setProjectId] = useState<string | null>(restored.projectId)
-  const [state, setState] = useState<StudioState | undefined>(undefined)
+  const [state, setState] = useState<PluginState | undefined>(undefined)
   const [activeStage, setActiveStage] = useState<string | null>(restored.stage)
   /**
    * Which edit version the panel is looking at.
@@ -204,7 +204,7 @@ export function Workbench({ send, sessionId }: WorkbenchProps): JSX.Element {
 
   if (projectId === null) {
     return (
-      <div className="dcs-workbench">
+      <div className="orb-workbench">
         <Welcome
           catalog={catalog}
           projects={projects}
@@ -220,13 +220,13 @@ export function Workbench({ send, sessionId }: WorkbenchProps): JSX.Element {
 
   if (state === undefined) {
     return (
-      <div className="dcs-workbench dcs-centered">
+      <div className="orb-workbench orb-centered">
         {error === null
-          ? <p className="dcs-note">读取项目中…</p>
+          ? <p className="orb-note">读取项目中…</p>
           : (
-            <div className="dcs-empty">
-              <p className="dcs-note dcs-note-error">{error}</p>
-              <button type="button" className="dcs-btn" onClick={backToWelcome}>返回</button>
+            <div className="orb-empty">
+              <p className="orb-note orb-note-error">{error}</p>
+              <button type="button" className="orb-btn" onClick={backToWelcome}>返回</button>
             </div>
           )}
       </div>
@@ -238,25 +238,25 @@ export function Workbench({ send, sessionId }: WorkbenchProps): JSX.Element {
   const screen = current.stage.screen
 
   return (
-    <div className="dcs-workbench">
-      <header className="dcs-topbar">
-        <button type="button" className="dcs-back" onClick={backToWelcome} title="回到欢迎页">←</button>
-        <div className="dcs-topbar-body">
-          <span className="dcs-topbar-title">{state.project.title}</span>
-          <span className="dcs-topbar-meta">
+    <div className="orb-workbench">
+      <header className="orb-topbar">
+        <button type="button" className="orb-back" onClick={backToWelcome} title="回到欢迎页">←</button>
+        <div className="orb-topbar-body">
+          <span className="orb-topbar-title">{state.project.title}</span>
+          <span className="orb-topbar-meta">
             {state.pipeline.definition.name} · {state.project.target_duration_seconds}s ·
             {' '}{state.style.playbook.name}
             {state.project.voice === '' ? ' · 音色未定' : ' · ' + state.project.voice}
           </span>
         </div>
-        <button type="button" className="dcs-btn" disabled={loading} onClick={() => void reload()}>
+        <button type="button" className="orb-btn" disabled={loading} onClick={() => void reload()}>
           {loading ? '刷新中…' : '刷新'}
         </button>
       </header>
 
       <Rail steps={steps} onSelect={selectStage} />
 
-      {error !== null ? <p className="dcs-note dcs-note-error">{error}</p> : null}
+      {error !== null ? <p className="orb-note orb-note-error">{error}</p> : null}
 
       {/* One path only. Two hand-written conditionals for project and script
           outlived the registry above and rendered those two screens twice —
@@ -271,12 +271,12 @@ export function Workbench({ send, sessionId }: WorkbenchProps): JSX.Element {
           onSelectCut: setCutId,
         })
         : (
-          <div className="dcs-screen dcs-placeholder">
-            <h2 className="dcs-screen-title">{SCREEN_TITLES[screen]}</h2>
-            <p className="dcs-note">
+          <div className="orb-screen orb-placeholder">
+            <h2 className="orb-screen-title">{SCREEN_TITLES[screen]}</h2>
+            <p className="orb-note">
               这一页还没做。当前阶段 <code>{current.stage.id}</code>，状态 <code>{current.status}</code>。
             </p>
-            <p className="dcs-hint">{current.stage.hint}</p>
+            <p className="orb-hint">{current.stage.hint}</p>
           </div>
         )}
     </div>

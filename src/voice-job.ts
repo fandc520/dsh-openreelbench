@@ -39,7 +39,7 @@ import { workflowLine } from './job-conventions.js'
 const NEWLINE = String.fromCharCode(10)
 
 /** The sheet carries the recording protocol; the request only points at it. */
-export const AUDIO_STAGE_SKILL = 'dsh-creative-studio-stage-assets-audio'
+export const AUDIO_STAGE_SKILL = 'dsh-openreelbench-stage-assets-audio'
 
 export function buildVoiceJob(input: VoiceJobInput): string {
   const lines: string[] = [

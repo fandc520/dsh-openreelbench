@@ -188,7 +188,7 @@ export function slugify(title: string): string {
 
 export function defaultWorkspaceRoot(): string {
   const base = process.env.DSH_HOME ?? join(homedir(), '.dsh')
-  return join(base, 'data', 'dsh-creative-studio', 'projects')
+  return join(base, 'data', 'dsh-openreelbench', 'projects')
 }
 
 export function resolveWorkspaceRoot(configured: string): string {

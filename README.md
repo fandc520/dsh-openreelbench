@@ -1,8 +1,8 @@
-# dsh-creative-studio
+# dsh-openreelbench
 
 English: [README.en.md](README.en.md)
 
-DeepSeek Harness 插件：把一句话需求变成一条带配音、配图和字幕的解说片。
+**dsh 开源视频创意台** —— DeepSeek Harness 插件，把一句话需求变成一条带配音、配图和字幕的解说片。
 
 四段状态机，两个人工审批闸：
 
@@ -15,7 +15,7 @@ brief ──[闸]──> script ──[闸]──> assets ──> compose
 的 `comfyui_workflow` 去跑。换工作流只改配置，不改代码。
 
 双面结构：宿主半面（工具 / 技能 / 设置命名空间注册）+ 浏览器半面（设置页 UI）。
-设置页在「设置 → AI 创意工作室」独立侧边栏入口下，见 [插件开发标准](docs/PLUGIN_DEVELOPMENT.md)。
+设置页在「设置 → OpenReel 创意台」独立侧边栏入口下，见 [插件开发标准](docs/PLUGIN_DEVELOPMENT.md)。
 
 ## 为什么要一个状态机
 
@@ -36,7 +36,7 @@ brief ──[闸]──> script ──[闸]──> assets ──> compose
 需要 Node ≥ 22.19 和 PATH 上的 `ffmpeg` / `ffprobe`。
 
 ```sh
-npx -p @deepseek-ai/dsh dsh plugin --profile <你的 profile> add github:fandc520/dsh-creative-studio
+npx -p @deepseek-ai/dsh dsh plugin --profile <你的 profile> add github:fandc520/dsh-openreelbench
 ```
 
 pnpm ≥ 10 默认拦截 Git 依赖的构建脚本，需要在 profile 的 `pnpm-workspace.yaml` 里
@@ -45,12 +45,12 @@ pnpm ≥ 10 默认拦截 Git 依赖的构建脚本，需要在 profile 的 `pnpm
 本地开发装法：
 
 ```sh
-npx -p @deepseek-ai/dsh dsh plugin --profile <你的 profile> add D:\dev-projects\Ai-CreativityStudio\dsh-creative-studio
+npx -p @deepseek-ai/dsh dsh plugin --profile <你的 profile> add D:\dev-projects\Ai-CreativityStudio\dsh-openreelbench
 ```
 
 ## 配置
 
-两个入口写同一份值：**DSH 设置页的 `studio` 段**，以及 `cordis.yml` 里的 `studio` 层。
+两个入口写同一份值：**DSH 设置页的 `openreel` 段**，以及 `cordis.yml` 里的 `openreel` 层。
 同一套 schemastery schema 驱动两边——设置页把 `cordis.yml` 当基础层，只写你改动的部分。
 
 改动**即时生效**，不用重启：项目根、ffprobe 路径都是每次调用时读，
@@ -60,10 +60,10 @@ npx -p @deepseek-ai/dsh dsh plugin --profile <你的 profile> add D:\dev-project
 `cordis.yml` 那一层长这样：
 
 ```yaml
-- id: studio
-  name: dsh-creative-studio
+- id: openreel
+  name: dsh-openreelbench
   config:
-    workspaceRoot: ''            # 空 = $DSH_HOME/data/dsh-creative-studio/projects
+    workspaceRoot: ''            # 空 = $DSH_HOME/data/dsh-openreelbench/projects
     defaultDurationSeconds: 30
     video:                       # 只有编码参数；观感和节奏归风格库
       width: 1920
@@ -128,12 +128,12 @@ npx -p @deepseek-ai/dsh dsh plugin --profile <你的 profile> add D:\dev-project
           maxSectionSeconds: 24
 ```
 
-`studio_project action: "style"` 会把当前风格的**可直接粘贴的提示词模板**交给 Agent。
+`openreel_project action: "style"` 会把当前风格的**可直接粘贴的提示词模板**交给 Agent。
 单段还能用 `delivery_cues.pause_before_seconds` / `pause_after_seconds` 覆盖风格的默认留白。
 
 ### 音色
 
-音色**不在绑定表里**，它是项目级设置：`studio_project action="init"` 时传 `voice`，
+音色**不在绑定表里**，它是项目级设置：`openreel_project action="init"` 时传 `voice`，
 或事后 `action="set_voice"`。为空时工具输出会明写 `NOT SET`，Agent 必须先问用户
 （把 TTS 工作流 voice 参数的 options 列出来给他挑）再生成配音。
 
@@ -144,15 +144,15 @@ npx -p @deepseek-ai/dsh dsh plugin --profile <你的 profile> add D:\dev-project
 
 | 工具 | 职责 |
 |---|---|
-| `studio_project` | `init` / `status` / `list` / `get` / `import` / `set_voice` / `style` / `bindings`。`import` 把 ComfyUI 产出（绝对路径或 http 媒体代理 URL）搬进项目，返回 manifest 要用的项目相对路径 |
-| `studio_stage` | **状态机唯一入口**。写产物 + 推进状态，任何校验不过就抛错 |
-| `studio_compose` | ffprobe 量时长 → 排时间轴 → 出字幕 → ffmpeg 出片，返回 `render_report`。**它不推进状态**，报告要交给 `studio_stage` 记录 |
-| `studio_show` | 把项目里**已有**的文件放进对话里当场预览（成片、配音、分镜都行）。只回显，不生成、不导入、不落盘 |
+| `openreel_project` | `init` / `status` / `list` / `get` / `import` / `set_voice` / `style` / `bindings`。`import` 把 ComfyUI 产出（绝对路径或 http 媒体代理 URL）搬进项目，返回 manifest 要用的项目相对路径 |
+| `openreel_stage` | **状态机唯一入口**。写产物 + 推进状态，任何校验不过就抛错 |
+| `openreel_compose` | ffprobe 量时长 → 排时间轴 → 出字幕 → ffmpeg 出片，返回 `render_report`。**它不推进状态**，报告要交给 `openreel_stage` 记录 |
+| `openreel_show` | 把项目里**已有**的文件放进对话里当场预览（成片、配音、分镜都行）。只回显，不生成、不导入、不落盘 |
 
-分成两步是故意的：`studio_compose` 只是产出一个文件，这一趟算不算数，
-由 `studio_stage` 核对输出文件真实存在之后才认。
+分成两步是故意的：`openreel_compose` 只是产出一个文件，这一趟算不算数，
+由 `openreel_stage` 核对输出文件真实存在之后才认。
 
-设置页通过 `installSettingsSection` 注册在 `studio` 命名空间下；宿主没有 settings 服务时
+设置页通过 `installSettingsSection` 注册在 `openreel` 命名空间下；宿主没有 settings 服务时
 （headless）这一段直接不注册，`cordis.yml` 的值照常生效。
 
 插件通过 `ctx.skills.register` 注册**两份**运行时技能（可被项目/用户技能覆盖），
@@ -160,8 +160,8 @@ npx -p @deepseek-ai/dsh dsh plugin --profile <你的 profile> add D:\dev-project
 
 | 技能 | 管什么 | 何时加载 |
 |---|---|---|
-| `dsh-creative-studio-explainer` | 怎么做片子：四段流程、审批闸协议、脚本与表演指导、风格契约 | 开始创作时 |
-| `dsh-creative-studio-usage` | 工具怎么表现：谁改状态、输入会被怎样规范化、错误码处置、重试语义、路径规则、与 dsh-comfyui 的分工 | 遇到报错、不确定工具副作用时 |
+| `dsh-openreelbench-explainer` | 怎么做片子：四段流程、审批闸协议、脚本与表演指导、风格契约 | 开始创作时 |
+| `dsh-openreelbench-usage` | 工具怎么表现：谁改状态、输入会被怎样规范化、错误码处置、重试语义、路径规则、与 dsh-comfyui 的分工 | 遇到报错、不确定工具副作用时 |
 
 两份里的绑定表和风格契约都按当前配置实时渲染。
 
@@ -205,7 +205,7 @@ pnpm test               # 端到端冒烟测试，需要 ffmpeg
 ### 配乐
 
 合成页有一条**配乐**轨道。填一个 ComfyUI 配乐工作流的名称，点「添加音乐」，
-Agent 会先读 `dsh-creative-studio-sound-design` 技能选曲，再用那条工作流生成，
+Agent 会先读 `dsh-openreelbench-sound-design` 技能选曲，再用那条工作流生成，
 最后以 `kind: "music"` 搬进项目——**不填 `scene_id`**，因为音乐属于整部片子。
 
 三项可调：**音量、淡入、淡出**，填完点保存（有未保存改动时按钮旁会显示「未保存」）。

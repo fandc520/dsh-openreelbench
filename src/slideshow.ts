@@ -8,7 +8,7 @@
  * a risk it might drift into — it is the thing it is, and the only question is
  * whether it is a good one.
  *
- * UNLIKE the variation check, this one CAN refuse: `studio_compose` will not
+ * UNLIKE the variation check, this one CAN refuse: `openreel_compose` will not
  * render a blocking score without an explicit override (see `blocking` at the
  * bottom for what counts). The reasoning behind putting a stop here and
  * nowhere else:

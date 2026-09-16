@@ -106,9 +106,9 @@ export function Waveform({
     // the centerline, easing to green toward the peaks — colour maps to
     // amplitude, so the loud passages read deeper without a second look.
     const waveGrad = context.createLinearGradient(0, 0, 0, height)
-    waveGrad.addColorStop(0, cssVar(canvas, '--dcs-wave-edge', '#34d399'))
-    waveGrad.addColorStop(0.5, cssVar(canvas, '--dcs-wave-core', '#22d3ee'))
-    waveGrad.addColorStop(1, cssVar(canvas, '--dcs-wave-edge', '#34d399'))
+    waveGrad.addColorStop(0, cssVar(canvas, '--orb-wave-edge', '#34d399'))
+    waveGrad.addColorStop(0.5, cssVar(canvas, '--orb-wave-core', '#22d3ee'))
+    waveGrad.addColorStop(1, cssVar(canvas, '--orb-wave-edge', '#34d399'))
     const middle = height / 2
 
     if (buffer === null) {
@@ -163,10 +163,10 @@ export function Waveform({
   }
 
   return (
-    <div className="dcs-wave">
+    <div className="orb-wave">
       <canvas
         ref={canvasRef}
-        className="dcs-wave-canvas"
+        className="orb-wave-canvas"
         style={{ height: height + 'px' }}
         onPointerDown={(event) => {
           if (buffer === null) return
@@ -190,11 +190,11 @@ export function Waveform({
           if (drag !== null && Math.abs(secondsAt(event) - drag.from) < 0.05) onSelectionChange(null)
         }}
       />
-      <div className="dcs-wave-foot">
-        {loading ? <span className="dcs-hint">读取波形…</span> : null}
-        {error !== null ? <span className="dcs-hint dcs-note-error">{error}</span> : null}
+      <div className="orb-wave-foot">
+        {loading ? <span className="orb-hint">读取波形…</span> : null}
+        {error !== null ? <span className="orb-hint orb-note-error">{error}</span> : null}
         {buffer !== null && error === null && !loading ? (
-          <span className="dcs-hint">
+          <span className="orb-hint">
             {selection === null
               ? '全长 ' + buffer.duration.toFixed(2) + ' 秒 · 在波形上拖选要保留的部分'
               : '保留 ' + selection.start.toFixed(2) + ' – ' + selection.end.toFixed(2)

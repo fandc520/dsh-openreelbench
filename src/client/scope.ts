@@ -1,5 +1,5 @@
 /**
- * The browser half's handle on the `studio` settings namespace.
+ * The browser half's handle on the `openreel` settings namespace.
  *
  * Everything here is structural. The scope arrives on the client context as
  * `ctx.settingsScope` — a service, not an import — so this bundle never pulls a
@@ -13,7 +13,7 @@
 import { useSyncExternalStore } from 'react'
 
 /** Must match the namespace the host registers in `src/index.ts`. */
-export const STUDIO_NAMESPACE = 'studio'
+export const OPENREEL_NAMESPACE = 'openreel'
 
 /** Client-side sync state of one settings namespace. */
 export interface ScopeSnapshot<T> {
@@ -52,7 +52,7 @@ export interface SettingsScopeBinder {
  *
  * `send` is the panel's only channel to the model, and it exists only in a
  * session scope — the host throws `conversation.send requires a session scope`
- * from a root context. That constraint is why 创意工作台 is a
+ * from a root context. That constraint is why OpenReel 创意台 is a
  * `conversation.view` and not a `shell.overlay`.
  */
 /** One text part of a prompt. Images are not sent from this panel. */
@@ -88,7 +88,7 @@ export interface SessionsService {
   binding(id: string): { session: SessionFace } | undefined
 }
 
-export interface StudioClientContext {
+export interface ClientContext {
   effect(callback: () => unknown, label?: string): void
   slots: {
     inject(slot: string, register: () => unknown): void

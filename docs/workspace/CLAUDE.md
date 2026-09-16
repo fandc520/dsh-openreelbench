@@ -6,7 +6,7 @@
 再用 TypeScript 重建成 **DSH（DeepSeek Harness）插件**，并**全本地化**——
 凡是「生成像素和波形」的能力统一走 ComfyUI。
 
-产物是本工作区里的 **`dsh-creative-studio/`**，一个能把一句话需求变成成片的 DSH 插件。
+产物是本工作区里的 **`dsh-openreelbench/`**，一个能把一句话需求变成成片的 DSH 插件。
 它以符号链接接入 DSH 的 `web` profile（见「本机环境」）。
 
 ### 要什么，不要什么
@@ -65,7 +65,7 @@ d:\dev-projects\Ai-CreativityStudio\      ← 唯一项目根：分析、文档�
 │       ├── inject.py             把数据注入 HTML 模板
 │       └── wrap_local.py         给 artifact 片段补 doctype 外壳
 ├── OpenMontage/              上游克隆（**只读参考，不要在里面改代码**）
-└── dsh-creative-studio/      ← 改造产物：独立可发布的 DSH 插件包
+└── dsh-openreelbench/      ← 改造产物：独立可发布的 DSH 插件包
     ├── README.md                 用户向：安装、配置、四个工具、风格库、音色
     ├── docs/PLUGIN_DEVELOPMENT.md    DSH 的 48 个 UI 挂载点全表 + 挑位决策表
     ├── src/                      host 11 个模块约 3600 行
@@ -84,12 +84,12 @@ D:\AiStudio\                  ← 成片产出目录（插件的 workspaceRoot�
 
 | 要找 | 去哪 |
 |---|---|
-| 插件怎么用、怎么配 | [dsh-creative-studio/README.md](dsh-creative-studio/README.md) |
+| 插件怎么用、怎么配 | [dsh-openreelbench/README.md](dsh-openreelbench/README.md) |
 | 做过什么、下一步做什么、为什么这么设计 | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | **该怎么做、不该怎么做**（ComfyUI / FFmpeg / 测试 / 工作方法） | [CONVENTIONS.md](CONVENTIONS.md) |
 | **DSH 平台的坑** | `.claude/skills/dsh-plugin-development/SKILL.md` §10 |
 | DSH 插件开发契约（host/client、bundle/profile、slot、Conversation Node） | `.claude/skills/dsh-plugin-development/SKILL.md` |
-| **界面要挂在哪个位置**（48 个插槽全表、风险标记、决策表） | [dsh-creative-studio/docs/PLUGIN_DEVELOPMENT.md](dsh-creative-studio/docs/PLUGIN_DEVELOPMENT.md) |
+| **界面要挂在哪个位置**（48 个插槽全表、风险标记、决策表） | [dsh-openreelbench/docs/PLUGIN_DEVELOPMENT.md](dsh-openreelbench/docs/PLUGIN_DEVELOPMENT.md) |
 | **还有哪些 OM 的东西没搬、该先搬哪个** | [docs/om-05-blueprint.md](docs/om-05-blueprint.md) |
 | OM 某个工具/管线/风格的原始定义 | `docs/data/*.json`，或 `OpenMontage/` 对应源文件 |
 | OM 的状态机、三层知识、四层检验怎么设计的 | `docs/om-02-anatomy.html` |
@@ -126,8 +126,8 @@ Python 只提供工具和持久化。状态机是代码（`lib/checkpoint.py`）
 Win11 / Node 24 / pnpm 11 / Python 3.12 / FFmpeg 8.1（`ffmpeg` `ffprobe` 都在 PATH）。
 ComfyUI 在 `http://127.0.0.1:8188`。DSH_HOME 未设置，落在 `~/.dsh`。
 插件已装进用户在用的 `web` profile，走符号链接而非拷贝：
-`~/.dsh/profiles/web/package.json` 里是 `"dsh-creative-studio": "link:D:/dev-projects/Ai-CreativityStudio/dsh-creative-studio"`，
-`node_modules/dsh-creative-studio` 是指向该目录的原生符号链接。
+`~/.dsh/profiles/web/package.json` 里是 `"dsh-openreelbench": "link:D:/dev-projects/Ai-CreativityStudio/dsh-openreelbench"`，
+`node_modules/dsh-openreelbench` 是指向该目录的原生符号链接。
 **挪动插件目录必须同步改这两处**（外加 `pnpm-lock.yaml` 与 `node_modules/.package-map.json` 里的同名路径），否则 DSH 加载不到。
 
 OM 的 venv 在 `OpenMontage/.venv/`，已装 requirements + pygments + piper-tts；
@@ -175,11 +175,11 @@ OM 的 venv 在 `OpenMontage/.venv/`，已装 requirements + pygments + piper-tt
 | `CLAUDE.md`（本文件） | 项目是什么、东西在哪 |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | 做过什么、下一步做什么、为什么这么设计 |
 | [CONVENTIONS.md](CONVENTIONS.md) | 该怎么做、不该怎么做 |
-| `dsh-creative-studio/docs/PLUGIN_DEVELOPMENT.md` | 界面该挂在哪个位置（48 个插槽全表） |
+| `dsh-openreelbench/docs/PLUGIN_DEVELOPMENT.md` | 界面该挂在哪个位置（48 个插槽全表） |
 
 ## 代码检索（CodeGraph）
 
-本工作区**整体**是一个 CodeGraph 索引根（`.codegraph/` 在此层，不在 `dsh-creative-studio/` 内，
+本工作区**整体**是一个 CodeGraph 索引根（`.codegraph/` 在此层，不在 `dsh-openreelbench/` 内，
 所以插件将来独立成包时目录是干净的）。`codegraph.json` 把 `OpenMontage/` 和 `docs/`
 标为 `deprioritize`——仍然可查，但排序永远压在插件代码之下。
 

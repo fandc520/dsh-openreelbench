@@ -1,9 +1,9 @@
 /**
- * The studio Settings page (`settings.section`, id `studio`).
+ * The openreelbench Settings page (`settings.section`, id `openreel`).
  *
- * The shell mounts it as the content of the "AI 创意工作室" sidebar entry and
+ * The shell mounts it as the content of the "OpenReel 创意台" sidebar entry and
  * passes `close` (unused here — a settings form never leaves settings); the
- * page's data comes through the bound `scope` for the `studio` namespace.
+ * page's data comes through the bound `scope` for the `openreel` namespace.
  *
  * Edits are STAGED and written only on save. Each settings write is a durable,
  * revision-fenced document mutation, so a control that committed as it settled
@@ -35,7 +35,7 @@ interface Edit {
   value: unknown
 }
 
-export interface StudioSettingsSectionProps {
+export interface SettingsSectionProps {
   /** Owner share from the settings shell (unused; kept for the slot contract). */
   close?: () => void
   scope: SettingsScope<Config>
@@ -65,7 +65,7 @@ function toList(value: unknown): string[] {
   return value.map((entry) => (typeof entry === 'string' ? entry : String(entry)))
 }
 
-export function StudioSettingsSection({ scope }: StudioSettingsSectionProps): JSX.Element | null {
+export function SettingsSection({ scope }: SettingsSectionProps): JSX.Element | null {
   const snapshot = useScope(scope)
   const [edits, setEdits] = useState<Map<string, Edit>>(new Map())
   const [saving, setSaving] = useState(false)
@@ -175,28 +175,28 @@ export function StudioSettingsSection({ scope }: StudioSettingsSectionProps): JS
     const error = errors.get(key)
 
     const head = (
-      <div className="dcs-field-head">
-        <span className="dcs-label">{spec.label}</span>
-        {overridden ? <span className="dcs-badge">已覆盖</span> : null}
+      <div className="orb-field-head">
+        <span className="orb-label">{spec.label}</span>
+        {overridden ? <span className="orb-badge">已覆盖</span> : null}
       </div>
     )
     const hint = spec.hint === undefined
       ? null
-      : <div className={error === undefined ? 'dcs-hint' : 'dcs-hint dcs-note-error'}>{error ?? spec.hint}</div>
+      : <div className={error === undefined ? 'orb-hint' : 'orb-hint orb-note-error'}>{error ?? spec.hint}</div>
 
     if (spec.kind === 'boolean') {
       const checked = edit !== undefined ? edit.value === true : stored === true
       return (
-        <div className="dcs-field" key={key}>
-          <label className="dcs-check">
+        <div className="orb-field" key={key}>
+          <label className="orb-check">
             <input
               type="checkbox"
               checked={checked}
               disabled={readOnly}
               onChange={(event) => stage(spec, event.target.checked)}
             />
-            <span className="dcs-label">{spec.label}</span>
-            {overridden ? <span className="dcs-badge">已覆盖</span> : null}
+            <span className="orb-label">{spec.label}</span>
+            {overridden ? <span className="orb-badge">已覆盖</span> : null}
           </label>
           {hint}
         </div>
@@ -210,10 +210,10 @@ export function StudioSettingsSection({ scope }: StudioSettingsSectionProps): JS
       // must still be visible, or saving would silently rewrite it.
       const known = options.some((option) => option.value === current)
       return (
-        <div className="dcs-field" key={key}>
+        <div className="orb-field" key={key}>
           {head}
           <select
-            className="dcs-select"
+            className="orb-select"
             value={current}
             disabled={readOnly}
             onChange={(event) => stage(spec, event.target.value)}
@@ -234,14 +234,14 @@ export function StudioSettingsSection({ scope }: StudioSettingsSectionProps): JS
       // would require clicking "+" before it could be entered at all.
       const rows = items.length === 0 ? [''] : items
       return (
-        <div className="dcs-field" key={key}>
+        <div className="orb-field" key={key}>
           {head}
-          <div className="dcs-list">
+          <div className="orb-list">
             {rows.map((value, index) => (
-              <div className="dcs-list-row" key={index}>
-                {index === 0 ? <span className="dcs-list-tag">默认</span> : null}
+              <div className="orb-list-row" key={index}>
+                {index === 0 ? <span className="orb-list-tag">默认</span> : null}
                 <input
-                  className="dcs-input"
+                  className="orb-input"
                   type="text"
                   value={value}
                   placeholder={index === 0 ? (spec.placeholder ?? '默认工作流') : '候选工作流'}
@@ -255,7 +255,7 @@ export function StudioSettingsSection({ scope }: StudioSettingsSectionProps): JS
                 />
                 <button
                   type="button"
-                  className="dcs-list-remove"
+                  className="orb-list-remove"
                   disabled={readOnly || items.length === 0}
                   aria-label="删除这一条"
                   onClick={() => {
@@ -270,7 +270,7 @@ export function StudioSettingsSection({ scope }: StudioSettingsSectionProps): JS
           </div>
           <button
             type="button"
-            className="dcs-btn dcs-list-add"
+            className="orb-btn orb-list-add"
             disabled={readOnly}
             onClick={() => stageList(spec, [...items, ''])}
           >
@@ -285,10 +285,10 @@ export function StudioSettingsSection({ scope }: StudioSettingsSectionProps): JS
       ? (typeof edit.value === 'string' ? edit.value : toText(edit.value))
       : toText(stored)
     return (
-      <div className="dcs-field" key={key}>
+      <div className="orb-field" key={key}>
         {head}
         <input
-          className={error === undefined ? 'dcs-input' : 'dcs-input dcs-invalid'}
+          className={error === undefined ? 'orb-input' : 'orb-input orb-invalid'}
           type="text"
           inputMode={spec.kind === 'number' ? 'numeric' : undefined}
           value={text}
@@ -318,40 +318,40 @@ export function StudioSettingsSection({ scope }: StudioSettingsSectionProps): JS
         run.push(fields[index]!)
         index += 1
       }
-      out.push(<div className="dcs-row" key={'row-' + spec.row}>{run.map(renderField)}</div>)
+      out.push(<div className="orb-row" key={'row-' + spec.row}>{run.map(renderField)}</div>)
     }
     return out
   }
 
   return (
-    <div className="dcs-card">
+    <div className="orb-card">
       {FIELD_GROUPS.map((group) => (
-        <div className="dcs-group dcs-group-boxed" key={group.title}>
-          <div className="dcs-group-title">{group.title}</div>
-          {group.blurb === undefined ? null : <p className="dcs-group-blurb">{group.blurb}</p>}
+        <div className="orb-group orb-group-boxed" key={group.title}>
+          <div className="orb-group-title">{group.title}</div>
+          {group.blurb === undefined ? null : <p className="orb-group-blurb">{group.blurb}</p>}
           {renderFields(group.fields)}
         </div>
       ))}
 
-      <div className="dcs-group">
-        <div className="dcs-hint">
+      <div className="orb-group">
+        <div className="orb-hint">
           风格库本身（提示词模板、一致性锚点、质量红线）在 profile 的 <code>cordis.yml</code> 里编辑，
           这里只选用哪一套。
         </div>
       </div>
 
-      <div className="dcs-actions">
-        {loading ? <span className="dcs-note">读取中…</span> : null}
+      <div className="orb-actions">
+        {loading ? <span className="orb-note">读取中…</span> : null}
         {!loading && !snapshot.writable
-          ? <span className="dcs-note dcs-note-warn">当前连接不接受写入，改动无法保存。</span>
+          ? <span className="orb-note orb-note-warn">当前连接不接受写入，改动无法保存。</span>
           : null}
         {result !== null
-          ? <span className={result.kind === 'ok' ? 'dcs-note dcs-note-ok' : 'dcs-note dcs-note-error'}>{result.text}</span>
+          ? <span className={result.kind === 'ok' ? 'orb-note orb-note-ok' : 'orb-note orb-note-error'}>{result.text}</span>
           : null}
-        <span className="dcs-spacer" />
-        <button className="dcs-btn" type="button" disabled={!dirty || saving} onClick={discard}>撤销</button>
+        <span className="orb-spacer" />
+        <button className="orb-btn" type="button" disabled={!dirty || saving} onClick={discard}>撤销</button>
         <button
-          className="dcs-btn dcs-btn-primary"
+          className="orb-btn orb-btn-primary"
           type="button"
           disabled={!dirty || blocked || readOnly}
           onClick={() => { void save() }}

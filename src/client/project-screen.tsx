@@ -17,23 +17,23 @@
  *
  * Two kinds of write leave this screen, and they are deliberately different:
  *
- *   - Marker fields (title, duration, style) go to `POST /studio/project`.
+ *   - Marker fields (title, duration, style) go to `POST /openreel/project`.
  *     They are project settings, not pipeline state, and changing a title
  *     should not invalidate a script.
- *   - The brief goes to `POST /studio/stage`, which runs the full check set
+ *   - The brief goes to `POST /openreel/stage`, which runs the full check set
  *     and moves the gate. Approving here is the same act as telling the model
  *     "看过了，可以" — so it also says exactly that in the conversation, and
  *     the model picks the run up from there.
  */
 import { useEffect, useMemo, useState } from 'react'
 
-import { PLATFORM_FRAMES, type Brief, type StudioState, api } from './api.ts'
+import { PLATFORM_FRAMES, type Brief, type PluginState, api } from './api.ts'
 import { type AgentPhase, BusyLabel } from './busy.tsx'
 import { IconCheck, IconDoc, IconMic, IconPalette, IconPlay, IconSliders, IconSpark } from './icons.tsx'
 import { buildBriefApprovedNote, buildBriefJob } from '../brief-job.js'
 
 export interface ProjectScreenProps {
-  state: StudioState
+  state: PluginState
   onReload: () => Promise<void>
   onSend: (text: string) => Promise<void>
 }
@@ -51,7 +51,7 @@ interface Draft {
 
 type Note = { kind: 'ok' | 'error'; text: string }
 
-function draftFrom(state: StudioState): Draft {
+function draftFrom(state: PluginState): Draft {
   const brief = state.artifacts.brief ?? {}
   return {
     title: state.project.title,
@@ -231,7 +231,7 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
         status: 'completed',
         artifacts: { brief },
         human_approved: true,
-        note: '在创意工作台确认',
+        note: '在OpenReel 创意台确认',
       })
       await onReload()
       await onSend(buildBriefApprovedNote(state.project.id, brief.title ?? draft.title.trim()))
@@ -244,40 +244,40 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
   }
 
   return (
-    <div className="dcs-screen">
-      <header className="dcs-screen-head">
-        <h2 className="dcs-screen-title">项目详情</h2>
-        <span className="dcs-spacer" />
-        <span className={'dcs-pill ' + (approved ? 'dcs-pill-ok' : parked ? 'dcs-pill-wait' : '')}>
+    <div className="orb-screen">
+      <header className="orb-screen-head">
+        <h2 className="orb-screen-title">项目详情</h2>
+        <span className="orb-spacer" />
+        <span className={'orb-pill ' + (approved ? 'orb-pill-ok' : parked ? 'orb-pill-wait' : '')}>
           {approved ? '已通过' : parked ? '等你确认' : stage?.status === 'pending' ? '未开始' : (stage?.status ?? '未开始')}
         </span>
       </header>
 
-      <section className="dcs-card">
-        <div className="dcs-card-head">
-          <IconSliders className="dcs-section-icon" />
-          <h3 className="dcs-card-title">项目设置</h3>
-          {dirty ? <span className="dcs-card-mark">未保存</span> : null}
+      <section className="orb-card">
+        <div className="orb-card-head">
+          <IconSliders className="orb-section-icon" />
+          <h3 className="orb-card-title">项目设置</h3>
+          {dirty ? <span className="orb-card-mark">未保存</span> : null}
         </div>
-        <div className="dcs-card-body">
-          <div className="dcs-setgrid">
-            <label className="dcs-field">
-              <span className="dcs-label">标题</span>
-              <input className="dcs-input" value={draft.title} onChange={(e) => set('title', e.target.value)} />
+        <div className="orb-card-body">
+          <div className="orb-setgrid">
+            <label className="orb-field">
+              <span className="orb-label">标题</span>
+              <input className="orb-input" value={draft.title} onChange={(e) => set('title', e.target.value)} />
             </label>
-            <label className="dcs-field">
-              <span className="dcs-label">时长（秒）</span>
+            <label className="orb-field">
+              <span className="orb-label">时长（秒）</span>
               <input
-                className="dcs-input"
+                className="orb-input"
                 inputMode="numeric"
                 value={draft.duration}
                 onChange={(e) => set('duration', e.target.value)}
               />
             </label>
-            <label className="dcs-field">
-              <span className="dcs-label">投放平台</span>
+            <label className="orb-field">
+              <span className="orb-label">投放平台</span>
               <select
-                className="dcs-select"
+                className="orb-select"
                 value={draft.platform}
                 onChange={(e) => set('platform', e.target.value)}
               >
@@ -287,89 +287,89 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
                   </option>
                 ))}
               </select>
-              <span className="dcs-hint">
+              <span className="orb-hint">
                 {/* Said before rendering, not after: the frame is the one setting
                     whose consequence is invisible until the film comes out wrong. */}
                 成片按这个出画幅，
                 {platformFrame?.id === 'generic'
                   ? '现在用设置里的默认值。'
                   : <b>{platformFrame?.frame}</b>}
-                {platformChanged ? <b className="dcs-note-warn">　（预览中，保存后生效）</b> : null}
+                {platformChanged ? <b className="orb-note-warn">　（预览中，保存后生效）</b> : null}
               </span>
             </label>
           </div>
 
-          <div className="dcs-style-row">
-            <label className="dcs-field">
-              <span className="dcs-label">风格</span>
-              <select className="dcs-select" value={draft.style} onChange={(e) => set('style', e.target.value)}>
+          <div className="orb-style-row">
+            <label className="orb-field">
+              <span className="orb-label">风格</span>
+              <select className="orb-select" value={draft.style} onChange={(e) => set('style', e.target.value)}>
                 {state.style.options.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.name}（{option.id}）— {option.mood}
                   </option>
                 ))}
               </select>
-              <span className="dcs-hint">
+              <span className="orb-hint">
                 {playbook.best_for} · 语速约 {playbook.narration.chars_per_second} 字/秒 ·
                 单段 {playbook.pacing.minSectionSeconds}–{playbook.pacing.maxSectionSeconds} 秒
-                {styleChanged ? <b className="dcs-note-warn">　（预览中，保存后生效）</b> : null}
+                {styleChanged ? <b className="orb-note-warn">　（预览中，保存后生效）</b> : null}
               </span>
             </label>
 
-            <div className="dcs-style-card">
-            <div className="dcs-style-line">
-              <b><IconPalette className="dcs-style-glyph" />画面基调</b>{playbook.mood}
+            <div className="orb-style-card">
+            <div className="orb-style-line">
+              <b><IconPalette className="orb-style-glyph" />画面基调</b>{playbook.mood}
             </div>
-            <div className="dcs-style-line">
-              <b><IconMic className="dcs-style-glyph" />旁白语气</b>{playbook.narration.voice_style}
+            <div className="orb-style-line">
+              <b><IconMic className="orb-style-glyph" />旁白语气</b>{playbook.narration.voice_style}
             </div>
-            <div className="dcs-style-line">
-              <b><IconSpark className="dcs-style-glyph" />一致性锚点</b>
-              <ul className="dcs-anchors">
+            <div className="orb-style-line">
+              <b><IconSpark className="orb-style-glyph" />一致性锚点</b>
+              <ul className="orb-anchors">
                 {playbook.visual.consistency_anchors.map((anchor) => <li key={anchor}>{anchor}</li>)}
               </ul>
             </div>
             </div>
           </div>
         </div>
-        <div className="dcs-card-foot">
+        <div className="orb-card-foot">
           {saveNote !== null ? (
-            <span className={'dcs-note ' + (saveNote.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{saveNote.text}</span>
+            <span className={'orb-note ' + (saveNote.kind === 'ok' ? 'orb-note-ok' : 'orb-note-error')}>{saveNote.text}</span>
           ) : null}
-          <span className="dcs-spacer" />
-          <button type="button" className="dcs-btn" disabled={busy !== 'idle'} onClick={() => void saveSettings()}>
-            <IconCheck className="dcs-btn-icon" />
+          <span className="orb-spacer" />
+          <button type="button" className="orb-btn" disabled={busy !== 'idle'} onClick={() => void saveSettings()}>
+            <IconCheck className="orb-btn-icon" />
             {busy === 'saving' ? '保存中…' : '保存设置'}
           </button>
         </div>
       </section>
 
-      <section className="dcs-card">
-        <div className="dcs-card-head">
-          <IconDoc className="dcs-section-icon" />
-          <h3 className="dcs-card-title">创意简报</h3>
+      <section className="orb-card">
+        <div className="orb-card-head">
+          <IconDoc className="orb-section-icon" />
+          <h3 className="orb-card-title">创意简报</h3>
         </div>
-        <div className="dcs-card-body">
+        <div className="orb-card-body">
           {!hasBrief && phase === null ? (
-            <p className="dcs-note">
+            <p className="orb-note">
               还没有简报。可以自己写，也可以让 Agent 先起一版——它知道项目标题、时长和风格。
             </p>
           ) : null}
 
-          <label className="dcs-field">
-            <span className="dcs-label">开场钩子</span>
+          <label className="orb-field">
+            <span className="orb-label">开场钩子</span>
             <input
-              className="dcs-input"
+              className="orb-input"
               value={draft.hook}
               placeholder="开场三秒抓人的那一句，不是标题的复述"
               onChange={(e) => set('hook', e.target.value)}
             />
           </label>
 
-          <label className="dcs-field">
-            <span className="dcs-label">关键要点</span>
+          <label className="orb-field">
+            <span className="orb-label">关键要点</span>
             <textarea
-              className="dcs-input dcs-textarea"
+              className="orb-input orb-textarea"
               rows={5}
               value={draft.keyPoints}
               placeholder={'一行一条，三到五条。\n每条是一个能独立成段的信息点，不是关键词。'}
@@ -377,63 +377,63 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
             />
           </label>
 
-          <div className="dcs-row">
-            <label className="dcs-field">
-              <span className="dcs-label">受众（可选）</span>
-              <input className="dcs-input" value={draft.audience} onChange={(e) => set('audience', e.target.value)} />
+          <div className="orb-row">
+            <label className="orb-field">
+              <span className="orb-label">受众（可选）</span>
+              <input className="orb-input" value={draft.audience} onChange={(e) => set('audience', e.target.value)} />
             </label>
-            <label className="dcs-field">
-              <span className="dcs-label">调性（可选）</span>
-              <input className="dcs-input" value={draft.tone} onChange={(e) => set('tone', e.target.value)} />
+            <label className="orb-field">
+              <span className="orb-label">调性（可选）</span>
+              <input className="orb-input" value={draft.tone} onChange={(e) => set('tone', e.target.value)} />
             </label>
           </div>
 
           {problems.length > 0 ? (
-            <ul className="dcs-problems">
+            <ul className="orb-problems">
               {problems.map((problem) => <li key={problem}>{problem}</li>)}
             </ul>
           ) : null}
 
           {briefNote !== null ? (
-            <p className={'dcs-note ' + (briefNote.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{briefNote.text}</p>
+            <p className={'orb-note ' + (briefNote.kind === 'ok' ? 'orb-note-ok' : 'orb-note-error')}>{briefNote.text}</p>
           ) : null}
         </div>
-        <div className="dcs-card-foot">
-          <span className="dcs-hint">
+        <div className="orb-card-foot">
+          <span className="orb-hint">
             {keyPoints.length} 条 · {durationValue > 0 ? '按当前风格约 ' + budget + ' 字' : ''}
           </span>
-          <span className="dcs-spacer" />
+          <span className="orb-spacer" />
           <button
             type="button"
-            className="dcs-btn dcs-btn-small dcs-btn-accent"
+            className="orb-btn orb-btn-small orb-btn-accent"
             disabled={phase !== null || busy !== 'idle'}
             title="让 Agent 换一个方向重写，你可以多要几版再挑"
             onClick={() => void askForBrief(hasBrief ? 'regenerate' : 'draft')}
           >
-            <IconSpark className="dcs-btn-icon" />
+            <IconSpark className="orb-btn-icon" />
             <BusyLabel phase={phase} idle={hasBrief ? '重新生成' : '让 Agent 起草'} />
           </button>
         </div>
       </section>
 
-      <div className="dcs-cta">
+      <div className="orb-cta">
         <button
           type="button"
-          className="dcs-cta-primary"
+          className="orb-cta-primary"
           disabled={busy !== 'idle' || problems.length > 0}
           title={problems.length > 0 ? problems[0] : undefined}
           onClick={() => void submit()}
         >
-          <IconPlay className="dcs-cta-icon" />
+          <IconPlay className="orb-cta-icon" />
           {busy === 'submitting' ? '提交中…' : approved ? '重新提交简报' : '确认简报，进入脚本'}
         </button>
-        <p className="dcs-cta-hint">
+        <p className="orb-cta-hint">
           {approved
             ? '这一版已经确认过了。再提交会替换简报，后面所有阶段都要重做。'
             : '这一页所有信息确认后的下一步——之后 Agent 才会开始写脚本。'}
         </p>
         {submitNote !== null ? (
-          <p className={'dcs-note ' + (submitNote.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{submitNote.text}</p>
+          <p className={'orb-note ' + (submitNote.kind === 'ok' ? 'orb-note-ok' : 'orb-note-error')}>{submitNote.text}</p>
         ) : null}
       </div>
     </div>

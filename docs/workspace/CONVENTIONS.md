@@ -97,7 +97,7 @@ TTS 产出的长度永远不是写脚本时估的。合成前先 ffprobe 量每�
 
 ### 4.4 让 Agent 交 schema 化的产物，就要把字段表写进 skill
 
-**症状**：Agent 调 `studio_stage` 记录 compose，连着两次 `SCHEMA INVALID` ——
+**症状**：Agent 调 `openreel_stage` 记录 compose，连着两次 `SCHEMA INVALID` ——
 第一次多写了顶层字段，第二次 outputs 里少了 `format` / `resolution` / `duration_seconds`。
 两次都靠读报错信息试出来。
 
@@ -192,7 +192,7 @@ Agent 读到「原样」，但手里已经有一份自己整理过的摘要，
 
 ### 4.5 给 Agent 加能力时，先问「它有没有那个入口」
 
-**症状**：给分镜计划加了重复度检查，skill 里写「结果在 `/studio/state` 的 `variation` 里」。
+**症状**：给分镜计划加了重复度检查，skill 里写「结果在 `/openreel/state` 的 `variation` 里」。
 面板显示正常，测试全绿。**但 Agent 调不了 HTTP 路由**——
 对它来说这道检查等于不存在，要一路走到 compose 被拦下才知道出事，
 而那时图已经全生成完，正好错过检查存在的意义。
@@ -204,8 +204,8 @@ Agent 读到「原样」，但手里已经有一份自己整理过的摘要，
 **正确做法**：能力的**投递时机跟着使用时机走**。
 不要让 Agent 去问，而是在它做那件事的那一刻**塞给它**：
 
-- 重复度报告 → `studio_stage` 提交 `scene_plan` 时**一并返回**
-- 自审重点 → `studio_project action: "status"` 返回**下一段**的，事前不是事后
+- 重复度报告 → `openreel_stage` 提交 `scene_plan` 时**一并返回**
+- 自审重点 → `openreel_project action: "status"` 返回**下一段**的，事前不是事后
 
 而且要**渲染进文本**——Agent 读的是 `render()` 的输出，不是 payload。
 
@@ -518,7 +518,7 @@ for (...) { setClock(FIXED); frame() }   // 循环里保持不变
 
 ### 5.11 断言「请求里的值回来了」不等于断言「它起作用了」
 
-**症状**：`studio_compose` 从来没有 `cut` 参数，剪辑版本每次都被丢掉，
+**症状**：`openreel_compose` 从来没有 `cut` 参数，剪辑版本每次都被丢掉，
 渲染的永远是计划版本——而测试是绿的。
 
 **根因**：断言写的是 `result.cut === cutId`。
@@ -605,7 +605,7 @@ assert new in s                                   # 再验证
 ### 6.2 不要在构建进行中重启宿主
 
 **症状**：GUI 启动报
-`failed to import loader entry (dsh-creative-studio): bundle script /plugins/.../client.js failed to load`。
+`failed to import loader entry (dsh-openreelbench): bundle script /plugins/.../client.js failed to load`。
 而磁盘上文件好好的，`node --check` 通过，测试全绿。
 
 **根因**：宿主在启动时读一次插件产物并挂静态路由。如果那一刻 `client/client.js`
@@ -723,7 +723,7 @@ VS Code 里装 `pomdtr.excalidraw-editor` 可直接双击编辑；
 
 ```
 ╭─[ src/client/workbench-styles.ts:789:24 ]
-│ 789 │    Its own class, NOT dcs-btn-accent: that name means "ask the model again"
+│ 789 │    Its own class, NOT orb-btn-accent: that name means "ask the model again"
 │      │                        ╰─
 │ Help: Try inserting a semicolon here
 ```
@@ -732,7 +732,7 @@ VS Code 里装 `pomdtr.excalidraw-editor` 可直接双击编辑；
 后面的 CSS 就被当成 TypeScript 源码解析——于是报错指向的是「散文」，不是「字符串坏了」。
 
 **正确做法**：CSS 里**一个反引号都不能有**，注释里也不行。要引用类名就直接写
-`.dcs-btn-accent` 这个名字，不要给它加引号包裹。
+`.orb-btn-accent` 这个名字，不要给它加引号包裹。
 
 **怎么更早发现**：认症状。**「rolldown 指着一句中文/英文散文说缺分号」= 样式表里混进了反引号。**
 文件头部注释里的反引号是安全的（在字符串外面），只有 `const CSS = ` 之后的算。
@@ -747,15 +747,15 @@ VS Code 里装 `pomdtr.excalidraw-editor` 可直接双击编辑；
 只是被同名的另一条覆盖了。
 
 已经发生两次：
-- `.dcs-select-small` 隔着 594 行声明两次 → 镜头语言下拉框比设计宽，用户反馈「太挤」
-- `.dcs-btn-accent` 隔着 486 行声明两次（一条是强调色，一条是「未保存」的金色）
+- `.orb-select-small` 隔着 594 行声明两次 → 镜头语言下拉框比设计宽，用户反馈「太挤」
+- `.orb-btn-accent` 隔着 486 行声明两次（一条是强调色，一条是「未保存」的金色）
   → 四个界面上六个「重新生成」按钮**全部渲染成金色**
 
 **根因**：两处各自都读得通，谁也不知道对方存在。而**颜色错了仍然像是有意为之**，
 所以没有任何一个环节会觉得不对。
 
 **正确做法**：一个 class 一个含义。含义变窄的那个改名（上例里「未保存」改成
-`.dcs-btn-dirty`，因为它只有一个使用点）。
+`.orb-btn-dirty`，因为它只有一个使用点）。
 
 **怎么更早发现**：冒烟测试里有一条 `class name collision`，直接扫样式表里重复的选择器。
 新增样式时它会告诉你撞了谁、在哪两行。
@@ -764,11 +764,11 @@ VS Code 里装 `pomdtr.excalidraw-editor` 可直接双击编辑；
 
 **症状**：新加的轨道块跑到了时间轴最上方，压在刻度尺上，而不是待在自己那条轨里。
 
-**根因**：`.dcs-music-block` 照着字幕条写了 `position: absolute`，
-但 `.dcs-lane-blocks` 是**没有定位的 flex 行**，绝对定位的子元素于是向上
+**根因**：`.orb-music-block` 照着字幕条写了 `position: absolute`，
+但 `.orb-lane-blocks` 是**没有定位的 flex 行**，绝对定位的子元素于是向上
 找到最近的已定位祖先，落在轨道顶端。
 
-字幕条能这么写，是因为字幕轨自己额外加了 `.dcs-lane-cues { position: relative }`——
+字幕条能这么写，是因为字幕轨自己额外加了 `.orb-lane-cues { position: relative }`——
 它必须绝对定位，因为每条字幕各有各的偏移。**这个前提没被一起抄过来。**
 
 **正确做法**：先问「我这个块需要各自偏移吗」。不需要（只有一块、铺满整条轨）
@@ -915,7 +915,7 @@ const actionsOf = (tool) => allTools.get(tool)?.parameters?.properties?.action?.
 const paramsOf  = (tool) => Object.keys(allTools.get(tool)?.parameters?.properties ?? {})
 ```
 
-没有 action 枚举的工具（如 `studio_compose`）则断言**参数存在**。
+没有 action 枚举的工具（如 `openreel_compose`）则断言**参数存在**。
 
 ### 9.3 当前状态（2026-09-09）
 
@@ -925,11 +925,11 @@ const paramsOf  = (tool) => Object.keys(allTools.get(tool)?.parameters?.properti
 **直接执行**：合成 · 过闸 · 保存/删除剪辑版本 · 裁剪音频 · 项目设置 · 素材导入 · 目标平台
 
 **已有共享函数**：`composeProject`（合成）· `machine.write`（过闸/产物）·
-`importAssets`（导入）· `parseCut`（剪辑版本，面板路由与 `studio_edit` 共用）·
+`importAssets`（导入）· `parseCut`（剪辑版本，面板路由与 `openreel_edit` 共用）·
 `trimAudioAsset`（裁剪）
 
-**Agent 侧入口**：`studio_edit`（`cuts` / `save_cut` / `delete_cut` / `trim_audio`）·
-`studio_project` 的 `set_platform`
+**Agent 侧入口**：`openreel_edit`（`cuts` / `save_cut` / `delete_cut` / `trim_audio`）·
+`openreel_project` 的 `set_platform`
 
 ### 9.4 什么**不需要**给 Agent 通路
 

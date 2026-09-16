@@ -29,7 +29,7 @@ export function phaseLabel(phase: AgentPhase): string {
 
 /** A small ring that keeps turning while a phase is active. */
 export function Spinner(): JSX.Element {
-  return <span className="dcs-spinner" aria-hidden="true" />
+  return <span className="orb-spinner" aria-hidden="true" />
 }
 
 export interface BusyLabelProps {
@@ -42,7 +42,7 @@ export interface BusyLabelProps {
 export function BusyLabel({ phase, idle }: BusyLabelProps): JSX.Element {
   if (phase === null) return <>{idle}</>
   return (
-    <span className="dcs-busy">
+    <span className="orb-busy">
       <Spinner />
       {phaseLabel(phase)}
     </span>

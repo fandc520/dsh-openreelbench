@@ -22,7 +22,7 @@
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 
-import { type Cut, type CutSection, type StudioState, api, bindingWorkflows } from './api.ts'
+import { type Cut, type CutSection, type PluginState, api, bindingWorkflows } from './api.ts'
 import { type AgentPhase, BusyLabel, Spinner } from './busy.tsx'
 import { IconClapper, IconPlay, IconSliders } from './icons.tsx'
 import { AdvicePanel } from './advice-panel.tsx'
@@ -32,7 +32,7 @@ import { MUSIC_SKILL, buildMusicJob } from '../music-job.js'
 import { DUCK_DB, MIX_BOUNDS, gainToVolume, resolveMusicSettings } from '../audio-mix.js'
 
 export interface TimelineScreenProps {
-  state: StudioState
+  state: PluginState
   onReload: () => Promise<void>
   onSend: (text: string) => Promise<void>
   onGoToStage: (stageId: string) => void
@@ -79,7 +79,7 @@ const LANE_LABEL = 42
  */
 const CUE_STEP = 0.2
 
-/** Must match `.dcs-block`'s right margin, or the gaps drift as blocks move. */
+/** Must match `.orb-block`'s right margin, or the gaps drift as blocks move. */
 const BLOCK_GAP = 2
 
 function pxAt(seconds: number, pps: number): string {
@@ -296,7 +296,7 @@ export function TimelineScreen({
   const filmUrl = useMemo(() => {
     const path = cut?.output ?? state.film?.path
     if (path === undefined) return undefined
-    return '/studio/media?project=' + encodeURIComponent(state.project.id)
+    return '/openreel/media?project=' + encodeURIComponent(state.project.id)
       + '&path=' + encodeURIComponent(path)
   }, [cut, state.film, state.project.id])
 
@@ -377,12 +377,12 @@ export function TimelineScreen({
   }, [state.artifacts.render_report])
 
   /** During a drag the lane follows the pointer, ahead of the saved value. */
-  function liveLead(timing: StudioState['timeline'][number]): number {
+  function liveLead(timing: PluginState['timeline'][number]): number {
     return dragPad?.sectionId === timing.sectionId && dragPad.edge === 'lead'
       ? dragPad.seconds
       : timing.lead
   }
-  function liveTail(timing: StudioState['timeline'][number]): number {
+  function liveTail(timing: PluginState['timeline'][number]): number {
     return dragPad?.sectionId === timing.sectionId && dragPad.edge === 'tail'
       ? dragPad.seconds
       : Math.max(0, timing.duration - timing.lead - timing.speechSeconds)
@@ -461,7 +461,7 @@ export function TimelineScreen({
     const startX = event.clientX
     let last = 0
     const move = (moved: PointerEvent): void => {
-      document.body.classList.add('dcs-dragging')
+      document.body.classList.add('orb-dragging')
       // Dragging the left edge leftwards lengthens the cue; the right edge
       // reads the other way round.
       last = (moved.clientX - startX) * perPixel * (edge === 'left' ? -1 : 1)
@@ -470,7 +470,7 @@ export function TimelineScreen({
     const up = (): void => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
-      document.body.classList.remove('dcs-dragging')
+      document.body.classList.remove('orb-dragging')
       setDragCue(null)
       // One write at the end of the gesture: every intermediate value would be
       // its own durable document revision.
@@ -488,7 +488,7 @@ export function TimelineScreen({
     const timing = state.timeline.find((entry) => entry.sectionId === activeShot?.sectionId)
     const shot = timing?.shots.find((entry) => entry.index === activeShot?.shotIndex)
     if (shot?.path === undefined) return undefined
-    return '/studio/media?project=' + encodeURIComponent(state.project.id)
+    return '/openreel/media?project=' + encodeURIComponent(state.project.id)
       + '&path=' + encodeURIComponent(shot.path)
   }, [activeShot, state.timeline, state.project.id])
 
@@ -499,7 +499,7 @@ export function TimelineScreen({
   /**
    * A content signature, not the array's identity.
    *
-   * Every `/studio/state` fetch returns a fresh array, so keying the preview on
+   * Every `/openreel/state` fetch returns a fresh array, so keying the preview on
    * the reference tore it down on any refresh — including the one that fires on
    * mount, which killed playback a second after it started. Rebuilding should
    * follow the timings actually changing, nothing else.
@@ -682,7 +682,7 @@ export function TimelineScreen({
    */
   useEffect(() => {
     const container = film.current
-    const scroller = container?.querySelector('.dcs-strip') as HTMLElement | null
+    const scroller = container?.querySelector('.orb-strip') as HTMLElement | null
     if (container === null || scroller === null) return undefined
 
     const onWheel = (event: WheelEvent): void => {
@@ -739,7 +739,7 @@ export function TimelineScreen({
    * pauses, the subtitle style and the music were all settled on this screen.
    * Sending them to a model as prose was a round trip that could only lose
    * something — and did: the message named the selected version and
-   * `studio_compose` had no parameter to put it in, so every render was of the
+   * `openreel_compose` had no parameter to put it in, so every render was of the
    * plan. The tool keeps its place for unattended runs; both go through the
    * same host function.
    */
@@ -1288,51 +1288,51 @@ export function TimelineScreen({
   }
 
   return (
-    <div className="dcs-screen dcs-screen-wide">
-      <header className="dcs-screen-head">
-        <h2 className="dcs-screen-title">合成</h2>
-        <span className="dcs-spacer" />
-        <span className={'dcs-pill ' + (recorded ? 'dcs-pill-ok' : '')}>
+    <div className="orb-screen orb-screen-wide">
+      <header className="orb-screen-head">
+        <h2 className="orb-screen-title">合成</h2>
+        <span className="orb-spacer" />
+        <span className={'orb-pill ' + (recorded ? 'orb-pill-ok' : '')}>
           {recorded ? '已记录' : filmUrl === undefined ? '未合成' : '未记录'}
         </span>
       </header>
 
       {result !== null ? (
-        <p className={'dcs-note ' + (result.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{result.text}</p>
+        <p className={'orb-note ' + (result.kind === 'ok' ? 'orb-note-ok' : 'orb-note-error')}>{result.text}</p>
       ) : null}
 
-      <section className="dcs-card">
-        <div className="dcs-card-head">
-          <IconPlay className="dcs-section-icon" />
-          <h3 className="dcs-card-title">合成</h3>
-          <span className="dcs-card-meta">
+      <section className="orb-card">
+        <div className="orb-card-head">
+          <IconPlay className="orb-section-icon" />
+          <h3 className="orb-card-title">合成</h3>
+          <span className="orb-card-meta">
             <span><b>{state.timeline.length}</b> 段 · <b>{shotBlocks.length}</b> 镜 · 全片 <b>{total.toFixed(1)}</b> 秒
               {cut === undefined ? '' : ' · 剪辑「' + cut.name + '」'}</span>
           </span>
         </div>
-        <div className="dcs-card-body">
+        <div className="orb-card-body">
           {/* A render is minutes long and used to show a spinner and nothing else,
               which is indistinguishable from a stuck one. The label says what is
               happening; the bar says it is still happening. */}
           {render === null ? null : (
-            <div className="dcs-render">
-              <div className="dcs-render-head">
+            <div className="orb-render">
+              <div className="orb-render-head">
                 <Spinner />
-                <span className="dcs-render-label">{render.label}</span>
-                <span className="dcs-spacer" />
-                <span className="dcs-hint dcs-render-clock">
+                <span className="orb-render-label">{render.label}</span>
+                <span className="orb-spacer" />
+                <span className="orb-hint orb-render-clock">
                   {Math.round(render.fraction * 100)}%　已用 {formatClock(render.elapsed)}
                 </span>
               </div>
               <div
-                className="dcs-render-bar"
+                className="orb-render-bar"
                 role="progressbar"
                 aria-valuenow={Math.round(render.fraction * 100)}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-label="合成进度"
               >
-                <div className="dcs-render-fill" style={{ width: (render.fraction * 100).toFixed(1) + '%' }} />
+                <div className="orb-render-fill" style={{ width: (render.fraction * 100).toFixed(1) + '%' }} />
               </div>
             </div>
           )}
@@ -1344,13 +1344,13 @@ export function TimelineScreen({
             <AdvicePanel
               title="成片检查"
               action={!risk.blocking ? undefined : (
-                <label className="dcs-inline-pick" title="看过分数仍然要出片">
+                <label className="orb-inline-pick" title="看过分数仍然要出片">
                   <input
                     type="checkbox"
                     checked={forceRender}
                     onChange={(event) => setForceRender(event.target.checked)}
                   />
-                  <span className="dcs-hint">我看过了，照出</span>
+                  <span className="orb-hint">我看过了，照出</span>
                 </label>
               )}
               rows={Object.entries(risk.dimensions).map(([name, entry]) => ({
@@ -1365,30 +1365,30 @@ export function TimelineScreen({
           )}
 
           {/* Versions left, mode right, one row over the picture they control. */}
-          <div className="dcs-compose-top">
-            <div className="dcs-cutbar">
+          <div className="orb-compose-top">
+            <div className="orb-cutbar">
               <button
                 type="button"
-                className={'dcs-cut' + (cut === undefined ? ' dcs-cut-active' : '')}
+                className={'orb-cut' + (cut === undefined ? ' orb-cut-active' : '')}
                 onClick={() => onSelectCut('')}
               >计划版本</button>
               {state.cuts.map((entry) => (
-                <span className={'dcs-cut-wrap' + (entry.id === cutId ? ' dcs-cut-wrap-active' : '')} key={entry.id}>
+                <span className={'orb-cut-wrap' + (entry.id === cutId ? ' orb-cut-wrap-active' : '')} key={entry.id}>
                   <button
                     type="button"
-                    className={'dcs-cut' + (entry.id === cutId ? ' dcs-cut-active' : '')}
+                    className={'orb-cut' + (entry.id === cutId ? ' orb-cut-active' : '')}
                     title={(entry.note ?? '') + '　更新于 ' + entry.updated_at.slice(0, 16).replace('T', ' ')}
                     onClick={() => onSelectCut(entry.id)}
                   >
                     {entry.name}
-                    {entry.output === undefined ? <span className="dcs-cut-dot" title="还没出片">·</span> : null}
+                    {entry.output === undefined ? <span className="orb-cut-dot" title="还没出片">·</span> : null}
                   </button>
                   {/* Float under the chip, not beside it: the row stays one
                       chip wide, and the commands read as belonging to it. */}
-                  <span className="dcs-cut-actions">
+                  <span className="orb-cut-actions">
                     <button
                       type="button"
-                      className="dcs-cut-x"
+                      className="orb-cut-x"
                       aria-label="重命名这一版"
                       title="重命名"
                       disabled={busy !== null}
@@ -1396,7 +1396,7 @@ export function TimelineScreen({
                     >✎</button>
                     <button
                       type="button"
-                      className="dcs-cut-x"
+                      className="orb-cut-x"
                       aria-label="删除这一版"
                       disabled={busy !== null}
                       onClick={() => void removeCut(entry)}
@@ -1404,7 +1404,7 @@ export function TimelineScreen({
                   </span>
                 </span>
               ))}
-              <button type="button" className="dcs-cut dcs-cut-new" disabled={busy !== null}
+              <button type="button" className="orb-cut orb-cut-new" disabled={busy !== null}
                 onClick={() => void newCut()}>＋ 新版本</button>
             </div>
           </div>
@@ -1412,22 +1412,22 @@ export function TimelineScreen({
           {/* The picture and its facts, 7:3. The mode switch floats over the
               picture itself: it changes what the picture IS, so it belongs on
               it, centered where the eye already is. */}
-          <div className="dcs-compose-stage-row">
-            <div className="dcs-stage">
+          <div className="orb-compose-stage-row">
+            <div className="orb-stage">
               {/* One control, two states, no third option: the render is a mode
                   you can leave, so it reads as a switch rather than as a button
                   that does something. An empty timeline has no modes to switch. */}
               {state.timeline.length === 0 ? null : (
-                <div className="dcs-mode dcs-mode-overlay" role="group" aria-label="预览模式">
+                <div className="orb-mode orb-mode-overlay" role="group" aria-label="预览模式">
                   <button
                     type="button"
-                    className={'dcs-mode-btn' + (mode === 'edit' ? ' dcs-mode-on' : '')}
+                    className={'orb-mode-btn' + (mode === 'edit' ? ' orb-mode-on' : '')}
                     onClick={showEdit}
                     title="回到编辑：改这一版，或另存一版"
                   >原稿编辑</button>
                   <button
                     type="button"
-                    className={'dcs-mode-btn' + (mode === 'film' ? ' dcs-mode-on' : '')}
+                    className={'orb-mode-btn' + (mode === 'film' ? ' orb-mode-on' : '')}
                     disabled={filmUrl === undefined}
                     onClick={showFilm}
                     title={filmUrl === undefined ? '还没有合成成片' : '播放已合成的成片'}
@@ -1437,13 +1437,13 @@ export function TimelineScreen({
             {state.timeline.length === 0 ? (
               /* An empty timeline is not a broken preview — it is an earlier
                  stage asking to be done. Point at the doors, in order. */
-              <div className="dcs-stage-guide">
-                <p className="dcs-stage-guide-title">时间线还是空的</p>
-                <p className="dcs-stage-guide-hint">先去配音生成解说，再去分镜出画面，回来这里排时间轴。</p>
-                <div className="dcs-stage-guide-actions">
-                  <button type="button" className="dcs-btn dcs-btn-accent"
+              <div className="orb-stage-guide">
+                <p className="orb-stage-guide-title">时间线还是空的</p>
+                <p className="orb-stage-guide-hint">先去配音生成解说，再去分镜出画面，回来这里排时间轴。</p>
+                <div className="orb-stage-guide-actions">
+                  <button type="button" className="orb-btn orb-btn-accent"
                     onClick={() => onGoToStage('assets_audio')}>去配音</button>
-                  <button type="button" className="dcs-btn dcs-btn-accent"
+                  <button type="button" className="orb-btn orb-btn-accent"
                     onClick={() => onGoToStage('assets_shots')}>去分镜</button>
                 </div>
               </div>
@@ -1451,42 +1451,42 @@ export function TimelineScreen({
               /* No render yet — play it locally instead. The clips and stills are
                  already here, so waiting on ffmpeg to hear a pause would put a
                  multi-minute round trip inside the one loop that has to be tight. */
-              <div className="dcs-preview">
+              <div className="orb-preview">
                 {activeShotPath === undefined ? (
-                  <div className="dcs-stage-guide">
-                    <p className="dcs-stage-guide-title">这一镜还没有画面</p>
-                    <p className="dcs-stage-guide-hint">分镜还缺这一张，生成后预览会自动接上。</p>
-                    <div className="dcs-stage-guide-actions">
-                      <button type="button" className="dcs-btn dcs-btn-accent"
+                  <div className="orb-stage-guide">
+                    <p className="orb-stage-guide-title">这一镜还没有画面</p>
+                    <p className="orb-stage-guide-hint">分镜还缺这一张，生成后预览会自动接上。</p>
+                    <div className="orb-stage-guide-actions">
+                      <button type="button" className="orb-btn orb-btn-accent"
                         onClick={() => onGoToStage('assets_shots')}>去分镜生成</button>
                     </div>
                   </div>
                 ) : (
-                  <img className="dcs-preview-frame" src={activeShotPath} alt="" />
+                  <img className="orb-preview-frame" src={activeShotPath} alt="" />
                 )}
                 {activeCue === undefined
                   ? null
-                  : <div className="dcs-preview-sub">{activeCue.text}</div>}
+                  : <div className="orb-preview-sub">{activeCue.text}</div>}
                 {filmUrl === undefined ? null : (
-                  <div className="dcs-stage-badge">编辑中 · 成片还是上一次合成的</div>
+                  <div className="orb-stage-badge">编辑中 · 成片还是上一次合成的</div>
                 )}
                 <button
                   type="button"
-                  className={'dcs-preview-play' + (previewing ? ' dcs-preview-play-on' : '')}
+                  className={'orb-preview-play' + (previewing ? ' orb-preview-play-on' : '')}
                   aria-label={previewing ? '暂停' : '预览播放'}
                   onClick={togglePreview}
                 >{previewing ? '❚❚' : '▶'}</button>
                 {/* Over the picture rather than beside the strip: it reads as part
                     of what is playing, and the strip stops paying for its width. */}
-                <div className="dcs-timecode">
-                  <span className="dcs-timecode-now">{formatClock(at)}</span>
-                  <span className="dcs-timecode-total">/ {formatClock(total)}</span>
+                <div className="orb-timecode">
+                  <span className="orb-timecode-now">{formatClock(at)}</span>
+                  <span className="orb-timecode-total">/ {formatClock(total)}</span>
                 </div>
               </div>
             ) : (
               <video
                 ref={player}
-                className="dcs-player"
+                className="orb-player"
                 src={filmUrl}
                 controls
                 /* Without this the element has no intrinsic ratio before playback,
@@ -1507,56 +1507,56 @@ export function TimelineScreen({
             </div>
 
             {activeShot !== undefined && activeTiming !== undefined ? (
-              <aside className="dcs-shot-info">
-                <div className="dcs-col-head"><b>镜头信息</b></div>
-                <div className="dcs-facts-box">
-                  <div className="dcs-facts-title">
+              <aside className="orb-shot-info">
+                <div className="orb-col-head"><b>镜头信息</b></div>
+                <div className="orb-facts-box">
+                  <div className="orb-facts-title">
                     {activeTiming.label} · 第 {(activeShot.shotIndex ?? 0) + 1} 镜
-                    <span className="dcs-hint">
+                    <span className="orb-hint">
                       　{formatClock(activeShot.start)} – {formatClock(activeShot.start + activeShot.duration)}
                     </span>
                   </div>
-                  <dl className="dcs-facts">
+                  <dl className="orb-facts">
                     {/* Three numbers a person checks while trimming, laid out as
                         tiles: name above, value below, side by side — the facts
                         panel is narrow, and stacking them made it a ladder. */}
-                    <div className="dcs-facts-stats">
-                      <div className="dcs-facts-stat"><dt>本镜</dt><dd>{activeShot.duration.toFixed(2)}s</dd></div>
-                      <div className="dcs-facts-stat"><dt>分段</dt><dd>{activeTiming.duration.toFixed(2)}s</dd></div>
-                      <div className="dcs-facts-stat"><dt>配音</dt><dd>{activeTiming.speechSeconds.toFixed(2)}s</dd></div>
+                    <div className="orb-facts-stats">
+                      <div className="orb-facts-stat"><dt>本镜</dt><dd>{activeShot.duration.toFixed(2)}s</dd></div>
+                      <div className="orb-facts-stat"><dt>分段</dt><dd>{activeTiming.duration.toFixed(2)}s</dd></div>
+                      <div className="orb-facts-stat"><dt>配音</dt><dd>{activeTiming.speechSeconds.toFixed(2)}s</dd></div>
                     </div>
-                    <div className="dcs-fact-wide">
+                    <div className="orb-fact-wide">
                       <dt>台词</dt>
                       <dd>{activeTiming.text === '' ? '（无）' : activeTiming.text}</dd>
                     </div>
-                    <div className="dcs-fact-wide">
+                    <div className="orb-fact-wide">
                       <dt>音频</dt>
-                      <dd className="dcs-mono">{fileNameOf(activeTiming.narrationPath) ?? '（未生成）'}</dd>
+                      <dd className="orb-mono">{fileNameOf(activeTiming.narrationPath) ?? '（未生成）'}</dd>
                     </div>
-                    <div className="dcs-fact-wide">
+                    <div className="orb-fact-wide">
                       <dt>画面</dt>
-                      <dd className="dcs-mono">{fileNameOf(activeShotPathRaw) ?? '（未生成）'}</dd>
+                      <dd className="orb-mono">{fileNameOf(activeShotPathRaw) ?? '（未生成）'}</dd>
                     </div>
                   </dl>
                 </div>
               </aside>
             ) : (
-              <aside className="dcs-shot-info">
-                <div className="dcs-col-head"><b>镜头信息</b></div>
-                <p className="dcs-note">时间线还没有片段。</p>
+              <aside className="orb-shot-info">
+                <div className="orb-col-head"><b>镜头信息</b></div>
+                <p className="orb-note">时间线还没有片段。</p>
               </aside>
             )}
           </div>
 
           {/* Subtitle tools centered under the picture; the render pair hugs
               the right edge, because it acts on the whole cut. */}
-          <div className="dcs-compose-actions">
+          <div className="orb-compose-actions">
             <span aria-hidden="true" />
-            <div className="dcs-compose-subtools">
-              <label className="dcs-inline-pick" title="烧录会重新编码整段视频，并依赖本机中文字体；关掉则字幕只作为旁挂 .srt 导出">
-                <span className="dcs-hint">字幕</span>
+            <div className="orb-compose-subtools">
+              <label className="orb-inline-pick" title="烧录会重新编码整段视频，并依赖本机中文字体；关掉则字幕只作为旁挂 .srt 导出">
+                <span className="orb-hint">字幕</span>
                 <select
-                  className="dcs-select dcs-select-small"
+                  className="orb-select orb-select-small"
                   value={burnSubtitles}
                   disabled={phase !== null || busy !== null}
                   onChange={(event) => setBurnSubtitles(event.target.value as 'off' | 'outline' | 'box')}
@@ -1568,22 +1568,22 @@ export function TimelineScreen({
               </label>
               {subtitlePath === undefined ? null : (
                 <a
-                  className="dcs-btn dcs-btn-small"
-                  href={'/studio/media?project=' + encodeURIComponent(state.project.id)
+                  className="orb-btn orb-btn-small"
+                  href={'/openreel/media?project=' + encodeURIComponent(state.project.id)
                     + '&path=' + encodeURIComponent(subtitlePath) + '&download=1'}
                   download
                   title="导出这一版的字幕"
                 >下载字幕</a>
               )}
             </div>
-            <div className="dcs-compose-run">
+            <div className="orb-compose-run">
               <button
                 type="button"
-                className="dcs-btn dcs-btn-accent"
+                className="orb-btn orb-btn-accent"
                 disabled={phase !== null || busy !== null}
                 onClick={() => void compose()}
               >
-                <IconClapper className="dcs-btn-icon" />
+                <IconClapper className="orb-btn-icon" />
                 <BusyLabel phase={phase} idle={filmUrl === undefined ? '合成' : '重新合成'} />
               </button>
             </div>
@@ -1595,11 +1595,11 @@ export function TimelineScreen({
           timeline has no axis to show — the guide in the stage points forward
           instead, and a black empty strip would only say "broken". */}
       {total > 0 ? (
-      <div className="dcs-film" ref={film}>
-        <div className="dcs-film-perf" aria-hidden="true" />
-        <div className="dcs-film-body">
+      <div className="orb-film" ref={film}>
+        <div className="orb-film-perf" aria-hidden="true" />
+        <div className="orb-film-body">
           <Strip ariaLabel="时间线" arrows={false}>
-          <div className="dcs-track" style={{ width: (LANE_LABEL + total * pps) + 'px' }}>
+          <div className="orb-track" style={{ width: (LANE_LABEL + total * pps) + 'px' }}>
             <Ruler total={total} pps={pps} onScrub={seek} />
             <Lane label="分镜" blocks={shotBlocks} total={total} pps={pps} at={at} onSeek={seek}
               onOpen={() => onGoToStage('assets_shots')}
@@ -1613,16 +1613,16 @@ export function TimelineScreen({
               padsOf={padsOf}
               onPad={(sectionId, edge, seconds, trim) => queuePad(sectionId, edge, seconds, trim)} />
             {cues.length > 0 ? (
-              <div className="dcs-lane">
-                <span className="dcs-lane-label dcs-lane-label-plain">字幕</span>
-                <div className="dcs-lane-blocks dcs-lane-cues" ref={cueTrack} style={{ width: px(total) }}>
+              <div className="orb-lane">
+                <span className="orb-lane-label orb-lane-label-plain">字幕</span>
+                <div className="orb-lane-blocks orb-lane-cues" ref={cueTrack} style={{ width: px(total) }}>
                   {cues.map((cue) => {
                     const live = at >= cue.start && at < cue.end
                     return (
                       <button
                         key={cue.key}
                         type="button"
-                        className={'dcs-cue' + (live ? ' dcs-cue-live' : '')}
+                        className={'orb-cue' + (live ? ' orb-cue-live' : '')}
                         style={{
                           left: px(liveCue(cue).start),
                           width: px(Math.max(0.05, liveCue(cue).end - liveCue(cue).start)),
@@ -1631,13 +1631,13 @@ export function TimelineScreen({
                         onClick={() => seek(cue.start)}
                       >
                         <span
-                          className="dcs-pad-handle dcs-pad-handle-left"
+                          className="orb-pad-handle orb-pad-handle-left"
                           title={cue.index === 0 ? '拖动改这一段字幕的前留白' : '和前一条互让时间'}
                           onPointerDown={(event) => startCueEdge(event, cue, 'left')}
                         />
-                        <span className="dcs-cue-text">{cue.text}</span>
+                        <span className="orb-cue-text">{cue.text}</span>
                         <span
-                          className="dcs-pad-handle dcs-pad-handle-right"
+                          className="orb-pad-handle orb-pad-handle-right"
                           title={cue.index === cue.total - 1 ? '拖动改这一段字幕的后留白' : '和后一条互让时间'}
                           onPointerDown={(event) => startCueEdge(event, cue, 'right')}
                         />
@@ -1648,27 +1648,27 @@ export function TimelineScreen({
               </div>
             ) : null}
             {musicPath === undefined || musicPath === '' ? null : (
-              <div className="dcs-lane">
-                <span className="dcs-lane-label dcs-lane-label-plain">配乐</span>
-                <div className="dcs-lane-blocks" style={{ width: px(total) }}>
+              <div className="orb-lane">
+                <span className="orb-lane-label orb-lane-label-plain">配乐</span>
+                <div className="orb-lane-blocks" style={{ width: px(total) }}>
                   {/* One block spanning the whole film, because that is what it
                       is: the bed is looped and cut to exactly this length. */}
                   <button
                     type="button"
-                    className="dcs-music-block"
+                    className="orb-music-block"
                     title={fileNameOf(musicPath) + '　整片铺满，合成时压在解说下面'}
                     onClick={() => seek(0)}
                   >
-                    <span className="dcs-music-name">♪　{fileNameOf(musicPath)}</span>
+                    <span className="orb-music-name">♪　{fileNameOf(musicPath)}</span>
                   </button>
                 </div>
               </div>
             )}
-            <div className="dcs-playhead" style={{ left: (LANE_LABEL + at * pps) + 'px' }} />
+            <div className="orb-playhead" style={{ left: (LANE_LABEL + at * pps) + 'px' }} />
             </div>
           </Strip>
         </div>
-        <div className="dcs-film-perf" aria-hidden="true" />
+        <div className="orb-film-perf" aria-hidden="true" />
       </div>
       ) : null}
 
@@ -1676,24 +1676,24 @@ export function TimelineScreen({
           the right column: it is an editor's knob like a pause is, and the
           facts box has moved up beside the picture it describes. */}
       {activeShot !== undefined && activeTiming !== undefined ? (
-        <section className="dcs-card">
-          <div className="dcs-card-head">
-            <IconSliders className="dcs-section-icon" />
-            <h3 className="dcs-card-title">片段编辑</h3>
+        <section className="orb-card">
+          <div className="orb-card-head">
+            <IconSliders className="orb-section-icon" />
+            <h3 className="orb-card-title">片段编辑</h3>
             {cut === undefined
-              ? <span className="dcs-hint">改动会自动开一个新版本</span>
+              ? <span className="orb-hint">改动会自动开一个新版本</span>
               : null}
           </div>
-          <div className="dcs-card-body">
-            <div className="dcs-duo-split">
-              <div className="dcs-duo-col">
-                <div className="dcs-col-head"><b>本段节奏</b></div>
-                <div className="dcs-row dcs-row-tight">
-              <label className="dcs-inline-pick">
-                <span className="dcs-hint">← 留白</span>
+          <div className="orb-card-body">
+            <div className="orb-duo-split">
+              <div className="orb-duo-col">
+                <div className="orb-col-head"><b>本段节奏</b></div>
+                <div className="orb-row orb-row-tight">
+              <label className="orb-inline-pick">
+                <span className="orb-hint">← 留白</span>
                 <input
                   key={activeShot.sectionId + ':lead:' + (activeCutSection?.lead ?? '')}
-                  className="dcs-input dcs-input-seconds"
+                  className="orb-input orb-input-seconds"
                   inputMode="decimal"
                   onKeyDown={commitOnEnter}
                   defaultValue={(activeCutSection?.lead ?? '').toString()}
@@ -1706,11 +1706,11 @@ export function TimelineScreen({
                   }}
                 />
               </label>
-              <label className="dcs-inline-pick">
-                <span className="dcs-hint">占比</span>
+              <label className="orb-inline-pick">
+                <span className="orb-hint">占比</span>
                 <input
                   key={activeShot.key + ':share'}
-                  className="dcs-input dcs-input-seconds"
+                  className="orb-input orb-input-seconds"
                   inputMode="decimal"
                   onKeyDown={commitOnEnter}
                   defaultValue={(activeShot.duration / Math.max(activeTiming.duration, 0.001)).toFixed(2)}
@@ -1729,11 +1729,11 @@ export function TimelineScreen({
                   }}
                 />
               </label>
-              <label className="dcs-inline-pick">
-                <span className="dcs-hint">留白 →</span>
+              <label className="orb-inline-pick">
+                <span className="orb-hint">留白 →</span>
                 <input
                   key={activeShot.sectionId + ':tail:' + (activeCutSection?.tail ?? '')}
-                  className="dcs-input dcs-input-seconds"
+                  className="orb-input orb-input-seconds"
                   inputMode="decimal"
                   onKeyDown={commitOnEnter}
                   defaultValue={(activeCutSection?.tail ?? '').toString()}
@@ -1748,11 +1748,11 @@ export function TimelineScreen({
               </label>
             </div>
 
-            <div className="dcs-divider" />
+            <div className="orb-divider" />
 
-            <div className="dcs-col-head">
+            <div className="orb-col-head">
               <b>字幕编辑</b>
-              <span className="dcs-hint">
+              <span className="orb-hint">
                 {activeCue === undefined
                   ? '播放头不在任何一条字幕上'
                   : '第 ' + (activeCue.index + 1) + ' / ' + activeCue.total + ' 条　'
@@ -1761,37 +1761,37 @@ export function TimelineScreen({
             </div>
             <textarea
               ref={cueBox}
-              className="dcs-input dcs-textarea"
+              className="orb-input orb-textarea"
               rows={2}
               value={cueDraft ?? activeCue?.text ?? ''}
               placeholder={activeCue === undefined ? '把播放头移到某条字幕上' : ''}
               disabled={activeCue === undefined || busy !== null}
               onChange={(event) => setCueDraft(event.target.value)}
             />
-            <div className="dcs-cue-actions">
-              <button type="button" className="dcs-btn dcs-btn-small"
+            <div className="orb-cue-actions">
+              <button type="button" className="orb-btn orb-btn-small"
                 disabled={activeCue === undefined || busy !== null || activeCue.index === 0}
                 title="和本段前一条合并" onClick={() => void mergeCue(-1)}>← 合并</button>
-              <button type="button" className="dcs-btn dcs-btn-small"
+              <button type="button" className="orb-btn orb-btn-small"
                 disabled={activeCue === undefined || busy !== null}
                 title="向左延长，时间从前一条来；本段第一条则改字幕前留白"
                 onClick={() => activeCue !== undefined
                   && void nudgeCueEdge(activeCue.sectionId, activeCue.index, 'left', CUE_STEP)}>← 延长</button>
-              <button type="button" className="dcs-btn dcs-btn-small"
+              <button type="button" className="orb-btn orb-btn-small"
                 disabled={activeCue === undefined || busy !== null}
                 title="在光标处断成两条"
                 onClick={() => void splitCue(cueBox.current?.selectionStart ?? 0)}>拆分</button>
-              <button type="button" className="dcs-btn dcs-btn-small"
+              <button type="button" className="orb-btn orb-btn-small"
                 disabled={activeCue === undefined || busy !== null}
                 title="向右延长，时间从后一条来；本段最后一条则改字幕后留白"
                 onClick={() => activeCue !== undefined
                   && void nudgeCueEdge(activeCue.sectionId, activeCue.index, 'right', CUE_STEP)}>延长 →</button>
-              <button type="button" className="dcs-btn dcs-btn-small"
+              <button type="button" className="orb-btn orb-btn-small"
                 disabled={activeCue === undefined || busy !== null
                   || activeCue.index >= activeCue.total - 1}
                 title="和本段后一条合并" onClick={() => void mergeCue(1)}>合并 →</button>
-              <span className="dcs-spacer" />
-              <button type="button" className="dcs-btn dcs-btn-small"
+              <span className="orb-spacer" />
+              <button type="button" className="orb-btn orb-btn-small"
                 disabled={cueDraft === null || busy !== null}
                 onClick={() => { const text = cueDraft; setCueDraft(null); if (text !== null) void editCue(text) }}>
                 保存
@@ -1799,19 +1799,19 @@ export function TimelineScreen({
             </div>
               </div>
 
-              <div className="dcs-duo-col">
-                <div className="dcs-col-head">
+              <div className="orb-duo-col">
+                <div className="orb-col-head">
                   <b>配乐</b>
-                  <span className="dcs-hint">
+                  <span className="orb-hint">
                     {musicPath === undefined || musicPath === ''
                       ? '整片一条音乐床，合成时自动压在解说下面'
                       : '已铺满全片 · ' + fileNameOf(musicPath)}
                   </span>
-                  <span className="dcs-spacer" />
+                  <span className="orb-spacer" />
                   {musicPath === undefined || musicPath === '' ? null : (
                     <button
                       type="button"
-                      className="dcs-btn dcs-btn-small"
+                      className="orb-btn orb-btn-small"
                       disabled={busy !== null || phase !== null}
                       title="从成片里去掉配乐。文件留在项目里，随时可以换回来"
                       onClick={() => void removeMusic()}
@@ -1819,16 +1819,16 @@ export function TimelineScreen({
                   )}
                 </div>
 
-                <div className="dcs-music-form">
+                <div className="orb-music-form">
                   <label
-                    className="dcs-inline-pick"
+                    className="orb-inline-pick"
                     title={musicChoices.length === 0
-                      ? '设置 → AI 创意工作室 → ComfyUI 工作流绑定 → 配乐（文生音乐）里可添加候选'
+                      ? '设置 → OpenReel 创意台 → ComfyUI 工作流绑定 → 配乐（文生音乐）里可添加候选'
                       : '从绑定的工作流里选一条，交给 Agent 选曲生成'}
                   >
-                    <span className="dcs-hint">工作流</span>
+                    <span className="orb-hint">工作流</span>
                     <select
-                      className="dcs-select dcs-select-small"
+                      className="orb-select orb-select-small"
                       value={musicWorkflow}
                       disabled={phase !== null}
                       onChange={(event) => setMusicWorkflow(event.target.value)}
@@ -1842,7 +1842,7 @@ export function TimelineScreen({
                     </select>
                   </label>
                   <input
-                    className="dcs-input"
+                    className="orb-input"
                     value={musicNote}
                     placeholder="想要什么样的音乐（可留空，Agent 会按风格和语速自己定）"
                     disabled={phase !== null}
@@ -1850,7 +1850,7 @@ export function TimelineScreen({
                   />
                   <button
                     type="button"
-                    className="dcs-btn dcs-btn-accent"
+                    className="orb-btn orb-btn-accent"
                     disabled={phase !== null || busy !== null || musicWorkflow.trim() === ''}
                     title="交给 Agent：先读配乐技能选曲，再用这条工作流生成，然后搬进项目"
                     onClick={() => void addMusic()}
@@ -1865,14 +1865,14 @@ export function TimelineScreen({
                 {/* The three numbers a person can judge by listening. Everything else in
                     the mix — the carve, the duck ratio, the loudness target — answers a
                     question listening does not ask, and stays fixed. */}
-                <div className="dcs-music-form">
-                  <label className="dcs-inline-pick" title={
+                <div className="orb-music-form">
+                  <label className="orb-inline-pick" title={
                     '音乐床相对解说的音量。规范值 ' + MIX_BOUNDS.gainDb.default
                     + ' dB（W3C：音乐要比人声低 20dB）。解说一响还会再自动压低 ' + (-DUCK_DB) + ' dB'
                   }>
-                    <span className="dcs-hint">音量</span>
+                    <span className="orb-hint">音量</span>
                     <input
-                      className="dcs-input dcs-input-tiny"
+                      className="orb-input orb-input-tiny"
                       type="number"
                       step={1}
                       min={MIX_BOUNDS.gainDb.min}
@@ -1881,12 +1881,12 @@ export function TimelineScreen({
                       disabled={phase !== null}
                       onChange={(event) => editMusic({ gain: event.target.value })}
                     />
-                    <span className="dcs-hint">dB</span>
+                    <span className="orb-hint">dB</span>
                   </label>
-                  <label className="dcs-inline-pick" title="开头music淡入的秒数">
-                    <span className="dcs-hint">淡入</span>
+                  <label className="orb-inline-pick" title="开头music淡入的秒数">
+                    <span className="orb-hint">淡入</span>
                     <input
-                      className="dcs-input dcs-input-tiny"
+                      className="orb-input orb-input-tiny"
                       type="number"
                       step={0.5}
                       min={MIX_BOUNDS.fadeInSeconds.min}
@@ -1895,12 +1895,12 @@ export function TimelineScreen({
                       disabled={phase !== null}
                       onChange={(event) => editMusic({ fadeIn: event.target.value })}
                     />
-                    <span className="dcs-hint">s</span>
+                    <span className="orb-hint">s</span>
                   </label>
-                  <label className="dcs-inline-pick" title="结尾淡出的秒数">
-                    <span className="dcs-hint">淡出</span>
+                  <label className="orb-inline-pick" title="结尾淡出的秒数">
+                    <span className="orb-hint">淡出</span>
                     <input
-                      className="dcs-input dcs-input-tiny"
+                      className="orb-input orb-input-tiny"
                       type="number"
                       step={0.5}
                       min={MIX_BOUNDS.fadeOutSeconds.min}
@@ -1909,18 +1909,18 @@ export function TimelineScreen({
                       disabled={phase !== null}
                       onChange={(event) => editMusic({ fadeOut: event.target.value })}
                     />
-                    <span className="dcs-hint">s</span>
+                    <span className="orb-hint">s</span>
                   </label>
                 </div>
 
                 {/* Save on its own bottom-right row: in a half-width column the
                     number fields wrap, and a spacer inside that row cannot be
                     trusted to push anything anywhere. */}
-                <div className="dcs-music-save">
-                  {musicDirty ? <span className="dcs-hint dcs-music-dirty">未保存</span> : null}
+                <div className="orb-music-save">
+                  {musicDirty ? <span className="orb-hint orb-music-dirty">未保存</span> : null}
                   <button
                     type="button"
-                    className={'dcs-btn dcs-btn-small' + (musicDirty ? ' dcs-btn-dirty' : '')}
+                    className={'orb-btn orb-btn-small' + (musicDirty ? ' orb-btn-dirty' : '')}
                     disabled={phase !== null || busy !== null || !musicDirty}
                     title="保存工作流名称和这三项设置。合成与试听都按保存后的值走"
                     onClick={() => void commitMusic()}
@@ -1935,17 +1935,17 @@ export function TimelineScreen({
       {/* The last step of the whole flow, so it gets the page's one loud
           button: nothing left to tune, take the film. */}
       {filmUrl === undefined ? null : (
-        <div className="dcs-cta">
+        <div className="orb-cta">
           <a
-            className="dcs-cta-primary"
+            className="orb-cta-primary"
             href={filmUrl + '&download=1'}
             download
             title="导出这一版的成片"
           >
-            <IconPlay className="dcs-cta-icon" />
+            <IconPlay className="orb-cta-icon" />
             导出成片
           </a>
-          <p className="dcs-cta-hint">
+          <p className="orb-cta-hint">
             导出的是{cut === undefined ? '计划版本' : '「' + cut.name + '」'}的成片
             {filmDuration === undefined ? '' : ' · ' + filmDuration.toFixed(1) + ' 秒'}
             {filmStat?.resolution === undefined ? '' : ' · ' + filmStat.resolution}
@@ -1992,9 +1992,9 @@ function Ruler({ total, pps, onScrub }: {
     const up = (): void => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
-      document.body.classList.remove('dcs-dragging')
+      document.body.classList.remove('orb-dragging')
     }
-    document.body.classList.add('dcs-dragging')
+    document.body.classList.add('orb-dragging')
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
   }
@@ -2007,7 +2007,7 @@ function Ruler({ total, pps, onScrub }: {
     ticks.push(
       <span
         key={second}
-        className={'dcs-tick' + (labelled ? ' dcs-tick-major' : '')}
+        className={'orb-tick' + (labelled ? ' orb-tick-major' : '')}
         style={{ left: pxAt(second, pps) }}
       >
         {labelled ? <i>{second}s</i> : null}
@@ -2015,10 +2015,10 @@ function Ruler({ total, pps, onScrub }: {
     )
   }
   return (
-    <div className="dcs-lane dcs-ruler">
-      <span className="dcs-lane-label dcs-lane-label-plain" />
+    <div className="orb-lane orb-ruler">
+      <span className="orb-lane-label orb-lane-label-plain" />
       <div
-        className="dcs-ruler-track"
+        className="orb-ruler-track"
         style={{ width: pxAt(total, pps) }}
         ref={track}
         role="slider"
@@ -2217,7 +2217,7 @@ function Lane({
       // Dragging the left handle leftwards lengthens the lead-in; the right
       // handle reads the other way round.
       const delta = (moved.clientX - startX) * perPixel * (edge === 'lead' ? -1 : 1)
-      document.body.classList.add('dcs-dragging')
+      document.body.classList.add('orb-dragging')
       const raw = Number((from + delta).toFixed(2))
       // Past zero there is no pause left to remove, so the drag starts cutting
       // the clip instead. Two different acts, one continuous gesture — which is
@@ -2227,31 +2227,31 @@ function Lane({
     const up = (): void => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
-      document.body.classList.remove('dcs-dragging')
+      document.body.classList.remove('orb-dragging')
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
   }
 
   return (
-    <div className="dcs-lane">
-      <button type="button" className="dcs-lane-label" onClick={onOpen} title="回到这一步去改内容">
+    <div className="orb-lane">
+      <button type="button" className="orb-lane-label" onClick={onOpen} title="回到这一步去改内容">
         {label}
       </button>
-      <div className="dcs-lane-blocks" ref={track}>
+      <div className="orb-lane-blocks" ref={track}>
         {blocks.map((block) => {
           const live = at >= block.start && at < block.start + block.duration
           return (
             <button
               key={block.key}
               type="button"
-              className={'dcs-block' + (live ? ' dcs-block-live' : '')
-                + (canDrag(block) ? ' dcs-block-drag' : '')
+              className={'orb-block' + (live ? ' orb-block-live' : '')
+                + (canDrag(block) ? ' orb-block-drag' : '')
                 + (dragShot?.key === block.key
-                  ? (dragShot.landing === true ? ' dcs-block-landing' : ' dcs-block-lifted')
+                  ? (dragShot.landing === true ? ' orb-block-landing' : ' orb-block-lifted')
                   : '')
-                + (shiftOf(block) === 0 ? '' : ' dcs-block-shoved')
-                + (landedKey === block.key ? ' dcs-block-settled' : '')}
+                + (shiftOf(block) === 0 ? '' : ' orb-block-shoved')
+                + (landedKey === block.key ? ' orb-block-settled' : '')}
               style={{
                 width: pxAt(block.duration, pps),
                 ...(dragShot?.key === block.key && dragShot.landing !== true
@@ -2285,7 +2285,7 @@ function Lane({
                   dx = at.clientX - startX
                   if (!moved && Math.abs(dx) < 4) return
                   moved = true
-                  document.body.classList.add('dcs-dragging')
+                  document.body.classList.add('orb-dragging')
                   landing = dropIndex(widths, BLOCK_GAP, from, at.clientX - origin - runStart)
                   onDragShot?.({ key: block.key, sectionId, dx, from, to: landing, order })
                 }
@@ -2293,7 +2293,7 @@ function Lane({
                 const up = (): void => {
                   window.removeEventListener('pointermove', move)
                   window.removeEventListener('pointerup', up)
-                  document.body.classList.remove('dcs-dragging')
+                  document.body.classList.remove('orb-dragging')
                   // The landing slot is whatever the last frame worked out, so
                   // what drops is exactly the arrangement that was on screen.
                   if (!moved || landing === from) {
@@ -2332,11 +2332,11 @@ function Lane({
               {block.waveform === undefined ? null : (
                 <>
                   {(block.leadShare ?? 0) > 0.001 ? (
-                    <span className="dcs-block-pad" aria-hidden="true"
+                    <span className="orb-block-pad" aria-hidden="true"
                       style={{ left: 0, width: (block.leadShare! * block.duration * pps) + 'px' }} />
                   ) : null}
                   <span
-                    className="dcs-block-wave"
+                    className="orb-block-wave"
                     aria-hidden="true"
                     style={{
                       left: ((block.leadShare ?? 0) * block.duration * pps) + 'px',
@@ -2346,7 +2346,7 @@ function Lane({
                     <Waveform bars={block.waveform} />
                   </span>
                   {(block.tailShare ?? 0) > 0.001 ? (
-                    <span className="dcs-block-pad" aria-hidden="true"
+                    <span className="orb-block-pad" aria-hidden="true"
                       style={{ right: 0, width: (block.tailShare! * block.duration * pps) + 'px' }} />
                   ) : null}
                 </>
@@ -2354,21 +2354,21 @@ function Lane({
               {block.waveform !== undefined && onPad !== undefined ? (
                 <>
                   <span
-                    className="dcs-pad-handle dcs-pad-handle-left"
+                    className="orb-pad-handle orb-pad-handle-left"
                     title="拖动改前留白"
                     onPointerDown={(event) => startPad(event, block, 'lead')}
                   />
                   <span
-                    className="dcs-pad-handle dcs-pad-handle-right"
+                    className="orb-pad-handle orb-pad-handle-right"
                     title="拖动改后留白"
                     onPointerDown={(event) => startPad(event, block, 'tail')}
                   />
                 </>
               ) : null}
               {block.showTime ? (
-                <span className="dcs-block-time">{block.duration.toFixed(1)}s</span>
+                <span className="orb-block-time">{block.duration.toFixed(1)}s</span>
               ) : (
-                <span className="dcs-block-name">
+                <span className="orb-block-name">
                   {block.shotIndex === undefined ? block.label : block.label + ' ' + (block.shotIndex + 1)}
                 </span>
               )}

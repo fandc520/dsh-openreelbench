@@ -18,7 +18,7 @@
  *
  *   - THE PROJECT ID. The old request named the project by title only, so a
  *     model whose history had been compacted had to look the id up by name
- *     before it could call `studio_stage` at all.
+ *     before it could call `openreel_stage` at all.
  *   - The four settings the user picked on the screen. The sheet tells the
  *     model to read them off the marker; listing them here saves the lookup and
  *     makes the request legible to a person reading the conversation.
@@ -39,7 +39,7 @@ export interface BriefJobInput {
 }
 
 const NEWLINE = String.fromCharCode(10)
-const SKILL = 'dsh-creative-studio-stage-brief'
+const SKILL = 'dsh-openreelbench-stage-brief'
 
 export function buildBriefJob(input: BriefJobInput): string {
   return [
@@ -65,7 +65,7 @@ export function buildBriefJob(input: BriefJobInput): string {
  */
 export function buildBriefApprovedNote(projectId: string, title: string): string {
   return [
-    '/dsh-creative-studio-stage-script',
+    '/dsh-openreelbench-stage-script',
     '',
     '简报「' + title + '」我确认了，brief 闸已过。项目 `' + projectId + '`，接着写脚本。',
   ].join(NEWLINE)

@@ -51,14 +51,14 @@ export interface ImportLineOptions {
  */
 export function importLine(options: ImportLineOptions): string {
   if (options.kind === 'music') {
-    return '生成完用 `studio_project` 的 `action: "import"` 搬进项目，'
+    return '生成完用 `openreel_project` 的 `action: "import"` 搬进项目，'
       + '`kind` 填 `music`，**不要填 `scene_id`** —— 配乐属于整部片子，不属于某一段。'
       + '导入会自动记到项目上，不用再写进任何清单。'
   }
   const unit = options.unit
-  return '每' + unit + '生成完用 `studio_project` 的 `action: "import"` 搬进项目'
+  return '每' + unit + '生成完用 `openreel_project` 的 `action: "import"` 搬进项目'
     + '（`kind` 填 `' + options.kind + '`、`scene_id` 填段落编号），'
-    + '然后写进 `' + options.manifest + '` 并用 `studio_stage` 以 `in_progress` 记录——'
+    + '然后写进 `' + options.manifest + '` 并用 `openreel_stage` 以 `in_progress` 记录——'
     + '**每' + unit + '都记一次**，不要攒到最后。'
     + (options.extra === undefined || options.extra.trim() === '' ? '' : options.extra.trim())
 }

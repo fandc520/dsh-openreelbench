@@ -9,8 +9,8 @@
  * is: the question is "what does this sentence need to show", and nothing
  * countable answers that.
  *
- * LOADED DETERMINISTICALLY, NOT BY GUESSWORK. The panel puts `/dsh-creative-
- * studio-cinematography` in the message it sends when the audio gate passes,
+ * LOADED DETERMINISTICALLY, NOT BY GUESSWORK. The panel puts the
+ * `/dsh-openreelbench-cinematography` skill in the message it sends when the audio gate passes,
  * and the harness injects this body as instructions for that turn. So it does
  * not depend on the model recognising that a catalog line applies, and it is
  * not resident: the catalog carries one line, the body arrives only on the turn
@@ -167,7 +167,7 @@ establishing → medium → close_up → wide → extreme_close_up → medium_wi
 
 ## 八、怎么提交
 
-一次写完整份计划，用 \`studio_stage\`：
+一次写完整份计划，用 \`openreel_stage\`：
 
 \`\`\`
 stage: "assets_shots"
@@ -198,8 +198,8 @@ artifacts: { scene_plan: { version: "1.0", shots: [...] } }
 **第 2 条不要空着。** 一份每一镜都很确定的设计，多半是没想。
 `
 
-export const STUDIO_CINEMATOGRAPHY_SKILL: RuntimeSkill = {
-  name: 'dsh-creative-studio-cinematography',
+export const OPENREEL_CINEMATOGRAPHY_SKILL: RuntimeSkill = {
+  name: 'dsh-openreelbench-cinematography',
   source: 'runtime',
   description:
     '为图文解说片设计镜头语言：把每段旁白的功能映射成镜别、焦段、景深、光线、色温，'

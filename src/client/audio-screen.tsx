@@ -4,7 +4,7 @@
  * Three things are worth knowing before reading the code.
  *
  * **Auditioning runs from the browser; generating does not.** Both could —
- * dsh-comfyui exposes its own routes and studio's host never touches ComfyUI
+ * dsh-comfyui exposes its own routes and openreelbench's host never touches ComfyUI
  * either way — but the two calls differ in what a failure costs. An audition is
  * a preview: it produces no artifact, and a bad one is discarded by looking
  * away. Generation produces what the next stage consumes, and it fails in ways
@@ -28,7 +28,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { type StudioState, api, bindingWorkflows } from './api.ts'
+import { type PluginState, api, bindingWorkflows } from './api.ts'
 import { type AgentPhase, BusyLabel } from './busy.tsx'
 import { IconMic, IconPlay, IconSpark } from './icons.tsx'
 import { Strip } from './strip.tsx'
@@ -40,7 +40,7 @@ import { buildVoiceJob } from '../voice-job.js'
 import { buildScenePlanJob, buildVoiceDesignJob, buildVoiceProposalJob } from '../voice-extra-jobs.js'
 
 export interface AudioScreenProps {
-  state: StudioState
+  state: PluginState
   onReload: () => Promise<void>
   onSend: (text: string) => Promise<void>
   onGoToStage: (stageId: string) => void
@@ -59,7 +59,7 @@ interface SectionRow {
 
 const VOICE_NODE = 'CharacterVoicesNode'
 
-function readSections(state: StudioState): SectionRow[] {
+function readSections(state: PluginState): SectionRow[] {
   const script = state.artifacts.script as
     | { sections?: Array<Record<string, unknown>> } | undefined
   const manifest = state.artifacts.asset_manifest_audio as
@@ -90,7 +90,7 @@ function readSections(state: StudioState): SectionRow[] {
 }
 
 /** What the panel watches to know the agent's narration landed. */
-function signatureOf(state: StudioState): string {
+function signatureOf(state: PluginState): string {
   const manifest = state.artifacts.asset_manifest_audio as
     | { assets?: Array<{ scene_id?: string; path?: string }> } | undefined
   return (manifest?.assets ?? [])
@@ -433,7 +433,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
     if (active?.path === undefined || selection === null) return
     setWorking(active.id)
     try {
-      await fetch('/studio/asset/trim', {
+      await fetch('/openreel/asset/trim', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -465,7 +465,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
         status: 'completed',
         artifacts: { asset_manifest_audio: manifest },
         human_approved: true,
-        note: '在创意工作台确认配音',
+        note: '在OpenReel 创意台确认配音',
       })
       await onReload()
 
@@ -492,38 +492,38 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
 
   const audioSrc = previewUrl ?? (active?.path === undefined
     ? undefined
-    : '/studio/media?project=' + encodeURIComponent(state.project.id)
+    : '/openreel/media?project=' + encodeURIComponent(state.project.id)
       + '&path=' + encodeURIComponent(active.path) + '&v=' + (active.seconds ?? 0))
 
   return (
-    <div className="dcs-screen">
-      <header className="dcs-screen-head">
-        <h2 className="dcs-screen-title">配音</h2>
-        <span className="dcs-spacer" />
-        <span className={'dcs-pill ' + (approved ? 'dcs-pill-ok' : 'dcs-pill-wait')}>
+    <div className="orb-screen">
+      <header className="orb-screen-head">
+        <h2 className="orb-screen-title">配音</h2>
+        <span className="orb-spacer" />
+        <span className={'orb-pill ' + (approved ? 'orb-pill-ok' : 'orb-pill-wait')}>
           {approved ? '已审核' : '待确认'}
         </span>
       </header>
 
       {comfyUp === false ? (
-        <p className="dcs-note dcs-note-error">
+        <p className="orb-note orb-note-error">
           连不上 dsh-comfyui，这一页的生成功能都不可用。确认它已安装并启用。
         </p>
       ) : null}
 
-      <section className="dcs-card">
-        <div className="dcs-card-head">
-          <IconSpark className="dcs-section-icon" />
-          <h3 className="dcs-card-title">配音生成</h3>
-          <span className="dcs-card-meta">
+      <section className="orb-card">
+        <div className="orb-card-head">
+          <IconSpark className="orb-section-icon" />
+          <h3 className="orb-card-title">配音生成</h3>
+          <span className="orb-card-meta">
             <span><b>{done}</b>/{sections.length} 段已生成</span>
           </span>
-          <span className="dcs-spacer" />
+          <span className="orb-spacer" />
           {ttsChoices.length > 1 ? (
-            <label className="dcs-inline-pick">
-              <span className="dcs-hint">工作流</span>
+            <label className="orb-inline-pick">
+              <span className="orb-hint">工作流</span>
               <select
-                className="dcs-select dcs-select-small"
+                className="orb-select orb-select-small"
                 value={ttsWorkflow}
                 disabled={working !== null || phase !== null}
                 title="这个能力绑定了多条工作流，选一条用于这次生成"
@@ -535,46 +535,46 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
               </select>
             </label>
           ) : (
-            <span className="dcs-hint">工作流 {ttsWorkflow === '' ? '（未绑定）' : ttsWorkflow}</span>
+            <span className="orb-hint">工作流 {ttsWorkflow === '' ? '（未绑定）' : ttsWorkflow}</span>
           )}
         </div>
-        <div className="dcs-card-body">
+        <div className="orb-card-body">
         {active !== undefined ? (
-          <div className="dcs-take-detail">
-            <div className="dcs-line">
-              <span className="dcs-line-label">台词</span>
-              <p className="dcs-take-text">{active.text || '（这一段没有台词）'}</p>
+          <div className="orb-take-detail">
+            <div className="orb-line">
+              <span className="orb-line-label">台词</span>
+              <p className="orb-take-text">{active.text || '（这一段没有台词）'}</p>
             </div>
             {active.deliveryNote !== '' ? (
-              <div className="dcs-line">
-                <span className="dcs-line-label">表达</span>
-                <p className="dcs-take-text dcs-hint">{active.deliveryNote}</p>
+              <div className="orb-line">
+                <span className="orb-line-label">表达</span>
+                <p className="orb-take-text orb-hint">{active.deliveryNote}</p>
               </div>
             ) : null}
 
             <Waveform url={audioSrc} selection={selection} onSelectionChange={setSelection} />
-            {audioSrc !== undefined ? <audio ref={player} className="dcs-audio" src={audioSrc} controls /> : null}
+            {audioSrc !== undefined ? <audio ref={player} className="orb-audio" src={audioSrc} controls /> : null}
 
-            <div className="dcs-actions">
-              <span className="dcs-hint">
+            <div className="orb-actions">
+              <span className="orb-hint">
                 {phase === null ? '' : '已交给 Agent，生成中会出现在对话里。'}
               </span>
-              <span className="dcs-spacer" />
-              <button type="button" className="dcs-btn dcs-btn-small"
+              <span className="orb-spacer" />
+              <button type="button" className="orb-btn orb-btn-small"
                 disabled={selection === null || working !== null || active.path === undefined}
                 onClick={() => void trim()}>裁掉选区外</button>
               <button
                 type="button"
-                className="dcs-btn dcs-btn-small dcs-btn-accent"
+                className="orb-btn orb-btn-small orb-btn-accent"
                 disabled={working !== null || phase !== null || sections.length === 0}
                 onClick={() => void generate(sections.map((section) => section.id))}
               >
                 <BusyLabel phase={phase} idle="全部生成" />
               </button>
-              <button type="button" className="dcs-btn dcs-btn-small dcs-btn-accent"
+              <button type="button" className="orb-btn orb-btn-small orb-btn-accent"
                 disabled={working !== null || phase !== null}
                 onClick={() => void generate([active.id])}>
-                <IconSpark className="dcs-btn-icon" />
+                <IconSpark className="orb-btn-icon" />
                 {phase === null
                   ? (active.path === undefined ? '生成这一段' : '重新生成')
                   : <BusyLabel phase={phase} idle="" />}
@@ -591,9 +591,9 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
             // one. Here the row is a picker: every card is one section, they
             // are equally clickable, and stretching them only pushes the later
             // ones off screen. Duration is already on the card as a number.
-            const classes = ['dcs-take-card']
-            if (section.id === activeId) classes.push('dcs-take-current')
-            if (section.path === undefined) classes.push('dcs-take-empty')
+            const classes = ['orb-take-card']
+            if (section.id === activeId) classes.push('orb-take-current')
+            if (section.path === undefined) classes.push('orb-take-empty')
             return (
               <button
                 key={section.id}
@@ -604,9 +604,9 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                   + (section.seconds === undefined ? '' : ' · 配音 ' + section.seconds.toFixed(2) + 's'
                     + (screenTime === undefined ? '' : ' · 占屏 ' + screenTime.toFixed(2) + 's（含风格留白）'))}
               >
-                <span className="dcs-take-index">{index + 1}</span>
-                <span className="dcs-take-id">{section.id}</span>
-                <span className="dcs-take-time">
+                <span className="orb-take-index">{index + 1}</span>
+                <span className="orb-take-id">{section.id}</span>
+                <span className="orb-take-time">
                   {working === section.id
                     ? '生成中'
                     : section.seconds === undefined ? '未生成'
@@ -617,31 +617,31 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
           })}
           <button
             type="button"
-            className={'dcs-take-card dcs-take-all' + (playingAll ? ' dcs-take-current' : '')}
+            className={'orb-take-card orb-take-all' + (playingAll ? ' orb-take-current' : '')}
             disabled={done === 0}
             onClick={playAll}
             title={playingAll ? '停止连播' : '按顺序播放已生成的段落，不合并文件'}
           >
-            <span className="dcs-take-index">{playingAll ? '■' : '▶'}</span>
-            <span className="dcs-take-id">全部</span>
-            <span className="dcs-take-time">{done}/{sections.length} 段</span>
+            <span className="orb-take-index">{playingAll ? '■' : '▶'}</span>
+            <span className="orb-take-id">全部</span>
+            <span className="orb-take-time">{done}/{sections.length} 段</span>
           </button>
         </Strip>
         </div>
       </section>
 
-      <section className="dcs-card">
-        <div className="dcs-card-head">
-          <IconMic className="dcs-section-icon" />
-          <h3 className="dcs-card-title">音色</h3>
-          <span className="dcs-card-meta">
+      <section className="orb-card">
+        <div className="orb-card-head">
+          <IconMic className="orb-section-icon" />
+          <h3 className="orb-card-title">音色</h3>
+          <span className="orb-card-meta">
             <span>{voices.length > 0 ? '音色库 ' + voices.length + ' 个' : comfyUp === true ? '读不到音色库' : ''}</span>
             <span>{queryWorkflow === '' ? '试听需先绑定「音色查询」工作流' : '试听工作流 ' + queryWorkflow}</span>
           </span>
-          <span className="dcs-spacer" />
+          <span className="orb-spacer" />
           <button
             type="button"
-            className="dcs-btn dcs-btn-small"
+            className="orb-btn orb-btn-small"
             disabled={working !== null || comfyUp !== true}
             title="重新读一遍 ComfyUI 的音色库，并同步两条工作流保存的参数清单"
             onClick={() => void refreshVoices()}
@@ -650,21 +650,21 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
           </button>
           <button
             type="button"
-            className="dcs-btn dcs-btn-small"
+            className="orb-btn orb-btn-small"
             disabled={working !== null || comfyUp !== true || voice === '' || queryWorkflow === ''}
-            title={queryWorkflow === '' ? '设置 → AI 创意工作室 → 绑定「音色查询」工作流' : '播放这个音色的参考片段'}
+            title={queryWorkflow === '' ? '设置 → OpenReel 创意台 → 绑定「音色查询」工作流' : '播放这个音色的参考片段'}
             onClick={() => void audition()}
           >
             {working === 'audition' ? <><Spinner />试听中…</> : '试听'}
           </button>
         </div>
-        <div className="dcs-card-body">
-          <div className="dcs-duo-split">
-            <div className="dcs-duo-col">
-              <label className="dcs-field">
-                <span className="dcs-label">音色库</span>
+        <div className="orb-card-body">
+          <div className="orb-duo-split">
+            <div className="orb-duo-col">
+              <label className="orb-field">
+                <span className="orb-label">音色库</span>
                 <select
-                  className="dcs-select"
+                  className="orb-select"
                   value={voice}
                   disabled={working !== null}
                   onChange={(event) => void saveVoice(event.target.value)}
@@ -673,15 +673,15 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                   {voices.map((name) => <option key={name} value={name}>{name}</option>)}
                 </select>
               </label>
-              {auditionUrl !== undefined ? <audio className="dcs-audio" src={auditionUrl} controls autoPlay /> : null}
+              {auditionUrl !== undefined ? <audio className="orb-audio" src={auditionUrl} controls autoPlay /> : null}
 
               {/* Reference audio lives here rather than in a panel of its own.
                   It is not a separate subject: picking a library voice and cloning
                   one from a sample are two answers to the same question, and a
                   third container made them look like two unrelated features. */}
-              <div className="dcs-subhead">
-                <span className="dcs-subhead-label">参考音频</span>
-                <span className="dcs-hint">
+              <div className="orb-subhead">
+                <span className="orb-subhead-label">参考音频</span>
+                <span className="orb-hint">
                   {voiceReferences.length === 0
                     ? '声音克隆用，整个项目共用'
                     : '整个项目共用 · ' + voiceReferences.length + ' 段'}
@@ -690,14 +690,14 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
 
               {/* Slots, like the reference images on the shots screen: position
                   matters, because a workflow's loaders take them in order. */}
-              <div className="dcs-slots">
+              <div className="orb-slots">
                 {voiceReferences.map((name, index) => (
-                  <div className="dcs-slot" key={name + index}>
-                    <span className="dcs-slot-index">{index + 1}</span>
+                  <div className="orb-slot" key={name + index}>
+                    <span className="orb-slot-index">{index + 1}</span>
                     <button
                       type="button"
-                      className={'dcs-slot-media dcs-slot-audio'
-                        + (playingRef === name ? ' dcs-slot-audio-on' : '')}
+                      className={'orb-slot-media orb-slot-audio'
+                        + (playingRef === name ? ' orb-slot-audio-on' : '')}
                       title={playingRef === name ? '停止' : '试听这一段'}
                       onClick={() => setPlayingRef(playingRef === name ? null : name)}
                     >{playingRef === name ? '■' : '▶'}</button>
@@ -713,10 +713,10 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                         hidden
                       />
                     ) : null}
-                    <span className="dcs-slot-name" title={name}>{name}</span>
+                    <span className="orb-slot-name" title={name}>{name}</span>
                     <button
                       type="button"
-                      className="dcs-slot-x"
+                      className="orb-slot-x"
                       aria-label="移除这一槽"
                       disabled={working !== null}
                       onClick={() => void removeVoiceReference(name)}
@@ -725,54 +725,54 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                 ))}
                 <button
                   type="button"
-                  className="dcs-slot dcs-slot-empty"
+                  className="orb-slot orb-slot-empty"
                   disabled={working !== null}
                   title="从 ComfyUI 的素材里指定一段；浏览器里也可以上传新的"
                   onClick={() => setPickerOpen(true)}
                 >
-                  <span className="dcs-slot-index">{voiceReferences.length + 1}</span>
-                  <span className="dcs-slot-add">指定参考音频</span>
+                  <span className="orb-slot-index">{voiceReferences.length + 1}</span>
+                  <span className="orb-slot-add">指定参考音频</span>
                 </button>
               </div>
-              <p className="dcs-hint">槽位按顺序对应工作流的加载参数。</p>
+              <p className="orb-hint">槽位按顺序对应工作流的加载参数。</p>
             </div>
 
-            <div className="dcs-duo-col">
-              <div className="dcs-col-head">
+            <div className="orb-duo-col">
+              <div className="orb-col-head">
                 <b>音色设计</b>
-                <span className="dcs-hint">
+                <span className="orb-hint">
                   工作流 {designWorkflow === '' ? '（未绑定）' : designWorkflow} · 交给 Agent 去跑
                 </span>
-                <span className="dcs-spacer" />
+                <span className="orb-spacer" />
                 <button
                   type="button"
-                  className="dcs-btn dcs-btn-small"
+                  className="orb-btn orb-btn-small"
                   disabled={working !== null}
                   title="让 Agent 看着项目题材和风格，提一个音色方案"
                   onClick={() => {
                     void onSend(buildVoiceProposalJob(state.project.id))
                     say('ok', '已经让 Agent 想一个，写好后这里会自动填上。')
                   }}
-                ><IconSpark className="dcs-btn-icon" />自动生成</button>
+                ><IconSpark className="orb-btn-icon" />自动生成</button>
               </div>
               <input
-                className="dcs-input"
+                className="orb-input"
                 value={designName}
                 placeholder="音色名称，例如 jiangshuo_male"
                 onChange={(event) => setDesignName(event.target.value)}
               />
               <textarea
-                className="dcs-input dcs-textarea"
+                className="orb-input orb-textarea"
                 rows={3}
                 value={designPrompt}
                 placeholder="想要什么样的声音，例如：沉稳中年男声，语速偏慢，略带磁性"
                 onChange={(event) => setDesignPrompt(event.target.value)}
               />
-              <div className="dcs-col-foot">
-                <span className="dcs-spacer" />
+              <div className="orb-col-foot">
+                <span className="orb-spacer" />
                 <button
                   type="button"
-                  className="dcs-btn dcs-btn-accent"
+                  className="orb-btn orb-btn-accent"
                   disabled={designName.trim() === '' || designPrompt.trim() === ''}
                   onClick={() => {
                     void onSend(buildVoiceDesignJob({
@@ -799,15 +799,15 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
         />
       ) : null}
 
-      <div className="dcs-cta">
-        <button type="button" className="dcs-cta-primary"
+      <div className="orb-cta">
+        <button type="button" className="orb-cta-primary"
           disabled={working !== null || done < sections.length || sections.length === 0}
           title={done < sections.length ? '还有 ' + (sections.length - done) + ' 段没生成，补齐才能提交' : undefined}
           onClick={() => void submit()}>
-          <IconPlay className="dcs-cta-icon" />
+          <IconPlay className="orb-cta-icon" />
           {working === 'submit' ? '提交中…' : approved ? '重新提交配音' : '确认配音，进入配图'}
         </button>
-        <p className="dcs-cta-hint">
+        <p className="orb-cta-hint">
           {done < sections.length
             ? '还有 ' + (sections.length - done) + ' 段没生成，补齐才能提交。'
             : approved
@@ -815,7 +815,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
               : '这一页所有段落听过之后的下一步——之后才会开始配图。'}
         </p>
         {result !== null ? (
-          <p className={'dcs-note ' + (result.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{result.text}</p>
+          <p className={'orb-note ' + (result.kind === 'ok' ? 'orb-note-ok' : 'orb-note-error')}>{result.text}</p>
         ) : null}
       </div>
     </div>

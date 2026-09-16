@@ -1,5 +1,5 @@
 /**
- * Typed fetches against the studio routes, plus the shapes the screens read.
+ * Typed fetches against the openreelbench routes, plus the shapes the screens read.
  *
  * The types are declared here rather than imported from the host modules:
  * a wire payload is a contract of its own, and pulling `src/state.ts` into the
@@ -137,7 +137,7 @@ export interface Cut {
   duration_seconds?: number
 }
 
-export interface StudioState {
+export interface PluginState {
   project: ProjectMarker
   pipeline: { id: string; fallback: boolean; definition: Pipeline }
   style: { id: string; fallback: boolean; playbook: Playbook; options: StyleOption[] }
@@ -388,7 +388,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  catalog: (): Promise<Catalog> => request('/studio/catalog'),
+  catalog: (): Promise<Catalog> => request('/openreel/catalog'),
 
   /** Whether a `/name` gesture would actually load this skill. */
   /** Start a render. Returns as soon as it is running; poll `composeStatus`. */
@@ -399,7 +399,7 @@ export const api = {
     subtitle_background?: 'outline' | 'box'
     force?: boolean
   }): Promise<{ started: boolean }> =>
-    request('/studio/compose', { method: 'POST', body: JSON.stringify(body) }),
+    request('/openreel/compose', { method: 'POST', body: JSON.stringify(body) }),
 
   composeStatus: (project: string): Promise<{
     running: boolean
@@ -412,30 +412,30 @@ export const api = {
     result?: { warnings: string[]; cut: string | null }
     error?: string
     code?: string
-  }> => request('/studio/compose?project=' + encodeURIComponent(project)),
+  }> => request('/openreel/compose?project=' + encodeURIComponent(project)),
 
   skill: (name: string): Promise<{
     name: string
     registry: boolean
     known: boolean
     loadable: boolean
-  }> => request('/studio/skill?name=' + encodeURIComponent(name)),
+  }> => request('/openreel/skill?name=' + encodeURIComponent(name)),
 
-  state: (project: string, cut?: string): Promise<StudioState> =>
-    request('/studio/state?project=' + encodeURIComponent(project)
+  state: (project: string, cut?: string): Promise<PluginState> =>
+    request('/openreel/state?project=' + encodeURIComponent(project)
       + (cut === undefined || cut === '' ? '' : '&cut=' + encodeURIComponent(cut))),
 
   cuts: (project: string): Promise<{ cuts: Cut[] }> =>
-    request('/studio/cuts?project=' + encodeURIComponent(project)),
+    request('/openreel/cuts?project=' + encodeURIComponent(project)),
 
   saveCut: (project: string, cut: Partial<Cut> & { id: string }): Promise<{ cut: Cut }> =>
-    request('/studio/cuts', { method: 'POST', body: JSON.stringify({ project, cut }) }),
+    request('/openreel/cuts', { method: 'POST', body: JSON.stringify({ project, cut }) }),
 
   deleteCut: (project: string, cut: string): Promise<{ deleted: string }> =>
-    request('/studio/cuts/delete', { method: 'POST', body: JSON.stringify({ project, cut }) }),
+    request('/openreel/cuts/delete', { method: 'POST', body: JSON.stringify({ project, cut }) }),
 
   library: (project?: string): Promise<{ projects: LibraryProject[] }> =>
-    request('/studio/library' + (project === undefined ? '' : '?project=' + encodeURIComponent(project))),
+    request('/openreel/library' + (project === undefined ? '' : '?project=' + encodeURIComponent(project))),
 
   updateProject: (body: {
     project: string
@@ -455,7 +455,7 @@ export const api = {
       gain_db?: number; fade_in?: number; fade_out?: number
     }
   }): Promise<{ project: ProjectMarker }> =>
-    request('/studio/project', { method: 'POST', body: JSON.stringify(body) }),
+    request('/openreel/project', { method: 'POST', body: JSON.stringify(body) }),
 
   /**
    * Save one section's shots into the scene_plan artifact.
@@ -469,24 +469,24 @@ export const api = {
     section: string,
     shots: ReadonlyArray<{ prompt?: string; weight?: number }>,
   ): Promise<{ scene_plan: unknown }> =>
-    request('/studio/scene-plan', { method: 'POST', body: JSON.stringify({ project, section, shots }) }),
+    request('/openreel/scene-plan', { method: 'POST', body: JSON.stringify({ project, section, shots }) }),
 
-  trash: (): Promise<{ entries: TrashEntry[] }> => request('/studio/trash'),
+  trash: (): Promise<{ entries: TrashEntry[] }> => request('/openreel/trash'),
 
   restoreTrash: (entry: string): Promise<{ id: string }> =>
-    request('/studio/trash/restore', { method: 'POST', body: JSON.stringify({ entry }) }),
+    request('/openreel/trash/restore', { method: 'POST', body: JSON.stringify({ entry }) }),
 
   purgeTrash: (entry: string): Promise<{ entry: string }> =>
-    request('/studio/trash/purge', { method: 'POST', body: JSON.stringify({ entry }) }),
+    request('/openreel/trash/purge', { method: 'POST', body: JSON.stringify({ entry }) }),
 
   removeProject: (project: string): Promise<{ removed: string; trashed_to: string }> =>
-    request('/studio/project/remove', { method: 'POST', body: JSON.stringify({ project }) }),
+    request('/openreel/project/remove', { method: 'POST', body: JSON.stringify({ project }) }),
 
   validate: (artifact: string, value: unknown): Promise<{
     valid: boolean
     issues: Array<{ path: string; message: string }>
     text: string
-  }> => request('/studio/validate', { method: 'POST', body: JSON.stringify({ artifact, value }) }),
+  }> => request('/openreel/validate', { method: 'POST', body: JSON.stringify({ artifact, value }) }),
 
   submitStage: (body: {
     project: string
@@ -496,5 +496,5 @@ export const api = {
     human_approved?: boolean
     note?: string
   }): Promise<{ next_stage: string | null; invalidated: string[]; notices: string[] }> =>
-    request('/studio/stage', { method: 'POST', body: JSON.stringify(body) }),
+    request('/openreel/stage', { method: 'POST', body: JSON.stringify(body) }),
 }

@@ -1,5 +1,5 @@
 /**
- * HTTP helpers for the studio routes.
+ * HTTP helpers for the openreelbench routes.
  *
  * Deliberately a local copy rather than an import from dsh-comfyui: a plugin
  * must not depend on another plugin's internals, and these are a few dozen
@@ -105,14 +105,14 @@ export type MediaKind = 'audio' | 'image' | 'video' | 'text' | 'other'
  * The URL a browser fetches one project file from.
  *
  * Lives here rather than beside the route because two callers mint it: the
- * routes that describe a project to the panel, and `studio_show`, which puts
+ * routes that describe a project to the panel, and `openreel_show`, which puts
  * media in front of the user through a tool card. One spelling, so a change to
  * the route cannot leave the card pointing at nothing.
  */
 export function mediaUrl(projectId: string, relativePath: string, download = false): string {
   const params = new URLSearchParams({ project: projectId, path: relativePath })
   if (download) params.set('download', '1')
-  return '/studio/media?' + params.toString()
+  return '/openreel/media?' + params.toString()
 }
 
 export function mediaKindOf(path: string): MediaKind {

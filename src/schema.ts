@@ -112,7 +112,7 @@ export interface AssetRecord {
   prompt?: string
   seed?: number
   model?: string
-  /** Filled in by `studio_stage` from ffprobe; a caller-supplied value is overwritten. */
+  /** Filled in by `openreel_stage` from ffprobe; a caller-supplied value is overwritten. */
   duration_seconds?: number
   resolution?: string
   format?: string

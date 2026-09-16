@@ -65,45 +65,45 @@ export function TrashSection({ entries, onChanged, onNotice, onError }: TrashSec
   }
 
   return (
-    <section className="dcs-section">
+    <section className="orb-section">
       <button
         type="button"
-        className="dcs-disclosure"
+        className="orb-disclosure"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="dcs-disclosure-caret">{open ? '▾' : '▸'}</span>
-        <IconTrash className="dcs-section-icon" />
+        <span className="orb-disclosure-caret">{open ? '▾' : '▸'}</span>
+        <IconTrash className="orb-section-icon" />
         回收站
-        <span className="dcs-count">{entries.length}</span>
+        <span className="orb-count">{entries.length}</span>
       </button>
 
       {open ? (
-        <div className="dcs-trash">
+        <div className="orb-trash">
           {entries.map((entry) => {
             const working = busy === entry.entry
             return (
-              <div className="dcs-trash-row" key={entry.entry}>
-                <div className="dcs-trash-body">
-                  <span className="dcs-project-title">{entry.title}</span>
-                  <span className="dcs-project-meta">
+              <div className="orb-trash-row" key={entry.entry}>
+                <div className="orb-trash-body">
+                  <span className="orb-project-title">{entry.title}</span>
+                  <span className="orb-project-meta">
                     {entry.removed_at.slice(0, 10)} 移除 · {formatBytes(entry.bytes)} · 原 id {entry.id}
                   </span>
                 </div>
 
                 {confirming === entry.entry ? (
-                  <div className="dcs-trash-actions">
-                    <span className="dcs-hint dcs-note-error">彻底删除后无法恢复</span>
-                    <button type="button" className="dcs-btn dcs-btn-small" disabled={working}
+                  <div className="orb-trash-actions">
+                    <span className="orb-hint orb-note-error">彻底删除后无法恢复</span>
+                    <button type="button" className="orb-btn orb-btn-small" disabled={working}
                       onClick={() => setConfirming(null)}>取消</button>
-                    <button type="button" className="dcs-btn dcs-btn-small dcs-btn-danger" disabled={working}
+                    <button type="button" className="orb-btn orb-btn-small orb-btn-danger" disabled={working}
                       onClick={() => void purge(entry)}>{working ? '删除中…' : '确认删除'}</button>
                   </div>
                 ) : (
-                  <div className="dcs-trash-actions">
-                    <button type="button" className="dcs-btn dcs-btn-small" disabled={working}
+                  <div className="orb-trash-actions">
+                    <button type="button" className="orb-btn orb-btn-small" disabled={working}
                       onClick={() => void restore(entry)}>{working ? '还原中…' : '还原'}</button>
-                    <button type="button" className="dcs-btn dcs-btn-small dcs-btn-quiet-danger" disabled={working}
+                    <button type="button" className="orb-btn orb-btn-small orb-btn-quiet-danger" disabled={working}
                       onClick={() => setConfirming(entry.entry)}>彻底删除</button>
                   </div>
                 )}

@@ -180,8 +180,8 @@ Mayer 的五条原则里有两条你**不用操心**，插件的结构已经保�
 以及**哪一段你拿不准**。第三条不要空着。
 `
 
-export const STUDIO_STORYTELLING_SKILL: RuntimeSkill = {
-  name: 'dsh-creative-studio-storytelling',
+export const OPENREEL_STORYTELLING_SKILL: RuntimeSkill = {
+  name: 'dsh-openreelbench-storytelling',
   source: 'runtime',
   description:
     '解说片的叙事结构：But-Therefore 因果链、整片弧线与按时长缩放、四种钩子、'

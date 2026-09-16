@@ -1,5 +1,5 @@
 /**
- * dsh-creative-studio host configuration.
+ * dsh-openreelbench host configuration.
  *
  * Two groups of knobs live here and they have very different lifetimes:
  *
@@ -89,7 +89,7 @@ export interface VideoProfile {
 }
 
 export interface Config {
-  /** Project root. Empty means `$DSH_HOME/data/dsh-creative-studio/projects`. */
+  /** Project root. Empty means `$DSH_HOME/data/dsh-openreelbench/projects`. */
   workspaceRoot: string
   ffmpegPath: string
   ffprobePath: string
@@ -117,7 +117,7 @@ export interface Config {
    * reusing a built-in id replaces it entirely.
    */
   playbooks: Record<string, Playbook>
-  /** Ceiling for one `studio_compose` render. */
+  /** Ceiling for one `openreel_compose` render. */
   renderTimeoutMs: number
 }
 
@@ -133,7 +133,7 @@ const binding = () => z.object({
 
 export const Config: z<Config> = z.object({
   workspaceRoot: z.string().default('')
-    .description('项目根目录。留空 = $DSH_HOME/data/dsh-creative-studio/projects。成片、素材、状态都落在这里，建议放非系统盘。'),
+    .description('项目根目录。留空 = $DSH_HOME/data/dsh-openreelbench/projects。成片、素材、状态都落在这里，建议放非系统盘。'),
   ffmpegPath: z.string().default('ffmpeg')
     .description('ffmpeg 可执行文件。在 PATH 上就填 ffmpeg，否则填绝对路径。'),
   ffprobePath: z.string().default('ffprobe')

@@ -1,6 +1,6 @@
-// Client bundle for dsh-creative-studio: emits the __ModuleLoader__.load
+// Client bundle for dsh-openreelbench: emits the __ModuleLoader__.load
 // factory the dsh web plugin table serves at
-// /plugins/dsh-creative-studio/client.js.
+// /plugins/dsh-openreelbench/client.js.
 //
 // Externals are exactly the loader module-table platform entries; everything
 // else inlines. The bundle imports no platform VALUE — services arrive on the
@@ -8,7 +8,7 @@
 // so react is the only real external.
 import { defineConfig } from 'tsdown'
 
-const ID = 'dsh-creative-studio'
+const ID = 'dsh-openreelbench'
 
 const PLATFORM_EXTERNALS = [
   'react',

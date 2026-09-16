@@ -280,34 +280,34 @@ async function testApply() {
   apply(host.ctx, entry)
 
   const toolNames = [...host.tools.keys()].sort().join(',')
-  if (toolNames === 'studio_compose,studio_edit,studio_project,studio_show,studio_stage') ok('apply registers the five tools')
+  if (toolNames === 'openreel_compose,openreel_edit,openreel_project,openreel_show,openreel_stage') ok('apply registers the five tools')
   else bad('tool registration', toolNames)
 
   const skillNames = [...host.skills.values()].map((s) => s.name).sort()
   const expectedSkills = [
-    'dsh-creative-studio-cinematography',
-    'dsh-creative-studio-explainer-stills',
-    'dsh-creative-studio-reviewer',
-    'dsh-creative-studio-sound-design',
-    'dsh-creative-studio-stage-assets-audio',
-    'dsh-creative-studio-stage-assets-shots',
-    'dsh-creative-studio-stage-brief',
-    'dsh-creative-studio-stage-compose',
-    'dsh-creative-studio-stage-script',
-    'dsh-creative-studio-storytelling',
-    'dsh-creative-studio-usage',
+    'dsh-openreelbench-cinematography',
+    'dsh-openreelbench-explainer-stills',
+    'dsh-openreelbench-reviewer',
+    'dsh-openreelbench-sound-design',
+    'dsh-openreelbench-stage-assets-audio',
+    'dsh-openreelbench-stage-assets-shots',
+    'dsh-openreelbench-stage-brief',
+    'dsh-openreelbench-stage-compose',
+    'dsh-openreelbench-stage-script',
+    'dsh-openreelbench-storytelling',
+    'dsh-openreelbench-usage',
   ]
   if (skillNames.join(',') === expectedSkills.join(','))
     ok('apply registers all 11 skills')
   else bad('skill registration', skillNames.join(','))
 
   const section = host.section()
-  if (section?.ns === 'studio') ok("settings section registered under the 'studio' namespace")
+  if (section?.ns === 'openreel') ok("settings section registered under the 'openreel' namespace")
   else bad('settings namespace', JSON.stringify(section?.ns))
   if (section?.base === entry) ok('the cordis.yml entry is passed as the settings base layer')
   else bad('settings base', 'entry config was not handed to the settings service')
 
-  const before = [...host.skills.values()].find((s) => s.name === 'dsh-creative-studio-explainer-stills')
+  const before = [...host.skills.values()].find((s) => s.name === 'dsh-openreelbench-explainer-stills')
   if (before.content.includes('Alpha-TTS')) ok('the skill renders the configured binding')
   else bad('skill binding', 'Alpha-TTS missing from the instruction text')
 
@@ -317,7 +317,7 @@ async function testApply() {
     bindings: { tts: { workflow: 'Beta-TTS', notes: '' }, image: { workflow: 'Alpha-Image', notes: '' } },
   }))
 
-  const after = [...host.skills.values()].find((s) => s.name === 'dsh-creative-studio-explainer-stills')
+  const after = [...host.skills.values()].find((s) => s.name === 'dsh-openreelbench-explainer-stills')
   if (after.content.includes('Beta-TTS') && !after.content.includes('Alpha-TTS')) {
     ok('a settings change re-renders the skill with the new binding')
   } else {
@@ -742,7 +742,7 @@ async function main() {
     globalThis.window = { __ModuleLoader__: { load: (module) => { captured = module } } }
     new Function(readFileSync('client/client.js', 'utf-8'))()
 
-    if (captured?.id === 'dsh-creative-studio') ok('bundle announces itself to the module loader')
+    if (captured?.id === 'dsh-openreelbench') ok('bundle announces itself to the module loader')
     else bad('bundle id', JSON.stringify(captured?.id))
 
     const externals = []
@@ -804,7 +804,7 @@ async function main() {
     mod.apply(ctx)
 
     const slots = registered.map((meta) => meta.name + '#' + (meta.id ?? meta.key))
-    if (slots.includes('conversation.view#studio') && slots.includes('settings.section#studio'))
+    if (slots.includes('conversation.view#openreel') && slots.includes('settings.section#openreel'))
       ok('registers ' + slots.join(' + '))
     else bad('client slots', JSON.stringify(slots))
 
@@ -869,9 +869,9 @@ async function main() {
     // A full-auto run has no button to press, so every one of these needs the
     // tool side to exist at all. Add a row when a new direct action lands.
     const shared = [
-      { action: '合成', call: 'composeProject(runtime', tool: 'studio_compose' },
-      { action: '过闸 / 提交产物', call: 'machine.write({', tool: 'studio_stage' },
-      { action: '导入素材', call: 'importAssets(layout', tool: 'studio_project' },
+      { action: '合成', call: 'composeProject(runtime', tool: 'openreel_compose' },
+      { action: '过闸 / 提交产物', call: 'machine.write({', tool: 'openreel_stage' },
+      { action: '导入素材', call: 'importAssets(layout', tool: 'openreel_project' },
     ]
     const broken = []
     for (const entry of shared) {
@@ -910,7 +910,7 @@ async function main() {
           projectId: 'p', title: 't', durationSeconds: 30,
           charsPerSecond: 4.9, style: 'clean-tech', rewrite: false,
         }),
-        skills: ['dsh-creative-studio-stage-script', 'dsh-creative-studio-storytelling'],
+        skills: ['dsh-openreelbench-stage-script', 'dsh-openreelbench-storytelling'],
       },
       {
         what: '选配乐',
@@ -918,7 +918,7 @@ async function main() {
           projectId: 'p', workflow: 'w', styleName: 's',
           pacingProfile: 'conversational', totalSeconds: 60,
         }),
-        skills: ['dsh-creative-studio-sound-design'],
+        skills: ['dsh-openreelbench-sound-design'],
       },
     ]
     const missing = []
@@ -935,7 +935,7 @@ async function main() {
     sentMessages.push({
       what: '镜头语言',
       text: buildScenePlanJob('p', 8),
-      skills: ['dsh-creative-studio-stage-assets-shots', 'dsh-creative-studio-cinematography'],
+      skills: ['dsh-openreelbench-stage-assets-shots', 'dsh-openreelbench-cinematography'],
     })
     for (const skill of sentMessages[sentMessages.length - 1].skills) {
       if (!sentMessages[sentMessages.length - 1].text.split(/\s+/).includes('/' + skill)) {
@@ -968,13 +968,13 @@ async function main() {
     const poll = async () => {
       for (let attempt = 0; attempt < 400; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 150))
-        const status = (await callRoute(routes, '/studio/compose',
-          '/studio/compose?project=' + id, {})).json()
+        const status = (await callRoute(routes, '/openreel/compose',
+          '/openreel/compose?project=' + id, {})).json()
         if (status.state !== 'running') return status
       }
       return { state: 'timeout' }
     }
-    const start = (body) => callRoute(routes, '/studio/compose', '/studio/compose', {
+    const start = (body) => callRoute(routes, '/openreel/compose', '/openreel/compose', {
       method: 'POST', body: { project: id, ...body },
     })
 
@@ -1013,8 +1013,8 @@ async function main() {
     const done = await (async () => {
       for (let attempt = 0; attempt < 400; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 60))
-        const status = (await callRoute(routes, '/studio/compose',
-          '/studio/compose?project=' + id, {})).json()
+        const status = (await callRoute(routes, '/openreel/compose',
+          '/openreel/compose?project=' + id, {})).json()
         if (status.state === 'running') seen.push(status)
         else return status
       }
@@ -1059,7 +1059,7 @@ async function main() {
       else bad('frame not reported', JSON.stringify(done.result?.warnings))
     }
 
-    // THE BUG THIS FOUND. `studio_compose` had no cut parameter, so the panel's
+    // THE BUG THIS FOUND. `openreel_compose` had no cut parameter, so the panel's
     // message named a version the model could not pass on -- every render was
     // of the plan, and the output was still a film, so nothing caught it.
     const cutId = 'cut-route'
@@ -1110,7 +1110,7 @@ async function main() {
     else bad('concurrent renders', first.statusCode + ' then ' + second.statusCode)
     await poll()
 
-    const blank = await callRoute(routes, '/studio/compose', '/studio/compose', {
+    const blank = await callRoute(routes, '/openreel/compose', '/openreel/compose', {
       method: 'POST', body: {},
     })
     if (blank.statusCode === 400) ok('the route needs a project')
@@ -1119,7 +1119,7 @@ async function main() {
     // The page draws a bar, not just a spinner: minutes of silence and a
     // spinning circle are indistinguishable from a stuck render.
     const timelineSource = (await import('node:fs')).readFileSync('src/client/timeline-screen.tsx', 'utf-8')
-    if (timelineSource.includes('dcs-render-fill') && timelineSource.includes("role=\"progressbar\""))
+    if (timelineSource.includes('orb-render-fill') && timelineSource.includes("role=\"progressbar\""))
       ok('the compose screen draws a progress bar while rendering')
     else bad('no bar', 'a long render shows only a spinner')
 
@@ -1133,14 +1133,14 @@ async function main() {
       : screen.slice(composeFrom, screen.indexOf(String.fromCharCode(10) + '  }', composeFrom))
     if (composeBody.includes('api.startCompose(') && !composeBody.includes('onSend('))
       ok('the compose button renders directly instead of asking the agent to')
-    else bad('still via the agent', 'the panel composes a studio_compose request')
+    else bad('still via the agent', 'the panel composes a openreel_compose request')
     // And it passes the version the user is looking at -- the thing the prose
     // route could not carry.
     if (screen.includes('cut: cut.id')) ok('and it sends the selected version with it')
     else bad('cut not sent', 'the panel renders the plan whatever is selected')
     // The tool keeps its place: a fully automatic run has no button to press.
     const toolSource = (await import('node:fs')).readFileSync('src/tools.ts', 'utf-8')
-    if (toolSource.includes("name: 'studio_compose'") && toolSource.includes('composeProject(runtime'))
+    if (toolSource.includes("name: 'openreel_compose'") && toolSource.includes('composeProject(runtime'))
       ok('the tool stays, and goes through the same function the route does')
     else bad('tool path diverged', 'the agent and the panel no longer share a compose')
 
@@ -1153,15 +1153,15 @@ async function main() {
     applyPlugin(host.ctx, RouteConfig({ workspaceRoot: WS }))
     const routes = host.routes
 
-    const expected = ['/studio/catalog', '/studio/state', '/studio/media', '/studio/library',
-      '/studio/project', '/studio/project/remove', '/studio/trash', '/studio/trash/restore',
-      '/studio/trash/purge', '/studio/import', '/studio/asset/trim', '/studio/validate', '/studio/stage',
-      '/studio/compose', '/studio/skill']
+    const expected = ['/openreel/catalog', '/openreel/state', '/openreel/media', '/openreel/library',
+      '/openreel/project', '/openreel/project/remove', '/openreel/trash', '/openreel/trash/restore',
+      '/openreel/trash/purge', '/openreel/import', '/openreel/asset/trim', '/openreel/validate', '/openreel/stage',
+      '/openreel/compose', '/openreel/skill']
     const mounted = expected.filter((path) => routes.has(path))
     if (mounted.length === expected.length) ok(expected.length + ' routes mounted')
     else bad('route mounting', 'only ' + JSON.stringify(mounted))
 
-    const catalog = await callRoute(routes, '/studio/catalog', '/studio/catalog')
+    const catalog = await callRoute(routes, '/openreel/catalog', '/openreel/catalog')
     if (catalog.statusCode === 200) {
       const doc = catalog.json()
       const first = doc.pipelines?.[0]
@@ -1180,9 +1180,9 @@ async function main() {
       if (withPlaybooks.length === doc.styles.length)
         ok('every style option carries its full playbook')
       else bad('style playbooks', withPlaybooks.length + '/' + doc.styles.length)
-    } else bad('GET /studio/catalog', String(catalog.statusCode))
+    } else bad('GET /openreel/catalog', String(catalog.statusCode))
 
-    const state = await callRoute(routes, '/studio/state', '/studio/state?project=smoke')
+    const state = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke')
     let body
     if (state.statusCode === 200) {
       body = state.json()
@@ -1192,7 +1192,7 @@ async function main() {
       else bad('state artifacts', JSON.stringify(Object.keys(body.artifacts ?? {})))
       if (body.style?.playbook?.name) ok('state resolves the style playbook (' + body.style.playbook.name + ')')
       else bad('state style', JSON.stringify(body.style))
-      if (body.film?.url?.startsWith('/studio/media?')) ok('state hands back a playable film URL')
+      if (body.film?.url?.startsWith('/openreel/media?')) ok('state hands back a playable film URL')
       else bad('state film', JSON.stringify(body.film))
       // Artifacts are served verbatim: the panel builds media URLs itself from
       // the project id and the asset path, so nothing has to be added here — and
@@ -1200,7 +1200,7 @@ async function main() {
       const first = body.artifacts.asset_manifest_audio.assets[0]
       if (first !== undefined && !('url' in first)) ok('served artifacts carry no display-only fields')
       else bad('artifact purity', JSON.stringify(first))
-    } else bad('GET /studio/state', state.statusCode + ' ' + state.text().slice(0, 200))
+    } else bad('GET /openreel/state', state.statusCode + ' ' + state.text().slice(0, 200))
 
     if (state.statusCode === 200) {
       const doc = state.json()
@@ -1210,7 +1210,7 @@ async function main() {
       else bad('state style options', JSON.stringify(doc.style?.options?.length))
     }
 
-    const patched = await callRoute(routes, '/studio/project', '/studio/project', {
+    const patched = await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST',
       body: { project: 'smoke', title: '改过的标题', target_duration_seconds: 45, style: 'warm-doc' },
     })
@@ -1219,12 +1219,12 @@ async function main() {
       if (marker.title === '改过的标题' && marker.target_duration_seconds === 45 && marker.style === 'warm-doc')
         ok('project route patches title, duration and style')
       else bad('project patch', JSON.stringify(marker))
-    } else bad('POST /studio/project', patched.statusCode + ' ' + patched.text().slice(0, 160))
+    } else bad('POST /openreel/project', patched.statusCode + ' ' + patched.text().slice(0, 160))
 
     // References are project-level and stored as ComfyUI's own file names —
     // the model puts them straight into a loader node, so a path or a URL here
     // would be the one thing that node cannot use.
-    const withRefs = await callRoute(routes, '/studio/project', '/studio/project', {
+    const withRefs = await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST',
       body: { project: 'smoke', references: ['ref_a.png', '  ', 'ref_b.png'] },
     })
@@ -1239,7 +1239,7 @@ async function main() {
     // manifest — that records produced files, and an entry with no file is
     // exactly what the asset checks reject — so a prompt typed for a shot that
     // has not been generated used to be dropped on save without a word.
-    const planned = await callRoute(routes, '/studio/scene-plan', '/studio/scene-plan', {
+    const planned = await callRoute(routes, '/openreel/scene-plan', '/openreel/scene-plan', {
       method: 'POST',
       body: {
         project: 'smoke',
@@ -1260,7 +1260,7 @@ async function main() {
     // Shot language is the reason this artifact exists. A screen that has no
     // box for it must not delete it just by saving the fields it does know —
     // this is the contract most likely to be broken by a future edit.
-    const withLanguage = await callRoute(routes, '/studio/scene-plan', '/studio/scene-plan', {
+    const withLanguage = await callRoute(routes, '/openreel/scene-plan', '/openreel/scene-plan', {
       method: 'POST',
       body: {
         project: 'smoke',
@@ -1274,7 +1274,7 @@ async function main() {
     if (withLanguage.statusCode === 200) ok('a shot accepts structured shot language')
     else bad('shot language write', withLanguage.statusCode + ' ' + withLanguage.text().slice(0, 200))
 
-    const reSaved = await callRoute(routes, '/studio/scene-plan', '/studio/scene-plan', {
+    const reSaved = await callRoute(routes, '/openreel/scene-plan', '/openreel/scene-plan', {
       method: 'POST',
       body: {
         project: 'smoke',
@@ -1302,7 +1302,7 @@ async function main() {
       reference_names: ['ref.png'],
       hero_moment: true,
     }
-    const roundTrip = await callRoute(routes, '/studio/scene-plan', '/studio/scene-plan', {
+    const roundTrip = await callRoute(routes, '/openreel/scene-plan', '/openreel/scene-plan', {
       method: 'POST',
       body: { project: 'smoke', section: 's2', shots: [allFields] },
     })
@@ -1315,7 +1315,7 @@ async function main() {
 
     // And each has to be clearable again, or a control can be switched on but
     // never off.
-    const cleared = await callRoute(routes, '/studio/scene-plan', '/studio/scene-plan', {
+    const cleared = await callRoute(routes, '/openreel/scene-plan', '/openreel/scene-plan', {
       method: 'POST',
       body: {
         project: 'smoke',
@@ -1335,7 +1335,7 @@ async function main() {
 
     // An enum outside the vocabulary is a typo, and a typo that reaches a
     // prompt builder produces a silently worse picture.
-    const badLanguage = await callRoute(routes, '/studio/scene-plan', '/studio/scene-plan', {
+    const badLanguage = await callRoute(routes, '/openreel/scene-plan', '/openreel/scene-plan', {
       method: 'POST',
       body: {
         project: 'smoke',
@@ -1348,7 +1348,7 @@ async function main() {
     else bad('shot language guard', badLanguage.statusCode + ' ' + badLanguage.text().slice(0, 160))
 
     // THE MODEL has to see the variation report too. It cannot call an HTTP
-    // route, so /studio/state is the panel's channel only -- without this the
+    // route, so /openreel/state is the panel's channel only -- without this the
     // check did not exist for the model, which would first learn of a
     // repetitive plan when compose refused, after paying for every picture.
     {
@@ -1358,9 +1358,9 @@ async function main() {
         { tools: { register: (definition) => { stageTools.set(definition.name, definition); return () => {} } } },
         { machine, getConfig: () => config },
       )
-      const stageTool = stageTools.get('studio_stage')
+      const stageTool = stageTools.get('openreel_stage')
       const smoke = machine.layout('smoke')
-      // studio_stage enforces pipeline order, and earlier tests left the chain
+      // openreel_stage enforces pipeline order, and earlier tests left the chain
       // partly invalidated. Re-recorded from the artifacts already on disk.
       for (const [stage, name] of [
         ['brief', 'brief'],
@@ -1386,7 +1386,7 @@ async function main() {
       }, { signal: new AbortController().signal })
 
       if (answer.variation !== undefined && answer.variation.violations.length > 0)
-        ok('studio_stage hands the model its variation report  -> ' + answer.variation.score)
+        ok('openreel_stage hands the model its variation report  -> ' + answer.variation.score)
       else bad('model cannot see variation', JSON.stringify(answer.variation))
 
       if (answer.variation?.violations.some((entry) => entry.code === 'duplicate-subject'))
@@ -1406,9 +1406,9 @@ async function main() {
       else bad('spurious report', JSON.stringify(plain.variation))
 
       // And the model can read the plan back at all, which it could not before.
-      const projectTool = stageTools.get('studio_project')
+      const projectTool = stageTools.get('openreel_project')
       const artifactEnum = projectTool.parameters.properties.artifact.enum
-      if (artifactEnum.includes('scene_plan')) ok('studio_project can read scene_plan back')
+      if (artifactEnum.includes('scene_plan')) ok('openreel_project can read scene_plan back')
       else bad('scene_plan unreadable', JSON.stringify(artifactEnum))
 
       // This block wrote a deliberately repetitive plan through the real tool,
@@ -1433,7 +1433,7 @@ async function main() {
       const stored = await machine.readArtifact(smokeLayout, 'scene_plan')
       await fs.rm(join(smokeLayout.artifactsDir, 'scene_plan.json'), { force: true })
 
-      const bare = await callRoute(routes, '/studio/state', '/studio/state?project=smoke')
+      const bare = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke')
       const payload = bare.json()
       const covered = new Set(payload.prompts.map((entry) => entry.sectionId))
       const sections = new Set(payload.timeline.map((entry) => entry.sectionId))
@@ -1462,7 +1462,7 @@ async function main() {
     }
 
     // The plan reaches the panel as the shape the shots screen reads.
-    const planState = await callRoute(routes, '/studio/state', '/studio/state?project=smoke')
+    const planState = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke')
     if (planState.statusCode === 200) {
       const view = planState.json().project.shot_plan
       if (view?.s1?.length === 2 && view.s1[0].prompt === '开场空镜')
@@ -1484,7 +1484,7 @@ async function main() {
     // in ComfyUI's input directory, stored on the marker, read back by the
     // voice screen. Blank and non-string entries are dropped at the route --
     // an empty name would reach a loader node as a request for a file called "".
-    const refsSaved = await callRoute(routes, '/studio/project', '/studio/project', {
+    const refsSaved = await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST',
       body: { project: 'smoke', voice_references: ['clone-a.wav', '  clone-b.flac  ', '', 7] },
     })
@@ -1498,10 +1498,10 @@ async function main() {
     // A save that does not mention them must not clear them. The panel writes
     // one field at a time, so a patch that overwrote absent fields would drop
     // the clips the moment anyone renamed the project.
-    await callRoute(routes, '/studio/project', '/studio/project', {
+    await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST', body: { project: 'smoke', title: '改过的标题' },
     })
-    const afterOther = await callRoute(routes, '/studio/state', '/studio/state?project=smoke', {})
+    const afterOther = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke', {})
     if (afterOther.json().project?.voice_references?.length === 2)
       ok('an unrelated project save leaves the reference audio alone')
     else bad('references clobbered', JSON.stringify(afterOther.json().project?.voice_references))
@@ -1510,10 +1510,10 @@ async function main() {
     // name long before a file exists, and the agent's import writes the path
     // without knowing what was typed -- a whole-object patch would make each
     // of those erase the other.
-    const wf = await callRoute(routes, '/studio/project', '/studio/project', {
+    const wf = await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST', body: { project: 'smoke', music: { workflow: 'Alpha-Music' } },
     })
-    const bedSave = await callRoute(routes, '/studio/project', '/studio/project', {
+    const bedSave = await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST', body: { project: 'smoke', music: { path: 'assets/audio/music.wav' } },
     })
     const both = bedSave.json().project?.music
@@ -1523,7 +1523,7 @@ async function main() {
 
     // Clearing the path must be possible without forgetting the workflow --
     // that is the 去掉 button, and it should not cost the next film its setting.
-    const clearedBed = await callRoute(routes, '/studio/project', '/studio/project', {
+    const clearedBed = await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST', body: { project: 'smoke', music: { path: '' } },
     })
     const afterClear = clearedBed.json().project?.music
@@ -1533,7 +1533,7 @@ async function main() {
 
     // The mix settings clamp at the route too, so a hand-written request cannot
     // store a level the render would then have to defend against.
-    const loud = await callRoute(routes, '/studio/project', '/studio/project', {
+    const loud = await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST', body: { project: 'smoke', music: { gain_db: 99, fade_in: -5, fade_out: 500 } },
     })
     const stored = loud.json().project?.music
@@ -1542,7 +1542,7 @@ async function main() {
     else bad('route clamp', JSON.stringify(stored))
     // And a partial save leaves the others alone -- the save button sends only
     // the fields that parsed, so a cleared box must not mean zero.
-    const partial = await callRoute(routes, '/studio/project', '/studio/project', {
+    const partial = await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST', body: { project: 'smoke', music: { gain_db: -18 } },
     })
     const afterPartial = partial.json().project?.music
@@ -1557,7 +1557,7 @@ async function main() {
     // rather than as what it is.
     const escapes = []
     for (const attempt of ['/etc/passwd', 'C:/windows/x.wav', '../../out.wav', 'a/../../b.wav']) {
-      const sent = await callRoute(routes, '/studio/project', '/studio/project', {
+      const sent = await callRoute(routes, '/openreel/project', '/openreel/project', {
         method: 'POST', body: { project: 'smoke', music: { path: attempt } },
       })
       if (sent.statusCode !== 400) escapes.push(attempt + ' -> ' + sent.statusCode)
@@ -1565,12 +1565,12 @@ async function main() {
     if (escapes.length === 0) ok('an absolute or climbing music path is refused at the route')
     else bad('music path escape', escapes.join('; '))
     // And the refusal must not have taken the good value with it.
-    const stillThere = await callRoute(routes, '/studio/state', '/studio/state?project=smoke', {})
+    const stillThere = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke', {})
     if (stillThere.json().project?.music?.workflow === 'Alpha-Music')
       ok('a refused path leaves the stored music untouched')
     else bad('refusal clobbered', JSON.stringify(stillThere.json().project?.music))
 
-    const platformSaved = await callRoute(routes, '/studio/project', '/studio/project', {
+    const platformSaved = await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST', body: { project: 'smoke', target_platform: 'douyin' },
     })
     if (platformSaved.statusCode === 200 && platformSaved.json().project.target_platform === 'douyin')
@@ -1578,19 +1578,19 @@ async function main() {
     else bad('platform save', platformSaved.statusCode + ' ' + platformSaved.text().slice(0, 160))
 
     // The frame is decided from this value, so a typo must not reach the marker.
-    const badPlatform = await callRoute(routes, '/studio/project', '/studio/project', {
+    const badPlatform = await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST', body: { project: 'smoke', target_platform: 'myspace' },
     })
     if (badPlatform.statusCode === 400) ok('an unknown platform is refused at the route')
     else bad('platform guard', String(badPlatform.statusCode))
 
-    const badDuration = await callRoute(routes, '/studio/project', '/studio/project', {
+    const badDuration = await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST', body: { project: 'smoke', target_duration_seconds: 99999 },
     })
     if (badDuration.statusCode === 400) ok('project route rejects an out-of-range duration')
     else bad('project duration guard', String(badDuration.statusCode))
 
-    const noop = await callRoute(routes, '/studio/project', '/studio/project', {
+    const noop = await callRoute(routes, '/openreel/project', '/openreel/project', {
       method: 'POST', body: { project: 'smoke' },
     })
     if (noop.statusCode === 400) ok('project route rejects an empty patch')
@@ -1600,7 +1600,7 @@ async function main() {
     // a batch of generated assets, and the listing must lose it while the
     // bytes survive.
     await machine.initProject({ id: 'throwaway', title: '待移除', targetDurationSeconds: 20 })
-    const removed = await callRoute(routes, '/studio/project/remove', '/studio/project/remove', {
+    const removed = await callRoute(routes, '/openreel/project/remove', '/openreel/project/remove', {
       method: 'POST', body: { project: 'throwaway' },
     })
     if (removed.statusCode === 200 && removed.json().trashed_to.includes('.trash')) {
@@ -1611,9 +1611,9 @@ async function main() {
       const after = await machine.listProjects()
       if (!after.some((entry) => entry.id === 'throwaway')) ok('a trashed project drops out of the listing')
       else bad('trash listing', 'still listed')
-    } else bad('POST /studio/project/remove', removed.statusCode + ' ' + removed.text().slice(0, 140))
+    } else bad('POST /openreel/project/remove', removed.statusCode + ' ' + removed.text().slice(0, 140))
 
-    const removeMissing = await callRoute(routes, '/studio/project/remove', '/studio/project/remove', {
+    const removeMissing = await callRoute(routes, '/openreel/project/remove', '/openreel/project/remove', {
       method: 'POST', body: { project: 'no-such-project' },
     })
     if (removeMissing.statusCode === 404) ok('removing an unknown project is 404')
@@ -1621,51 +1621,51 @@ async function main() {
 
     // The trash closes the loop: what 移除 put away must be listable, and both
     // reversible and irreversible exits have to work.
-    const listed = await callRoute(routes, '/studio/trash', '/studio/trash')
+    const listed = await callRoute(routes, '/openreel/trash', '/openreel/trash')
     const trashed = listed.statusCode === 200 ? listed.json().entries : []
     const mine = trashed.find((item) => item.id === 'throwaway')
     if (mine !== undefined && mine.title === '待移除' && typeof mine.bytes === 'number')
       ok('trash lists the removed project with its title and size')
-    else bad('GET /studio/trash', JSON.stringify(trashed).slice(0, 160))
+    else bad('GET /openreel/trash', JSON.stringify(trashed).slice(0, 160))
 
-    const restored = await callRoute(routes, '/studio/trash/restore', '/studio/trash/restore', {
+    const restored = await callRoute(routes, '/openreel/trash/restore', '/openreel/trash/restore', {
       method: 'POST', body: { entry: mine.entry },
     })
     if (restored.statusCode === 200 && restored.json().id === 'throwaway') {
       const back = await machine.listProjects()
       if (back.some((entry) => entry.id === 'throwaway')) ok('restore puts the project back in the listing')
       else bad('restore', 'not listed after restore')
-    } else bad('POST /studio/trash/restore', restored.statusCode + ' ' + restored.text().slice(0, 140))
+    } else bad('POST /openreel/trash/restore', restored.statusCode + ' ' + restored.text().slice(0, 140))
 
     // Restoring onto a live id must refuse rather than quietly rename.
-    await callRoute(routes, '/studio/project/remove', '/studio/project/remove', {
+    await callRoute(routes, '/openreel/project/remove', '/openreel/project/remove', {
       method: 'POST', body: { project: 'throwaway' },
     })
     await machine.initProject({ id: 'throwaway', title: '同名新项目', targetDurationSeconds: 20 })
-    const again = await callRoute(routes, '/studio/trash', '/studio/trash')
+    const again = await callRoute(routes, '/openreel/trash', '/openreel/trash')
     const blocked = again.json().entries.find((item) => item.id === 'throwaway')
-    const collision = await callRoute(routes, '/studio/trash/restore', '/studio/trash/restore', {
+    const collision = await callRoute(routes, '/openreel/trash/restore', '/openreel/trash/restore', {
       method: 'POST', body: { entry: blocked.entry },
     })
     if (collision.statusCode === 409 || collision.statusCode === 400) ok('restoring onto a live id refuses')
     else bad('restore collision', String(collision.statusCode))
 
-    const purged = await callRoute(routes, '/studio/trash/purge', '/studio/trash/purge', {
+    const purged = await callRoute(routes, '/openreel/trash/purge', '/openreel/trash/purge', {
       method: 'POST', body: { entry: blocked.entry },
     })
     if (purged.statusCode === 200) {
       const gone = await fs.stat(join(WS, '.trash', blocked.entry)).then(() => true, () => false)
       if (!gone) ok('purge deletes the trashed project for real')
       else bad('purge', 'directory survived')
-    } else bad('POST /studio/trash/purge', String(purged.statusCode))
+    } else bad('POST /openreel/trash/purge', String(purged.statusCode))
 
-    const escape = await callRoute(routes, '/studio/trash/purge', '/studio/trash/purge', {
+    const escape = await callRoute(routes, '/openreel/trash/purge', '/openreel/trash/purge', {
       method: 'POST', body: { entry: '../smoke' },
     })
     if (escape.statusCode === 400) ok('a trash entry name escaping the trash is refused')
     else bad('trash traversal', String(escape.statusCode))
 
-    // Round-trip contract: what /studio/state hands the panel must be
+    // Round-trip contract: what /openreel/state hands the panel must be
     // submittable back unchanged. A route that decorates a document it also
     // accepts makes that document impossible to return — which is exactly what
     // an injected `url` field did.
@@ -1676,7 +1676,7 @@ async function main() {
         const stage = { brief: 'brief', script: 'script', asset_manifest_audio: 'assets_audio',
           asset_manifest_shots: 'assets_shots', render_report: 'compose' }[name]
         if (stage === undefined) continue
-        const back = await callRoute(routes, '/studio/stage', '/studio/stage', {
+        const back = await callRoute(routes, '/openreel/stage', '/openreel/stage', {
           method: 'POST',
           body: { project: 'smoke', stage, status: 'completed', human_approved: true, artifacts: { [name]: value } },
         })
@@ -1691,7 +1691,7 @@ async function main() {
     // A cut is an override layer, not a copy: it records only what the editor
     // changed, so a re-generated take still flows through instead of stranding
     // the edit.
-    const saved = await callRoute(routes, '/studio/cuts', '/studio/cuts', {
+    const saved = await callRoute(routes, '/openreel/cuts', '/openreel/cuts', {
       method: 'POST',
       body: {
         project: 'smoke',
@@ -1703,16 +1703,16 @@ async function main() {
       if (doc.id === 'cut-a' && doc.sections.length === 2 && doc.sections[0].tail === 1.5)
         ok('a cut saves its timing overrides')
       else bad('cut save', JSON.stringify(doc))
-    } else bad('POST /studio/cuts', saved.statusCode + ' ' + saved.text().slice(0, 160))
+    } else bad('POST /openreel/cuts', saved.statusCode + ' ' + saved.text().slice(0, 160))
 
     // An explicit pad must beat the style's minimum-section floor. It did not:
     // setting a pause to zero silently got the floor's padding back, which made
     // the control look broken.
-    await callRoute(routes, '/studio/cuts', '/studio/cuts', {
+    await callRoute(routes, '/openreel/cuts', '/openreel/cuts', {
       method: 'POST',
       body: { project: 'smoke', cut: { id: 'cut-tight', name: '零留白', sections: [{ id: 's1', lead: 0, tail: 0 }] } },
     })
-    const tight = await callRoute(routes, '/studio/state', '/studio/state?project=smoke&cut=cut-tight')
+    const tight = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke&cut=cut-tight')
     if (tight.statusCode === 200) {
       const s1 = tight.json().timeline.find((entry) => entry.sectionId === 's1')
       // s1's narration measures 3.2s; with both pads at zero that is the whole
@@ -1721,20 +1721,20 @@ async function main() {
         ok('a pad set to zero is honoured, not floored (' + s1.duration.toFixed(2) + 's)')
       else bad('zero pad', s1.duration + ' vs speech ' + s1.speechSeconds)
     } else bad('state with zero pads', String(tight.statusCode))
-    await callRoute(routes, '/studio/cuts/delete', '/studio/cuts/delete', {
+    await callRoute(routes, '/openreel/cuts/delete', '/openreel/cuts/delete', {
       method: 'POST', body: { project: 'smoke', cut: 'cut-tight' },
     })
 
     // Padding bottoms out at zero; shortening past that means cutting the clip,
     // which is a different act and a different field.
-    await callRoute(routes, '/studio/cuts', '/studio/cuts', {
+    await callRoute(routes, '/openreel/cuts', '/openreel/cuts', {
       method: 'POST',
       body: {
         project: 'smoke',
         cut: { id: 'cut-trim', name: '裁一刀', sections: [{ id: 's1', lead: 0, tail: 0, trimStart: 0.5, trimEnd: 0.3 }] },
       },
     })
-    const trimmed = await callRoute(routes, '/studio/state', '/studio/state?project=smoke&cut=cut-trim')
+    const trimmed = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke&cut=cut-trim')
     if (trimmed.statusCode === 200) {
       const s1 = trimmed.json().timeline.find((entry) => entry.sectionId === 's1')
       // 3.2s recorded, 0.8s cut away, no padding left.
@@ -1743,20 +1743,20 @@ async function main() {
       if (Math.abs(s1.trimStart - 0.5) < 0.001) ok('the trim point reaches the preview')
       else bad('trimStart', String(s1.trimStart))
     } else bad('state with trim', String(trimmed.statusCode))
-    await callRoute(routes, '/studio/cuts/delete', '/studio/cuts/delete', {
+    await callRoute(routes, '/openreel/cuts/delete', '/openreel/cuts/delete', {
       method: 'POST', body: { project: 'smoke', cut: 'cut-trim' },
     })
 
     // A cut stores the subtitle SEGMENTATION, never the times: keeping timing
     // derived is what lets an edited cue survive a pad change or a re-record.
-    await callRoute(routes, '/studio/cuts', '/studio/cuts', {
+    await callRoute(routes, '/openreel/cuts', '/openreel/cuts', {
       method: 'POST',
       body: {
         project: 'smoke',
         cut: { id: 'cut-subs', name: '改字幕', sections: [{ id: 's1', cues: ['前半句', '  ', '后半句都在这里'] }] },
       },
     })
-    const subs = await callRoute(routes, '/studio/state', '/studio/state?project=smoke&cut=cut-subs')
+    const subs = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke&cut=cut-subs')
     if (subs.statusCode === 200) {
       const s1 = subs.json().timeline.find((entry) => entry.sectionId === 's1')
       if (s1.cues.length === 2 && s1.cues[0].text === '前半句') ok('a cut supplies its own cue segmentation')
@@ -1770,7 +1770,7 @@ async function main() {
 
     // A weight is an explicit share of the same fixed window: one cue can only
     // grow by shrinking its neighbour, so the film's length never moves.
-    await callRoute(routes, '/studio/cuts', '/studio/cuts', {
+    await callRoute(routes, '/openreel/cuts', '/openreel/cuts', {
       method: 'POST',
       body: {
         project: 'smoke',
@@ -1780,7 +1780,7 @@ async function main() {
         },
       },
     })
-    const weighted = await callRoute(routes, '/studio/state', '/studio/state?project=smoke&cut=cut-subs')
+    const weighted = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke&cut=cut-subs')
     if (weighted.statusCode === 200) {
       const s1 = weighted.json().timeline.find((entry) => entry.sectionId === 's1')
       const first = s1.cues[0].end - s1.cues[0].start
@@ -1792,11 +1792,11 @@ async function main() {
         ok('weighted cues still tile the speech window exactly')
       else bad('cue tiling', (first + second) + ' vs ' + s1.speechSeconds)
     } else bad('state with cue weights', String(weighted.statusCode))
-    await callRoute(routes, '/studio/cuts/delete', '/studio/cuts/delete', {
+    await callRoute(routes, '/openreel/cuts/delete', '/openreel/cuts/delete', {
       method: 'POST', body: { project: 'smoke', cut: 'cut-subs' },
     })
 
-    const withCut = await callRoute(routes, '/studio/state', '/studio/state?project=smoke&cut=cut-a')
+    const withCut = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke&cut=cut-a')
     if (withCut.statusCode === 200) {
       const doc = withCut.json()
       const s1 = doc.timeline.find((entry) => entry.sectionId === 's1')
@@ -1812,13 +1812,13 @@ async function main() {
     // The plan a panel reads has to be the plan for the cut it is editing.
     // Fetching without the id returns the untouched plan, which is how an edit
     // could save correctly and still not show up.
-    const padded = await callRoute(routes, '/studio/cuts', '/studio/cuts', {
+    const padded = await callRoute(routes, '/openreel/cuts', '/openreel/cuts', {
       method: 'POST',
       body: { project: 'smoke', cut: { id: 'cut-pad', name: '拉长', sections: [{ id: 's1', tail: 6 }] } },
     })
     if (padded.statusCode === 200) {
-      const withPad = await callRoute(routes, '/studio/state', '/studio/state?project=smoke&cut=cut-pad')
-      const without = await callRoute(routes, '/studio/state', '/studio/state?project=smoke')
+      const withPad = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke&cut=cut-pad')
+      const without = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke')
       const padSection = withPad.json().timeline.find((entry) => entry.sectionId === 's1')
       const plainSection = without.json().timeline.find((entry) => entry.sectionId === 's1')
       // Derived, not hardcoded: the section's own lead comes from its cues or
@@ -1832,54 +1832,54 @@ async function main() {
         ok('the same request without the cut id returns the untouched plan')
       else bad('cut isolation', plainSection.duration + ' vs ' + padSection.duration)
     } else bad('POST pad cut', String(padded.statusCode))
-    await callRoute(routes, '/studio/cuts/delete', '/studio/cuts/delete', {
+    await callRoute(routes, '/openreel/cuts/delete', '/openreel/cuts/delete', {
       method: 'POST', body: { project: 'smoke', cut: 'cut-pad' },
     })
 
-    const badCut = await callRoute(routes, '/studio/cuts', '/studio/cuts', {
+    const badCut = await callRoute(routes, '/openreel/cuts', '/openreel/cuts', {
       method: 'POST', body: { project: 'smoke', cut: { id: '../escape', name: 'x' } },
     })
     if (badCut.statusCode === 400) ok('a cut id that could escape its directory is refused')
     else bad('cut id guard', String(badCut.statusCode))
 
-    const dropped = await callRoute(routes, '/studio/cuts/delete', '/studio/cuts/delete', {
+    const dropped = await callRoute(routes, '/openreel/cuts/delete', '/openreel/cuts/delete', {
       method: 'POST', body: { project: 'smoke', cut: 'cut-a' },
     })
-    const remaining = await callRoute(routes, '/studio/cuts', '/studio/cuts?project=smoke')
+    const remaining = await callRoute(routes, '/openreel/cuts', '/openreel/cuts?project=smoke')
     if (dropped.statusCode === 200 && remaining.json().cuts.length === 0) ok('a cut can be deleted')
     else bad('cut delete', String(dropped.statusCode))
 
-    const noProject = await callRoute(routes, '/studio/state', '/studio/state')
+    const noProject = await callRoute(routes, '/openreel/state', '/openreel/state')
     if (noProject.statusCode === 400) ok('state without a project is 400')
     else bad('state 400', String(noProject.statusCode))
 
-    const unknown = await callRoute(routes, '/studio/state', '/studio/state?project=nope')
+    const unknown = await callRoute(routes, '/openreel/state', '/openreel/state?project=nope')
     if (unknown.statusCode === 404) ok('state for an unknown project is 404')
     else bad('state 404', String(unknown.statusCode))
 
     const asset = body?.artifacts?.asset_manifest_shots?.assets?.[0]
     if (asset !== undefined) {
-      const media = await callRoute(routes, '/studio/media',
-        '/studio/media?project=smoke&path=' + encodeURIComponent(asset.path))
+      const media = await callRoute(routes, '/openreel/media',
+        '/openreel/media?project=smoke&path=' + encodeURIComponent(asset.path))
       if (media.statusCode === 200 && media.headers['content-type'] === 'image/png' && media.buffer().length > 0)
         ok('media serves a real file with the right content-type (' + media.buffer().length + ' bytes)')
-      else bad('GET /studio/media', media.statusCode + ' ' + media.headers['content-type'])
+      else bad('GET /openreel/media', media.statusCode + ' ' + media.headers['content-type'])
 
-      const ranged = await callRoute(routes, '/studio/media',
-        '/studio/media?project=smoke&path=' + encodeURIComponent(asset.path),
+      const ranged = await callRoute(routes, '/openreel/media',
+        '/openreel/media?project=smoke&path=' + encodeURIComponent(asset.path),
         { headers: { range: 'bytes=0-9' } })
       if (ranged.statusCode === 206 && ranged.buffer().length === 10 && ranged.headers['content-range']?.startsWith('bytes 0-9/'))
         ok('media answers Range with 206 so a player can seek')
       else bad('media Range', ranged.statusCode + ' len=' + ranged.buffer().length + ' ' + ranged.headers['content-range'])
     } else bad('media fixture', 'no video asset in the state payload')
 
-    const escaped = await callRoute(routes, '/studio/media',
-      '/studio/media?project=smoke&path=' + encodeURIComponent('../../../secret.txt'))
+    const escaped = await callRoute(routes, '/openreel/media',
+      '/openreel/media?project=smoke&path=' + encodeURIComponent('../../../secret.txt'))
     if (escaped.statusCode === 400 && escaped.json().code === 'BAD_PATH')
       ok('media refuses a path escaping the project with 400')
     else bad('media traversal', escaped.statusCode + ' ' + escaped.text().slice(0, 120))
 
-    const library = await callRoute(routes, '/studio/library', '/studio/library?project=smoke')
+    const library = await callRoute(routes, '/openreel/library', '/openreel/library?project=smoke')
     if (library.statusCode === 200) {
       const entry = library.json().projects?.[0]
       const ids = (entry?.categories ?? []).map((category) => category.id)
@@ -1887,18 +1887,18 @@ async function main() {
       else bad('library categories', JSON.stringify(ids))
       if (entry?.total_bytes > 0) ok('library reports a size (' + Math.round(entry.total_bytes / 1024) + ' KB)')
       else bad('library size', JSON.stringify(entry?.total_bytes))
-    } else bad('GET /studio/library', String(library.statusCode))
+    } else bad('GET /openreel/library', String(library.statusCode))
 
     // Validate checks without writing, so the editor can mark problems as the
     // user types instead of the panel re-implementing schema.ts in the browser.
     const goodScript = await machine.readArtifact(machine.layout('smoke'), 'script')
-    const validOk = await callRoute(routes, '/studio/validate', '/studio/validate', {
+    const validOk = await callRoute(routes, '/openreel/validate', '/openreel/validate', {
       method: 'POST', body: { artifact: 'script', value: goodScript },
     })
     if (validOk.statusCode === 200 && validOk.json().valid === true) ok('validate accepts a good script')
-    else bad('POST /studio/validate', validOk.statusCode + ' ' + validOk.text().slice(0, 160))
+    else bad('POST /openreel/validate', validOk.statusCode + ' ' + validOk.text().slice(0, 160))
 
-    const validBad = await callRoute(routes, '/studio/validate', '/studio/validate', {
+    const validBad = await callRoute(routes, '/openreel/validate', '/openreel/validate', {
       method: 'POST', body: { artifact: 'script', value: { ...goodScript, title: undefined } },
     })
     if (validBad.statusCode === 200 && validBad.json().valid === false && validBad.json().issues.length > 0)
@@ -1906,7 +1906,7 @@ async function main() {
     else bad('validate bad script', validBad.text().slice(0, 160))
 
     const before = await machine.status('smoke')
-    const validUnknown = await callRoute(routes, '/studio/validate', '/studio/validate', {
+    const validUnknown = await callRoute(routes, '/openreel/validate', '/openreel/validate', {
       method: 'POST', body: { artifact: 'nonsense', value: {} },
     })
     const after = await machine.status('smoke')
@@ -1919,7 +1919,7 @@ async function main() {
     // The panel generates through dsh-comfyui and lands the media here, so the
     // route has to enforce the same naming rule the tool does.
     const audioAsset = body.artifacts.asset_manifest_audio.assets[0]
-    const imported = await callRoute(routes, '/studio/import', '/studio/import', {
+    const imported = await callRoute(routes, '/openreel/import', '/openreel/import', {
       method: 'POST',
       body: {
         project: 'smoke',
@@ -1930,9 +1930,9 @@ async function main() {
       const path = imported.json().imported[0].path
       if (/assets\/audio\/02-s2(\.v\d+)?\.wav$/.test(path)) ok('import names by section order: ' + path)
       else bad('import naming', path)
-    } else bad('POST /studio/import', imported.statusCode + ' ' + imported.text().slice(0, 160))
+    } else bad('POST /openreel/import', imported.statusCode + ' ' + imported.text().slice(0, 160))
 
-    const badScene = await callRoute(routes, '/studio/import', '/studio/import', {
+    const badScene = await callRoute(routes, '/openreel/import', '/openreel/import', {
       method: 'POST',
       body: { project: 'smoke', items: [{ source: 'http://x/y.wav', kind: 'audio', scene_id: 'nope' }] },
     })
@@ -1944,22 +1944,22 @@ async function main() {
     const trimTarget = imported.statusCode === 200 ? imported.json().imported[0].path : undefined
     if (trimTarget !== undefined) {
       const before = await probeDuration(config.ffprobePath, join(WS, 'smoke', trimTarget))
-      const trimmed = await callRoute(routes, '/studio/asset/trim', '/studio/asset/trim', {
+      const trimmed = await callRoute(routes, '/openreel/asset/trim', '/openreel/asset/trim', {
         method: 'POST', body: { project: 'smoke', path: trimTarget, start: 0.5, end: 1.5 },
       })
       const after = await probeDuration(config.ffprobePath, join(WS, 'smoke', trimTarget))
       if (trimmed.statusCode === 200 && after !== undefined && before !== undefined && after < before)
         ok('trim shortens the file in place (' + before.toFixed(2) + 's -> ' + after.toFixed(2) + 's)')
-      else bad('POST /studio/asset/trim', trimmed.statusCode + ' ' + trimmed.text().slice(0, 160))
+      else bad('POST /openreel/asset/trim', trimmed.statusCode + ' ' + trimmed.text().slice(0, 160))
 
-      const badRange = await callRoute(routes, '/studio/asset/trim', '/studio/asset/trim', {
+      const badRange = await callRoute(routes, '/openreel/asset/trim', '/openreel/asset/trim', {
         method: 'POST', body: { project: 'smoke', path: trimTarget, start: 2, end: 1 },
       })
       if (badRange.statusCode === 400) ok('trim refuses an end before the start')
       else bad('trim range guard', String(badRange.statusCode))
     }
 
-    const crossOrigin = await callRoute(routes, '/studio/stage', '/studio/stage', {
+    const crossOrigin = await callRoute(routes, '/openreel/stage', '/openreel/stage', {
       method: 'POST',
       headers: { origin: 'http://evil.example' },
       body: { project: 'smoke', stage: 'brief', status: 'completed', human_approved: true },
@@ -1967,7 +1967,7 @@ async function main() {
     if (crossOrigin.statusCode === 403) ok('stage refuses a cross-origin write')
     else bad('stage cross-origin', String(crossOrigin.statusCode))
 
-    const gate = await callRoute(routes, '/studio/stage', '/studio/stage', {
+    const gate = await callRoute(routes, '/openreel/stage', '/openreel/stage', {
       method: 'POST',
       body: { project: 'smoke', stage: 'brief', status: 'completed', artifacts: { brief }, human_approved: false },
     })
@@ -1975,14 +1975,14 @@ async function main() {
       ok('the gate still holds through the route, not just the tool')
     else bad('stage gate', gate.statusCode + ' ' + gate.text().slice(0, 160))
 
-    const badStage = await callRoute(routes, '/studio/stage', '/studio/stage', {
+    const badStage = await callRoute(routes, '/openreel/stage', '/openreel/stage', {
       method: 'POST',
       body: { project: 'smoke', stage: 'nope', status: 'completed' },
     })
     if (badStage.statusCode === 400) ok('stage rejects an unknown stage name')
     else bad('stage unknown', String(badStage.statusCode))
 
-    const submit = await callRoute(routes, '/studio/stage', '/studio/stage', {
+    const submit = await callRoute(routes, '/openreel/stage', '/openreel/stage', {
       method: 'POST',
       body: { project: 'smoke', stage: 'brief', status: 'completed', artifacts: { brief }, human_approved: true, note: '面板提交' },
     })
@@ -2067,7 +2067,7 @@ async function main() {
 
   console.log('\n== 媒体回显 ==')
   {
-    // studio_show is how the agent puts media on screen. The card reads
+    // openreel_show is how the agent puts media on screen. The card reads
     // `presentationMeta` and never the rendered text, so that payload is the
     // contract this holds — including that its url is the one the media route
     // answers, since a wrong url draws a broken frame and says nothing.
@@ -2076,7 +2076,7 @@ async function main() {
       { tools: { register: (definition) => { registered.set(definition.name, definition); return () => {} } } },
       { machine, getConfig: () => config },
     )
-    const show = registered.get('studio_show')
+    const show = registered.get('openreel_show')
     const exec = { signal: new AbortController().signal }
 
     const shots = (await machine.readArtifact(layout, 'asset_manifest_shots')).assets
@@ -2084,11 +2084,11 @@ async function main() {
     const shown = await show.execute({ project: layout.id, paths: [one], note: '看一眼' }, exec)
     const item = shown.items[0]
     if (shown.items.length === 1 && item.path === one && item.kind === 'image' && item.bytes > 0)
-      ok('studio_show resolves a project path into one item')
+      ok('openreel_show resolves a project path into one item')
     else bad('show result', JSON.stringify(shown.items))
 
     if (item.url === mediaUrl(layout.id, one))
-      ok('the item url is the one /studio/media is registered for')
+      ok('the item url is the one /openreel/media is registered for')
     else bad('media url', item.url)
 
     const meta = show.output.presentationMeta({ project: layout.id }, shown)
@@ -2097,13 +2097,13 @@ async function main() {
     else bad('presentationMeta', JSON.stringify(meta))
 
     // A compose result feeds the same card, so a finished film shows itself.
-    const composeMeta = registered.get('studio_compose').output.presentationMeta(
+    const composeMeta = registered.get('openreel_compose').output.presentationMeta(
       { project: layout.id },
       { report: { outputs: [{ path: 'output/smoke.mp4', duration_seconds: 12, file_size_bytes: 4096 }] } },
     )
     if (composeMeta.kind === 'media' && composeMeta.items[0].kind === 'video'
       && composeMeta.items[0].url === mediaUrl(layout.id, 'output/smoke.mp4'))
-      ok('studio_compose feeds the same card')
+      ok('openreel_compose feeds the same card')
     else bad('compose card payload', JSON.stringify(composeMeta))
 
     let refused
@@ -2112,7 +2112,7 @@ async function main() {
     } catch (error) {
       refused = error
     }
-    if (refused?.code === 'BAD_REQUEST') ok('studio_show refuses a path with no file behind it')
+    if (refused?.code === 'BAD_REQUEST') ok('openreel_show refuses a path with no file behind it')
     else bad('missing path', refused === undefined ? 'accepted it' : String(refused.code))
 
     let escaped
@@ -2121,7 +2121,7 @@ async function main() {
     } catch (error) {
       escaped = error
     }
-    if (escaped !== undefined) ok('studio_show refuses a path that climbs out of the project')
+    if (escaped !== undefined) ok('openreel_show refuses a path that climbs out of the project')
     else bad('escape', 'accepted ../../etc/passwd')
   }
 
@@ -2184,7 +2184,7 @@ async function main() {
       else bad('duplicate render path', twice.join(', '))
     }
 
-    const card = entries.find((e) => e.meta.name === 'tool.call.toolview' && e.meta.key === 'studio_show')
+    const card = entries.find((e) => e.meta.name === 'tool.call.toolview' && e.meta.key === 'openreel_show')
     if (card?.component !== undefined) ok('the media card is registered with a component')
     else bad('media card', 'not registered')
 
@@ -2235,7 +2235,7 @@ async function main() {
 
     // The src has to be the media route, not a bare project path.
     const shot = tagFor('assets/shots/s1.png')
-    if (shot.src === mediaUrl('p', 'assets/shots/s1.png')) ok('the rendered src points at /studio/media')
+    if (shot.src === mediaUrl('p', 'assets/shots/s1.png')) ok('the rendered src points at /openreel/media')
     else bad('rendered src', String(shot.src))
 
     // Only genuinely unshowable bytes may degrade to a link.
@@ -2543,14 +2543,14 @@ async function main() {
 
     // Both rows render off the same guard, so neither can go missing while the
     // other shows -- which is how the two used to read as unrelated events.
-    if (bundleText.includes('dcs-plan-advice-row') && bundleText.includes('dcs-plan-advice-title'))
+    if (bundleText.includes('orb-plan-advice-row') && bundleText.includes('orb-plan-advice-title'))
       ok('the two rows sit in one named container')
-    else bad('rows not unified', 'dcs-plan-advice markup missing')
+    else bad('rows not unified', 'orb-plan-advice markup missing')
 
     // Class names are a flat namespace across every screen, and a collision is
     // silent in BOTH directions: the loser's rules are overridden, and the
     // winner's leak onto whatever else wore the name. This has bitten twice —
-    // `.dcs-advice` (a script-screen list) and `.dcs-select-small`, whose older
+    // `.orb-advice` (a script-screen list) and `.orb-select-small`, whose older
     // rule 594 lines later won and rendered the shot-language pickers wider
     // than designed. That was the cramped layout, hiding in a shared adjective.
     //
@@ -2563,7 +2563,7 @@ async function main() {
       const hit = /^\.([a-z0-9-]+)\s*[,{]/.exec(line)
       if (hit !== null) at.set(hit[1], [...(at.get(hit[1]) ?? []), index + 1])
     })
-    const accepted = new Set(['dcs-info', 'dcs-cue-actions', 'dcs-block-wave', 'dcs-field-narrow'])
+    const accepted = new Set(['orb-info', 'orb-cue-actions', 'orb-block-wave', 'orb-field-narrow'])
     const collisions = [...at.entries()]
       .filter(([name, lines]) => lines.length > 1
         && Math.max(...lines) - Math.min(...lines) > 30
@@ -2585,13 +2585,13 @@ async function main() {
       const markup = readFileSync('src/client/' + file, 'utf-8')
       const named = new Set([...markup.matchAll(/className=[{]?['"`]([^'"`]*)/g)]
         .flatMap((hit) => hit[1].split(/\s+/))
-        .filter((name) => name.startsWith('dcs-')))
+        .filter((name) => name.startsWith('orb-')))
       for (const name of named) {
         if (!sheets.includes('.' + name)) unstyled.push(file + ' → .' + name)
       }
     }
 
-    if (unstyled.length === 0) ok('every dcs- class the panels use is defined in a stylesheet')
+    if (unstyled.length === 0) ok('every orb- class the panels use is defined in a stylesheet')
     else bad('unstyled classes', JSON.stringify(unstyled))
 
     // A shot with no subject of its own borrows its section's, and must not
@@ -2700,7 +2700,7 @@ async function main() {
       { tools: { register: (definition) => { composeTools.set(definition.name, definition); return () => {} } } },
       { machine, getConfig: () => config },
     )
-    const compose = composeTools.get('studio_compose')
+    const compose = composeTools.get('openreel_compose')
     const script = await machine.readArtifact(layout, 'script')
     const savedPlan = await machine.readArtifact(layout, 'scene_plan')
 
@@ -2750,7 +2750,7 @@ async function main() {
       { tools: { register: (definition) => { strictTools.set(definition.name, definition); return () => {} } } },
       { machine, getConfig: () => strictConfig },
     )
-    const strictCompose = strictTools.get('studio_compose')
+    const strictCompose = strictTools.get('openreel_compose')
     await machine.updateProject(layout.id, { style: 'strict' })
 
     let blocked
@@ -2790,9 +2790,9 @@ async function main() {
 
   console.log('\n== 自审协议 ==')
   {
-    const { STUDIO_REVIEWER_SKILL } = await import('../lib/skill-reviewer.js')
+    const { OPENREEL_REVIEWER_SKILL } = await import('../lib/skill-reviewer.js')
     const { PIPELINES } = await import('../lib/pipelines.js')
-    const body = STUDIO_REVIEWER_SKILL.content
+    const body = OPENREEL_REVIEWER_SKILL.content
 
     // The focus lists are rendered from the pipeline, so the skill cannot drift
     // from what the tools hand over. Checked by looking for each item.
@@ -2824,7 +2824,7 @@ async function main() {
       { tools: { register: (definition) => { focusTools.set(definition.name, definition); return () => {} } } },
       { machine, getConfig: () => config },
     )
-    const projectTool = focusTools.get('studio_project')
+    const projectTool = focusTools.get('openreel_project')
     const status = await projectTool.execute(
       { action: 'status', project: 'smoke' },
       { signal: new AbortController().signal },
@@ -2837,7 +2837,7 @@ async function main() {
     } else {
       const stage = PIPELINES['explainer-stills'].stages.find((entry) => entry.id === status.review_focus.stage)
       if (stage !== undefined && status.review_focus.items.length === stage.review_focus.length)
-        ok('studio_project status carries the focus for the stage ahead  -> ' + status.review_focus.stage)
+        ok('openreel_project status carries the focus for the stage ahead  -> ' + status.review_focus.stage)
       else bad('focus mismatch', JSON.stringify(status.review_focus))
 
       const shown = projectTool.output.render({ action: 'status' }, status).map((b) => b.text).join('')
@@ -2932,7 +2932,7 @@ async function main() {
     // The incremental protocol moved into the stage sheet; the request points
     // at it. Asserted in full under 「协议在细则里，请求只带手势」 -- here it is
     // enough that the pointer is present, because without it nothing loads.
-    if (full.split(String.fromCharCode(10))[0].startsWith('/dsh-creative-studio-stage-'))
+    if (full.split(String.fromCharCode(10))[0].startsWith('/dsh-openreelbench-stage-'))
       ok('the message opens with the stage gesture that carries the protocol')
     else bad('missing stage gesture', full.split(String.fromCharCode(10))[0])
   }
@@ -3031,7 +3031,7 @@ async function main() {
 
     // Same protocol as the shots screen: a failure on the last segment must not
     // throw away every earlier one.
-    if (plain.split(String.fromCharCode(10))[0].startsWith('/dsh-creative-studio-stage-'))
+    if (plain.split(String.fromCharCode(10))[0].startsWith('/dsh-openreelbench-stage-'))
       ok('the message opens with the stage gesture that carries the protocol')
     else bad('missing stage gesture', plain.split(String.fromCharCode(10))[0])
   }
@@ -3085,15 +3085,15 @@ async function main() {
   }
   console.log('\n== 镜头语言技能 ==')
   {
-    const { STUDIO_CINEMATOGRAPHY_SKILL } = await import('../lib/skill-cinematography.js')
+    const { OPENREEL_CINEMATOGRAPHY_SKILL } = await import('../lib/skill-cinematography.js')
     const schema = await import('../lib/schema.js')
-    const body = STUDIO_CINEMATOGRAPHY_SKILL.content
+    const body = OPENREEL_CINEMATOGRAPHY_SKILL.content
 
     // The gesture the panel sends has to name a skill that exists, and match
     // the harness grammar exactly: /(^|\s)\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/
     // A typo here degrades silently -- the message still sends, the body never
     // loads, and the model designs shot language with no guidance at all.
-    const name = STUDIO_CINEMATOGRAPHY_SKILL.name
+    const name = OPENREEL_CINEMATOGRAPHY_SKILL.name
     if (/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) ok('the skill name matches the harness gesture grammar')
     else bad('ungrammatical skill name', name)
 
@@ -3115,7 +3115,7 @@ async function main() {
       'prompt', 'shot_language', 'assets_shots', 'in_progress', 'status', 'get', 'script',
       'target_platform', 'variation', 'revise', 'fail', 'version', 'shots',
       // Tool and API names the skill legitimately references.
-      'studio_stage', 'studio_project', 'asset_manifest_shots',
+      'openreel_stage', 'openreel_project', 'asset_manifest_shots',
     ])
     const invented = [...new Set(named)].filter((token) => !vocab.has(token))
     if (invented.length === 0) ok('every enum the skill names is one the schema accepts')
@@ -3375,7 +3375,7 @@ async function main() {
     // Always on screen, bed or no bed. An empty screen cannot tell you that a
     // music track is something this film can have -- the same reason the advice
     // panel renders when it is clean.
-    if (!screen.includes('{musicPath === undefined ? null : (\n        <section className="dcs-panel dcs-music"'))
+    if (!screen.includes('{musicPath === undefined ? null : (\n        <section className="orb-panel orb-music"'))
       ok('the panel is rendered whether or not a bed exists yet')
     else bad('panel hidden when empty', 'no bed means no way to add one')
 
@@ -3401,11 +3401,11 @@ async function main() {
 
     // And it has to appear as a track on the timeline, which is what the user
     // asked for: one block the length of the film, because that is what it is.
-    if (screen.includes('dcs-music-block') && screen.includes("dcs-lane-label-plain\">配乐"))
+    if (screen.includes('orb-music-block') && screen.includes("orb-lane-label-plain\">配乐"))
       ok('the bed shows as its own lane over the shared time axis')
     else bad('no lane', 'the timeline has no music track')
 
-    // ...IN the lane, not floating over the ruler. dcs-lane-blocks is an
+    // ...IN the lane, not floating over the ruler. orb-lane-blocks is an
     // unpositioned flex row, so an absolutely-positioned child resolves against
     // whatever is positioned further up the tree and lands at the top of the
     // track. The cue lane is the exception and pays for it with its own
@@ -3415,8 +3415,8 @@ async function main() {
       const at = sheet.indexOf(selector + ' {')
       return at === -1 ? '' : sheet.slice(at, sheet.indexOf('}', at))
     }
-    const laneRow = ruleOf('.dcs-lane-blocks')
-    const block = ruleOf('.dcs-music-block')
+    const laneRow = ruleOf('.orb-lane-blocks')
+    const block = ruleOf('.orb-music-block')
     if (block !== '' && !block.includes('position: absolute'))
       ok('the bed block is laid out by the lane, not positioned over it')
     else bad('bed escapes its lane', block.trim())
@@ -3459,8 +3459,8 @@ async function main() {
     // it in before the step. The panel is not asking the model to go read
     // something -- but the whole thing is silent when the name does not
     // resolve, so the panel has to be able to ask.
-    const good = (await callRoute(host.routes, '/studio/skill',
-      '/studio/skill?name=' + MUSIC_SKILL, {})).json()
+    const good = (await callRoute(host.routes, '/openreel/skill',
+      '/openreel/skill?name=' + MUSIC_SKILL, {})).json()
     if (good.known && good.loadable && good.registry)
       ok('the skill the music request invokes is registered and user-invocable')
     else bad('skill not loadable', JSON.stringify(good))
@@ -3468,8 +3468,8 @@ async function main() {
     // Registered but not user-invocable is a DIFFERENT failure from absent, and
     // the panel says something different about each -- one is a restart, the
     // other is a policy.
-    const missing = (await callRoute(host.routes, '/studio/skill',
-      '/studio/skill?name=dsh-creative-studio-not-a-skill', {})).json()
+    const missing = (await callRoute(host.routes, '/openreel/skill',
+      '/openreel/skill?name=dsh-openreelbench-not-a-skill', {})).json()
     if (missing.registry && !missing.known && !missing.loadable)
       ok('an unregistered name reports absent rather than merely unloadable')
     else bad('unknown skill', JSON.stringify(missing))
@@ -3479,17 +3479,17 @@ async function main() {
     // a route answering "it exists" would tell the panel to send a request
     // whose skill still would not load.
     host.skills.set('policy#0', {
-      name: 'dsh-creative-studio-locked',
+      name: 'dsh-openreelbench-locked',
       invocation: { modelInvocable: true, userInvocable: false },
     })
-    const locked = (await callRoute(host.routes, '/studio/skill',
-      '/studio/skill?name=dsh-creative-studio-locked', {})).json()
+    const locked = (await callRoute(host.routes, '/openreel/skill',
+      '/openreel/skill?name=dsh-openreelbench-locked', {})).json()
     if (locked.known && !locked.loadable)
       ok('a registered but non-user-invocable skill reports known and unloadable')
     else bad('policy ignored', JSON.stringify(locked))
     host.skills.delete('policy#0')
 
-    const blank = await callRoute(host.routes, '/studio/skill', '/studio/skill', {})
+    const blank = await callRoute(host.routes, '/openreel/skill', '/openreel/skill', {})
     if (blank.statusCode === 400) ok('the route needs a name')
     else bad('blank name', String(blank.statusCode))
 
@@ -3498,8 +3498,8 @@ async function main() {
     const names = [...host.skills.values()].map((skill) => skill.name)
     const unloadable = []
     for (const name of names) {
-      const answer = (await callRoute(host.routes, '/studio/skill',
-        '/studio/skill?name=' + encodeURIComponent(name), {})).json()
+      const answer = (await callRoute(host.routes, '/openreel/skill',
+        '/openreel/skill?name=' + encodeURIComponent(name), {})).json()
       if (!answer.loadable) unloadable.push(name)
     }
     if (unloadable.length === 0) ok('all ' + names.length + ' registered skills would load from a gesture')
@@ -3511,8 +3511,8 @@ async function main() {
     const withSkills = bare.ctx.get
     bare.ctx.get = (name) => (name === 'skills' ? undefined : withSkills(name))
     applySkills(bare.ctx, SkillConfig({ workspaceRoot: WS }))
-    const none = (await callRoute(bare.routes, '/studio/skill',
-      '/studio/skill?name=' + MUSIC_SKILL, {})).json()
+    const none = (await callRoute(bare.routes, '/openreel/skill',
+      '/openreel/skill?name=' + MUSIC_SKILL, {})).json()
     if (none.registry === false && none.loadable === false)
       ok('no skill registry reports itself as such, not as a missing skill')
     else bad('bare host', JSON.stringify(none))
@@ -3529,7 +3529,7 @@ async function main() {
     else bad('no gate', 'the panel sends regardless of whether the skill loads')
   }
 
-  console.log('\n== studio_edit：剪辑版本与裁剪 ==')
+  console.log('\n== openreel_edit：剪辑版本与裁剪 ==')
   {
     const { registerStudioTools: regEdit } = await import('../lib/tools.js')
     const editTools = new Map()
@@ -3537,7 +3537,7 @@ async function main() {
       { tools: { register: (definition) => { editTools.set(definition.name, definition); return () => {} } } },
       { machine, getConfig: () => config },
     )
-    const tool = editTools.get('studio_edit')
+    const tool = editTools.get('openreel_edit')
     const call = async (args) => tool.execute(args, { signal: new AbortController().signal })
 
     // ---- cuts round-trip -------------------------------------------------
@@ -3641,7 +3641,7 @@ async function main() {
       { tools: { register: (definition) => { platTools.set(definition.name, definition); return () => {} } } },
       { machine, getConfig: () => config },
     )
-    const projectTool = platTools.get('studio_project')
+    const projectTool = platTools.get('openreel_project')
     const callProject = async (args) => projectTool.execute(args, { signal: new AbortController().signal })
 
     const set = await callProject({ action: 'set_platform', project: 'smoke', target_platform: 'douyin' })
@@ -3687,18 +3687,18 @@ async function main() {
     const paramsOf = (tool) => Object.keys(allTools.get(tool)?.parameters?.properties ?? {})
 
     const reachable = [
-      ['保存剪辑版本', 'studio_edit', 'action', 'save_cut'],
-      ['删除剪辑版本', 'studio_edit', 'action', 'delete_cut'],
-      ['列出剪辑版本', 'studio_edit', 'action', 'cuts'],
-      ['裁剪音频', 'studio_edit', 'action', 'trim_audio'],
-      ['目标平台', 'studio_project', 'action', 'set_platform'],
-      ['导入素材', 'studio_project', 'action', 'import'],
-      ['音色', 'studio_project', 'action', 'set_voice'],
-      ['风格', 'studio_project', 'action', 'style'],
+      ['保存剪辑版本', 'openreel_edit', 'action', 'save_cut'],
+      ['删除剪辑版本', 'openreel_edit', 'action', 'delete_cut'],
+      ['列出剪辑版本', 'openreel_edit', 'action', 'cuts'],
+      ['裁剪音频', 'openreel_edit', 'action', 'trim_audio'],
+      ['目标平台', 'openreel_project', 'action', 'set_platform'],
+      ['导入素材', 'openreel_project', 'action', 'import'],
+      ['音色', 'openreel_project', 'action', 'set_voice'],
+      ['风格', 'openreel_project', 'action', 'style'],
       // Compose takes no action enum; what the panel can choose per render is
       // what has to be reachable here.
-      ['合成指定版本', 'studio_compose', 'param', 'cut'],
-      ['烧录字幕', 'studio_compose', 'param', 'burn_subtitles'],
+      ['合成指定版本', 'openreel_compose', 'param', 'cut'],
+      ['烧录字幕', 'openreel_compose', 'param', 'burn_subtitles'],
     ]
     const unreachable = reachable.filter(([, tool, kind, name]) =>
       !(kind === 'action' ? actionsOf(tool) : paramsOf(tool)).includes(name))
@@ -3728,7 +3728,7 @@ async function main() {
       .find((s) => s.name === stageSkillName('brief')).content
 
     // THE OMISSION THIS ROUND FOUND. The old request named the project by
-    // title only. studio_stage takes an id, so a model whose history had been
+    // title only. openreel_stage takes an id, so a model whose history had been
     // compacted had to look the id up by name before it could record anything.
     if (job.includes('`demo-film`')) ok('the request carries the project id, not just the title')
     else bad('no project id', job)
@@ -3845,7 +3845,7 @@ async function main() {
     // Two gestures, and they answer different questions: how to write it, and
     // which keys to write it into. Neither substitutes for the other.
     const first = job.split(String.fromCharCode(10)).slice(0, 2)
-    if (first.includes('/' + stageSkillName('script')) && first.includes('/dsh-creative-studio-storytelling'))
+    if (first.includes('/' + stageSkillName('script')) && first.includes('/dsh-openreelbench-storytelling'))
       ok('the request loads both the stage sheet and the craft skill')
     else bad('gestures', JSON.stringify(first))
 
@@ -3860,9 +3860,9 @@ async function main() {
 
     // ...and each is still somewhere. The last one lives in storytelling, not
     // in the sheet, which is exactly why both gestures are needed.
-    const { STUDIO_STORYTELLING_SKILL } = await import('../lib/skill-storytelling.js')
+    const { OPENREEL_STORYTELLING_SKILL } = await import('../lib/skill-storytelling.js')
     if (sheet.includes('分段即分镜') && sheet.includes('awaiting_human')
-      && STUDIO_STORYTELLING_SKILL.content.includes('哪一段你拿不准'))
+      && OPENREEL_STORYTELLING_SKILL.content.includes('哪一段你拿不准'))
       ok('everything the request dropped is carried by one of the two skills')
     else bad('dropped for good', 'a line left the request and landed nowhere')
 
@@ -3923,7 +3923,7 @@ async function main() {
     // both the sheet and the craft skill -- same pairing as the script request.
     const planGestures = plan.split(/\s+/).filter((t) => t.startsWith('/'))
     if (planGestures.includes('/' + stageSkillName('assets-shots'))
-      && planGestures.includes('/dsh-creative-studio-cinematography'))
+      && planGestures.includes('/dsh-openreelbench-cinematography'))
       ok('the planning handoff loads the shots sheet and the craft skill')
     else bad('plan gestures', JSON.stringify(planGestures))
 
@@ -4136,7 +4136,7 @@ async function main() {
 
   console.log('\n== usage 技能与真实工具表对齐 ==')
   {
-    const { STUDIO_USAGE_SKILL } = await import('../lib/skill-usage.js')
+    const { OPENREEL_USAGE_SKILL } = await import('../lib/skill-usage.js')
     const { registerStudioTools: regU } = await import('../lib/tools.js')
     const uTools = new Map()
     regU(
@@ -4147,14 +4147,14 @@ async function main() {
     // The skill described three tools while five were registered, and the two
     // it omitted were the ones an unattended run needs most. A tool the model
     // is never told about is a tool it will not reach for.
-    const undocumented = [...uTools.keys()].filter((name) => !STUDIO_USAGE_SKILL.content.includes(name))
+    const undocumented = [...uTools.keys()].filter((name) => !OPENREEL_USAGE_SKILL.content.includes(name))
     if (undocumented.length === 0) ok('usage documents every registered tool (' + uTools.size + ')')
     else bad('tool missing from usage', undocumented.join(', '))
 
     // And the count in the heading has to move with them.
     const counts = { 3: '三', 4: '四', 5: '五', 6: '六', 7: '七' }
     const written = counts[uTools.size]
-    if (written !== undefined && STUDIO_USAGE_SKILL.content.includes(written + '个工具'))
+    if (written !== undefined && OPENREEL_USAGE_SKILL.content.includes(written + '个工具'))
       ok('the heading counts the tools that exist')
     else bad('stale tool count', 'the heading does not say ' + written + '个工具')
   }
@@ -4163,7 +4163,7 @@ async function main() {
   {
     const { buildStageSkills, stageSkillName } = await import('../lib/stage-skills.js')
     const { buildPipelineSkills } = await import('../lib/pipeline-skill.js')
-    const { STUDIO_SOUND_DESIGN_SKILL } = await import('../lib/skill-sound-design.js')
+    const { OPENREEL_SOUND_DESIGN_SKILL } = await import('../lib/skill-sound-design.js')
     const { buildMusicJob: musicFor } = await import('../lib/music-job.js')
     const { Config: PCConfig } = await import('../lib/config.js')
 
@@ -4185,7 +4185,7 @@ async function main() {
     // ...and so does the map, and the music skill, which is not a stage sheet.
     if (pipeline.includes('action: "skill"')) ok('the pipeline map carries it too')
     else bad('map without the rule', 'the binding table never mentions the skill pack')
-    if (STUDIO_SOUND_DESIGN_SKILL.content.includes('action: "skill"'))
+    if (OPENREEL_SOUND_DESIGN_SKILL.content.includes('action: "skill"'))
       ok('the sound-design skill sends the model to the pack before writing a prompt')
     else bad('music skill without the rule', 'it still reads as a copyable prompt')
 
@@ -4196,7 +4196,7 @@ async function main() {
       ['分镜细则', sheets.find((s) => s.name === stageSkillName('assets-shots')).content],
       ['配音细则', sheets.find((s) => s.name === stageSkillName('assets-audio')).content],
       ['管线地图', pipeline],
-      ['配乐技能', STUDIO_SOUND_DESIGN_SKILL.content],
+      ['配乐技能', OPENREEL_SOUND_DESIGN_SKILL.content],
     ].filter(([, body]) => !body.includes('requireSkill'))
     if (mentionsGate.length === 0) ok('all four say the pack can be mandatory')
     else bad('gate unmentioned', mentionsGate.map(([what]) => what).join(', '))
@@ -4300,11 +4300,11 @@ async function main() {
     const registered = new Set([
       ...pipeSkills.map((s) => s.name),
       ...stageSkills.map((s) => s.name),
-      'dsh-creative-studio-storytelling',
-      'dsh-creative-studio-cinematography',
-      'dsh-creative-studio-sound-design',
-      'dsh-creative-studio-reviewer',
-      'dsh-creative-studio-usage',
+      'dsh-openreelbench-storytelling',
+      'dsh-openreelbench-cinematography',
+      'dsh-openreelbench-sound-design',
+      'dsh-openreelbench-reviewer',
+      'dsh-openreelbench-usage',
     ])
 
     // A pipeline with no skill is a pipeline the model has no map for, and
@@ -4340,7 +4340,7 @@ async function main() {
 
     // The map has to actually list the stages, in order. A table rendered from
     // the wrong source would still look like a table.
-    const explainer = pipeSkills.find((s) => s.name === 'dsh-creative-studio-explainer-stills')
+    const explainer = pipeSkills.find((s) => s.name === 'dsh-openreelbench-explainer-stills')
     const order = PIPELINES['explainer-stills'].stages.map((s) => s.id)
     const positions = order.map((id) => explainer.content.indexOf('`' + id + '`'))
     if (positions.every((at, i) => at > 0 && (i === 0 || at > positions[i - 1])))
@@ -4395,11 +4395,11 @@ async function main() {
 
   console.log('\n== 配乐技能 ==')
   {
-    const { STUDIO_SOUND_DESIGN_SKILL } = await import('../lib/skill-sound-design.js')
+    const { OPENREEL_SOUND_DESIGN_SKILL } = await import('../lib/skill-sound-design.js')
     const { buildMusicJob } = await import('../lib/music-job.js')
     const { MIX } = await import('../lib/audio-mix.js')
-    const body = STUDIO_SOUND_DESIGN_SKILL.content
-    const name = STUDIO_SOUND_DESIGN_SKILL.name
+    const body = OPENREEL_SOUND_DESIGN_SKILL.content
+    const name = OPENREEL_SOUND_DESIGN_SKILL.name
 
     // Same grammar check as the shot-language skill. A typo degrades silently:
     // the message still sends, the body never loads, and the model picks a
@@ -4480,7 +4480,7 @@ async function main() {
     // picks a track on vibes, which is exactly what the ported knowledge exists
     // to replace. Whitespace-bounded and on its own line, or it does not load.
     const firstLine = job.split(String.fromCharCode(10))[0]
-    if (firstLine === '/dsh-creative-studio-sound-design')
+    if (firstLine === '/dsh-openreelbench-sound-design')
       ok('the request opens with the sound-design skill gesture')
     else bad('no skill gesture', firstLine)
 

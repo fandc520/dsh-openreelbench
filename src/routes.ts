@@ -1,25 +1,25 @@
 /**
  * Browser-facing HTTP routes — the data plane behind the two panels.
  *
- *   GET  /studio/catalog              pipelines and styles the panels offer
- *   GET  /studio/state?project=<id>   everything 创意工作台 renders
- *   GET  /studio/media?project&path   preview and download, Range-aware
- *   GET  /studio/library              工作室看板's project → category → file tree
- *   POST /studio/project              rename / retime / restyle a project
- *   POST /studio/project/remove       move a project into .trash
- *   GET  /studio/trash                what is in the trash
- *   POST /studio/trash/restore        put one back
- *   POST /studio/trash/purge          delete one for real
- *   POST /studio/import               pull generated media into the project
- *   POST /studio/asset/trim           cut an asset's head and tail with ffmpeg
- *   POST /studio/validate             check an artifact without writing it
- *   GET  /studio/cuts?project=        edit versions of the finished film
- *   POST /studio/cuts                 save one
- *   POST /studio/cuts/delete          drop one
- *   POST /studio/stage                a panel's submit button
+ *   GET  /openreel/catalog              pipelines and styles the panels offer
+ *   GET  /openreel/state?project=<id>   everything OpenReel 创意台 renders
+ *   GET  /openreel/media?project&path   preview and download, Range-aware
+ *   GET  /openreel/library              创意台看板's project → category → file tree
+ *   POST /openreel/project              rename / retime / restyle a project
+ *   POST /openreel/project/remove       move a project into .trash
+ *   GET  /openreel/trash                what is in the trash
+ *   POST /openreel/trash/restore        put one back
+ *   POST /openreel/trash/purge          delete one for real
+ *   POST /openreel/import               pull generated media into the project
+ *   POST /openreel/asset/trim           cut an asset's head and tail with ffmpeg
+ *   POST /openreel/validate             check an artifact without writing it
+ *   GET  /openreel/cuts?project=        edit versions of the finished film
+ *   POST /openreel/cuts                 save one
+ *   POST /openreel/cuts/delete          drop one
+ *   POST /openreel/stage                a panel's submit button
  *
  * Three of the four are reads. The one write goes through `StateMachine.write()`
- * — the same function `studio_stage` calls — and that is the whole point: the
+ * — the same function `openreel_stage` calls — and that is the whole point: the
  * panel is allowed to advance the pipeline, but not to reach past the schema,
  * asset, gate and prerequisite checks while doing it. A route that wrote
  * `checkpoints/*.json` directly would be quicker and would quietly delete the
@@ -49,7 +49,7 @@ import { planSections } from './compose.js'
 import { type ComposeResultPayload, composeProject } from './render-job.js'
 import { CutError, type Cut, deleteCut, listCuts, parseCut, readCut, writeCut } from './cuts.js'
 import { STAGES, STAGE_ARTIFACT, StateViolationError, isStage, isStatus } from './state.js'
-import type { StudioRuntime } from './tools.js'
+import type { PluginRuntime } from './tools.js'
 import {
   errorMessage,
   mediaKindOf,
@@ -345,7 +345,7 @@ interface SkillCatalog {
   }>>
 }
 
-export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => void) | undefined {
+export function mountStudioRoutes(ctx: Context, runtime: PluginRuntime): (() => void) | undefined {
   const webServer = ctx.get('webServer') as WebServer | undefined
   if (webServer === undefined) return undefined
 
@@ -367,7 +367,7 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     renders.clear()
   })
 
-  // ---- GET /studio/skill?name= -------------------------------------------
+  // ---- GET /openreel/skill?name= -------------------------------------------
   //
   // Whether the host's skill registry resolves one name, and whether a `/name`
   // gesture would load it.
@@ -380,7 +380,7 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
   // skill. This route is how a panel refuses to send instead.
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/skill',
+    path: '/openreel/skill',
     handler: async (request, response) => {
       try {
         const name = query(request).get('name') ?? ''
@@ -409,10 +409,10 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- GET /studio/state -------------------------------------------------
+  // ---- GET /openreel/state -------------------------------------------------
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/state',
+    path: '/openreel/state',
     handler: async (request, response) => {
       try {
         const projectId = query(request).get('project')
@@ -524,13 +524,13 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- GET /studio/catalog -----------------------------------------------
+  // ---- GET /openreel/catalog -----------------------------------------------
   // What the welcome screen offers and what the project screen picks from.
   // Static for now, but a route rather than a constant in the bundle so a
   // custom playbook added to config shows up without rebuilding the client.
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/catalog',
+    path: '/openreel/catalog',
     handler: async (_request, response) => {
       try {
         sendJson(response, 200, {
@@ -544,10 +544,10 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- POST /studio/project ----------------------------------------------
+  // ---- POST /openreel/project ----------------------------------------------
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/project',
+    path: '/openreel/project',
     handler: async (request, response) => {
       try {
         if (request.method !== 'POST') {
@@ -683,10 +683,10 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- POST /studio/project/remove ---------------------------------------
+  // ---- POST /openreel/project/remove ---------------------------------------
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/project/remove',
+    path: '/openreel/project/remove',
     handler: async (request, response) => {
       try {
         if (request.method !== 'POST') {
@@ -711,10 +711,10 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- GET /studio/trash -------------------------------------------------
+  // ---- GET /openreel/trash -------------------------------------------------
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/trash',
+    path: '/openreel/trash',
     handler: async (_request, response) => {
       try {
         sendJson(response, 200, { entries: await machine.listTrash() })
@@ -724,10 +724,10 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- POST /studio/trash/restore & /studio/trash/purge -------------------
+  // ---- POST /openreel/trash/restore & /openreel/trash/purge -------------------
   for (const [path, run] of [
-    ['/studio/trash/restore', (entry: string) => machine.restoreProject(entry)],
-    ['/studio/trash/purge', (entry: string) => machine.purgeProject(entry)],
+    ['/openreel/trash/restore', (entry: string) => machine.restoreProject(entry)],
+    ['/openreel/trash/purge', (entry: string) => machine.purgeProject(entry)],
   ] as const) {
     disposers.push(webServer.register({
       kind: 'exact',
@@ -756,11 +756,11 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     }))
   }
 
-  // ---- POST /studio/scene-plan -------------------------------------------
+  // ---- POST /openreel/scene-plan -------------------------------------------
   // One section's shots at a time, because that is the unit the screen edits.
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/scene-plan',
+    path: '/openreel/scene-plan',
     handler: async (request, response) => {
       try {
         if (request.method !== 'POST') {
@@ -811,7 +811,7 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
   // ---- cuts --------------------------------------------------------------
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/cuts',
+    path: '/openreel/cuts',
     handler: async (request, response) => {
       try {
         if (request.method === 'GET') {
@@ -858,7 +858,7 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
 
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/cuts/delete',
+    path: '/openreel/cuts/delete',
     handler: async (request, response) => {
       try {
         if (request.method !== 'POST') {
@@ -883,10 +883,10 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- GET /studio/media -------------------------------------------------
+  // ---- GET /openreel/media -------------------------------------------------
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/media',
+    path: '/openreel/media',
     handler: async (request, response) => {
       try {
         const params = query(request)
@@ -909,10 +909,10 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- GET /studio/library ----------------------------------------------
+  // ---- GET /openreel/library ----------------------------------------------
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/library',
+    path: '/openreel/library',
     handler: async (request, response) => {
       try {
         const only = query(request).get('project')
@@ -931,13 +931,13 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- POST /studio/import -----------------------------------------------
+  // ---- POST /openreel/import -----------------------------------------------
   // The panel generates through dsh-comfyui's own routes and gets back a media
   // URL; this is how that URL becomes a file inside the project, under the same
   // naming rule the tool uses.
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/import',
+    path: '/openreel/import',
     handler: async (request, response) => {
       try {
         if (request.method !== 'POST') {
@@ -994,12 +994,12 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- POST /studio/asset/trim -------------------------------------------
+  // ---- POST /openreel/asset/trim -------------------------------------------
   // The browser picks the in and out points off a waveform; the cut itself is
   // ffmpeg's job, because only the host can write the file.
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/asset/trim',
+    path: '/openreel/asset/trim',
     handler: async (request, response) => {
       try {
         if (request.method !== 'POST') {
@@ -1034,13 +1034,13 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- POST /studio/validate ---------------------------------------------
+  // ---- POST /openreel/validate ---------------------------------------------
   // Schema checking without a write, so an editor can mark problems while the
   // user types. The panel must not re-implement these rules: they live in
   // schema.ts, and a browser copy would drift from the one the gate enforces.
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/validate',
+    path: '/openreel/validate',
     handler: async (request, response) => {
       try {
         if (request.method !== 'POST') {
@@ -1067,13 +1067,13 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- POST/GET /studio/compose -------------------------------------------
+  // ---- POST/GET /openreel/compose -------------------------------------------
   //
   // The compose screen renders the film itself rather than asking the agent to.
   // By this point nothing is left to decide: the cut, the pauses, the subtitle
   // style and the music were all settled on the screen, and routing the last
   // step through a model adds a round trip and a chance to mistranscribe them.
-  // `studio_compose` stays for unattended runs, and both go through
+  // `openreel_compose` stays for unattended runs, and both go through
   // `composeProject` so the prerequisites and the slideshow refusal cannot hold
   // on one path and be skipped on the other.
   //
@@ -1082,7 +1082,7 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
   // nothing to show and put the result at the mercy of an idle timeout.
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/compose',
+    path: '/openreel/compose',
     handler: async (request, response) => {
       try {
         const projectId = request.method === 'GET'
@@ -1165,7 +1165,7 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
                 job.fraction = Math.max(job.fraction, update.fraction)
               },
             })
-            // Recorded through the state machine, the same call studio_stage
+            // Recorded through the state machine, the same call openreel_stage
             // makes. The panel may advance the pipeline; it may not reach past
             // the schema and asset checks while doing it, and writing the
             // checkpoint here directly is exactly the shortcut that would.
@@ -1197,10 +1197,10 @@ export function mountStudioRoutes(ctx: Context, runtime: StudioRuntime): (() => 
     },
   }))
 
-  // ---- POST /studio/stage ------------------------------------------------
+  // ---- POST /openreel/stage ------------------------------------------------
   disposers.push(webServer.register({
     kind: 'exact',
-    path: '/studio/stage',
+    path: '/openreel/stage',
     handler: async (request, response) => {
       try {
         if (request.method !== 'POST') {

@@ -116,8 +116,8 @@ lo-fi ambient instrumental / 75 BPM / calm, focused / steady, no drops / 90s
 （语速档、题材、目标平台）。
 `
 
-export const STUDIO_SOUND_DESIGN_SKILL: RuntimeSkill = {
-  name: 'dsh-creative-studio-sound-design',
+export const OPENREEL_SOUND_DESIGN_SKILL: RuntimeSkill = {
+  name: 'dsh-openreelbench-sound-design',
   source: 'runtime',
   description:
     '给解说片选背景音乐：必须纯器乐、动态要平这两条硬规矩，'

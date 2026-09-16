@@ -105,7 +105,7 @@ export class Preview {
   constructor(options: PreviewOptions) {
     this.options = options
     const mediaUrl = (path: string): string =>
-      '/studio/media?project=' + encodeURIComponent(options.projectId)
+      '/openreel/media?project=' + encodeURIComponent(options.projectId)
       + '&path=' + encodeURIComponent(path)
 
     for (const section of options.sections) {

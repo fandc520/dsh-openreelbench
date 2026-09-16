@@ -37,9 +37,9 @@ import { stageSkillName } from './stage-skills.js'
 
 /** Which craft skill a stage should be read alongside. Absent means none applies. */
 const STAGE_CRAFT: Record<string, string> = {
-  script: 'dsh-creative-studio-storytelling',
-  assets_shots: 'dsh-creative-studio-cinematography',
-  compose: 'dsh-creative-studio-sound-design',
+  script: 'dsh-openreelbench-storytelling',
+  assets_shots: 'dsh-openreelbench-cinematography',
+  compose: 'dsh-openreelbench-sound-design',
 }
 
 /** Stage id to the stage-skill key. The two differ only in separator. */
@@ -111,7 +111,7 @@ export function buildPipelineSkill(pipeline: Pipeline, config: Config): RuntimeS
   const { playbook } = resolvePlaybook(config.defaultStyle, config.playbooks)
   const gates = pipeline.stages.filter((stage) => stage.gated).length
 
-  const content = `# AI 创意工作室：${pipeline.name}
+  const content = `# OpenReel 创意台：${pipeline.name}
 
 ${pipeline.description}
 
@@ -136,11 +136,11 @@ ${renderNodes(pipeline)}
 
 ## 红线
 
-**推进状态只能调 \`studio_stage\`。** 它会做 schema 校验、审批闸校验、前置校验、资产存在性校验，
+**推进状态只能调 \`openreel_stage\`。** 它会做 schema 校验、审批闸校验、前置校验、资产存在性校验，
 任何一条不过就抛错，没有"提示一下但还是写进去"。看到 \`PREREQUISITE VIOLATION\` /
 \`GATE VIOLATION\` / \`ASSET MISSING\` / \`COVERAGE INCOMPLETE\` 不要绕过去，
 那说明你确实漏了一步——回去补。工具行为和错误处置细节见
-\`dsh-creative-studio-usage\` 技能。
+\`dsh-openreelbench-usage\` 技能。
 
 **审批闸协议**（上表里标「是」的那几段）：
 
@@ -157,14 +157,14 @@ checkpoint 会被归档删除，必须重做。这是对的——素材是照旧
 
 ## 开工前：先读风格
 
-**动笔之前调 \`studio_project action: "style"\`。** 它返回本项目的风格 playbook：
+**动笔之前调 \`openreel_project action: "style"\`。** 它返回本项目的风格 playbook：
 图像提示词的前后缀、负向提示词、一致性锚点、旁白语气、语速估算、单段时长上下限、质量红线。
 
 风格不是装饰。实测过一次：三段用了同一个模型同一套 seed，只因为提示词措辞不同
 （一段写了 cinematic，一段写了 flat/minimal），出来的画风完全不是一路。
 **风格靠统一的提示词模板和负向提示词解决，不靠 seed。**
 
-用户没指定风格时用配置的默认值；他要换，\`studio_project action: "style"\` 会列出所有可选风格。
+用户没指定风格时用配置的默认值；他要换，\`openreel_project action: "style"\` 会列出所有可选风格。
 
 ## 每一段过闸时看什么
 
@@ -205,7 +205,7 @@ ${renderBinding('配图（txt2img）', config.bindings.image)}
 
 ${renderVisualContract(playbook)}
 
-**这是默认风格「${playbook.name}」的。项目实际用哪套以 \`studio_project action: "style"\` 为准。**
+**这是默认风格「${playbook.name}」的。项目实际用哪套以 \`openreel_project action: "style"\` 为准。**
 
 ## 不要做的事
 
@@ -216,18 +216,18 @@ ${renderVisualContract(playbook)}
 `
 
   return {
-    name: 'dsh-creative-studio-' + pipeline.id,
+    name: 'dsh-openreelbench-' + pipeline.id,
     source: 'runtime',
     description:
-      'AI 创意工作室的' + pipeline.name + '管线：'
+      'OpenReel 创意台的' + pipeline.name + '管线：'
       + pipeline.stages.map((stage) => stage.id).join(' → ') + ' '
       + pipeline.stages.length + ' 段状态机，' + gates + ' 个人工审批闸，'
       + '风格 playbook 统一画风，生成走 ComfyUI 工作流、合成走 FFmpeg。'
       + '每段的操作细则是单独的技能，这份是节点图和规矩。'
-      + '处理 studio_project / studio_stage / studio_compose，或用户要做' + pipeline.best_for + '时加载。',
+      + '处理 openreel_project / openreel_stage / openreel_compose，或用户要做' + pipeline.best_for + '时加载。',
     whenToUse:
       '用户要做' + pipeline.name + '（' + pipeline.best_for + '），'
-      + '或要求推进已有的 studio 项目时。先读这份拿到全局，再按节点图加载那一段的操作细则。',
+      + '或要求推进已有的 openreelbench 项目时。先读这份拿到全局，再按节点图加载那一段的操作细则。',
     content,
   }
 }

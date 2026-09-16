@@ -1,7 +1,7 @@
 {
-  "name": "dsh-creative-studio",
+  "name": "dsh-openreelbench",
   "version": "0.1.0-alpha.0",
-  "description": "AI creative studio for DeepSeek Harness: a gated four-stage pipeline (brief -> script -> assets -> compose) that turns one sentence into a narrated explainer video, with generation delegated to ComfyUI workflows and assembly done locally with FFmpeg. / DSH 的 AI 创意工作室：四段带审批闸的管线，生成走 ComfyUI，合成走 FFmpeg。",
+  "description": "OpenReelbench, the open video creative bench for DeepSeek Harness: a gated four-stage pipeline (brief -> script -> assets -> compose) that turns one sentence into a narrated explainer video; generation via ComfyUI workflows, assembly with FFmpeg. / DSH 开源视频创意台：四段带审批闸的管线，把一句话变成一条带配音、配图和字幕的解说片；生成走 ComfyUI，合成走 FFmpeg。",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -34,6 +34,7 @@
     "sync-docs": "node scripts/sync-docs.mjs"
   },
   "keywords": [
+    "openreelbench",
     "deepseek",
     "harness",
     "dsh",
@@ -46,11 +47,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fandc520/dsh-creative-studio.git"
+    "url": "git+https://github.com/fandc520/dsh-openreelbench.git"
   },
-  "homepage": "https://github.com/fandc520/dsh-creative-studio#readme",
+  "homepage": "https://github.com/fandc520/dsh-openreelbench#readme",
   "bugs": {
-    "url": "https://github.com/fandc520/dsh-creative-studio/issues"
+    "url": "https://github.com/fandc520/dsh-openreelbench/issues"
   },
   "engines": {
     "node": ">=22.19"

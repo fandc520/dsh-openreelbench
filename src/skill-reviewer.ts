@@ -36,7 +36,7 @@ function focusTable(): string {
 
 const CONTENT = `# 自审协议
 
-每一段写完、**提交 \`studio_stage\` 之前**，先自审一遍。
+每一段写完、**提交 \`openreel_stage\` 之前**，先自审一遍。
 这是「做完了」和「可以交」之间的那道关。
 
 ## 你不用查的东西
@@ -46,7 +46,7 @@ const CONTENT = `# 自审协议
 | 已经强制 | 谁在管 |
 |---|---|
 | 产物结构、字段名、枚举值 | schema 校验，不合就抛 \`SCHEMA INVALID\` |
-| 资产文件是否真的存在 | \`studio_stage\` 逐条核对路径 |
+| 资产文件是否真的存在 | \`openreel_stage\` 逐条核对路径 |
 | 每一段是否都有素材 | 覆盖检查，缺一个抛 \`COVERAGE_INCOMPLETE\` |
 | 管线顺序、审批闸 | 状态机，跳段抛 \`PREREQUISITE VIOLATION\` |
 | 分镜重复度、幻灯片风险 | \`variation\` 报告 + 出片前的风险闸 |
@@ -110,7 +110,7 @@ playbook 的 \`quality_rules\` 不是建议。
 
 ## 怎么记
 
-自审结果写进 \`studio_stage\` 的 \`note\`，格式随意但要能读：
+自审结果写进 \`openreel_stage\` 的 \`note\`，格式随意但要能读：
 
 \`\`\`
 自审：通过（0 critical / 2 suggestion）
@@ -131,15 +131,15 @@ playbook 的 \`quality_rules\` 不是建议。
 第 3 条空着的评审多半没认真做——**总有一两处是你判断不了的**。
 `
 
-export const STUDIO_REVIEWER_SKILL: RuntimeSkill = {
-  name: 'dsh-creative-studio-reviewer',
+export const OPENREEL_REVIEWER_SKILL: RuntimeSkill = {
+  name: 'dsh-openreelbench-reviewer',
   source: 'runtime',
   description:
-    'AI 创意工作室的自审协议：提交任何一段之前先按 CHAI 规矩自审（准确 / 完整 / 可执行），'
+    'OpenReel 创意台的自审协议：提交任何一段之前先按 CHAI 规矩自审（准确 / 完整 / 可执行），'
     + '四级严重度、两轮封顶、每一段各自的审查重点。'
     + '只覆盖代码查不到的判断题——schema、资产存在、覆盖、闸、重复度都已经由插件强制。',
   whenToUse:
-    '准备调 studio_stage 提交任何一段之前；'
+    '准备调 openreel_stage 提交任何一段之前；'
     + '尤其是写 awaiting_human 把东西交给用户看之前。',
   content: CONTENT,
 }

@@ -8,7 +8,7 @@
  * This one carries something the other two do not — a skill gesture. Choosing a
  * bed is a judgement call the model cannot make well from the project data
  * alone, and the knowledge that makes it well is in
- * `skill-sound-design.ts`. A whitespace-bounded `/dsh-creative-studio-sound-design`
+ * `skill-sound-design.ts`. A whitespace-bounded `/dsh-openreelbench-sound-design`
  * on the first line loads that skill for this turn only, which is the whole
  * reason these skills are not resident.
  */
@@ -44,7 +44,7 @@ import { importLine, workflowLine } from './job-conventions.js'
 
 const NEWLINE = String.fromCharCode(10)
 /** The skill the request opens with. Exported so the panel can check it loads. */
-export const MUSIC_SKILL = 'dsh-creative-studio-sound-design'
+export const MUSIC_SKILL = 'dsh-openreelbench-sound-design'
 const SKILL = MUSIC_SKILL
 
 export function buildMusicJob(input: MusicJobInput): string {

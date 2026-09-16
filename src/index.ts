@@ -1,5 +1,5 @@
 /**
- * dsh-creative-studio host entry.
+ * dsh-openreelbench host entry.
  *
  * Host-only by design: MVP-0 has no web surface, so the package declares no
  * `dsh.client` and builds no client bundle. The UI face arrives at M2, when
@@ -12,7 +12,7 @@
  * neither has to depend on the other's service.
  *
  * Configuration has two doors into the same values: the loader entry in
- * cordis.yml, and the `studio:` settings section the browser settings page
+ * cordis.yml, and the `openreel:` settings section the browser settings page
  * writes. One schema drives both, and changes land live — nothing here
  * snapshots a config value at apply time.
  */
@@ -25,16 +25,16 @@ import { probeDuration } from './compose.js'
 import { resolveWorkspaceRoot } from './project.js'
 import { buildPipelineSkills } from './pipeline-skill.js'
 import { buildStageSkills } from './stage-skills.js'
-import { STUDIO_CINEMATOGRAPHY_SKILL } from './skill-cinematography.js'
-import { STUDIO_STORYTELLING_SKILL } from './skill-storytelling.js'
-import { STUDIO_REVIEWER_SKILL } from './skill-reviewer.js'
-import { STUDIO_SOUND_DESIGN_SKILL } from './skill-sound-design.js'
-import { STUDIO_USAGE_SKILL } from './skill-usage.js'
+import { OPENREEL_CINEMATOGRAPHY_SKILL } from './skill-cinematography.js'
+import { OPENREEL_STORYTELLING_SKILL } from './skill-storytelling.js'
+import { OPENREEL_REVIEWER_SKILL } from './skill-reviewer.js'
+import { OPENREEL_SOUND_DESIGN_SKILL } from './skill-sound-design.js'
+import { OPENREEL_USAGE_SKILL } from './skill-usage.js'
 import { StateMachine } from './state.js'
-import { type StudioRuntime, registerStudioTools } from './tools.js'
+import { type PluginRuntime, registerStudioTools } from './tools.js'
 import { mountStudioRoutes } from './routes.js'
 
-export const name = 'dsh-creative-studio'
+export const name = 'dsh-openreelbench'
 export { Config }
 
 /**
@@ -44,7 +44,7 @@ export { Config }
  */
 export const inject = ['tools']
 
-const STUDIO_NS = 'studio'
+const OPENREEL_NS = 'openreel'
 
 interface SkillsService {
   register(skill: unknown): () => void
@@ -66,7 +66,7 @@ export function apply(ctx: Context, config: Config): void {
     probeDuration: (absolutePath: string) => probeDuration(resolved.ffprobePath, absolutePath),
   })
 
-  const runtime: StudioRuntime = {
+  const runtime: PluginRuntime = {
     getConfig: () => resolved,
     machine,
   }
@@ -76,7 +76,7 @@ export function apply(ctx: Context, config: Config): void {
     return () => {
       for (const dispose of disposers.reverse()) dispose()
     }
-  }, 'dsh-creative-studio: tools')
+  }, 'dsh-openreelbench: tools')
 
   /**
    * The data plane behind the two panels. `webServer` is looked up rather than
@@ -91,7 +91,7 @@ export function apply(ctx: Context, config: Config): void {
     webCtx.effect(() => {
       const dispose = mountStudioRoutes(webCtx, runtime)
       return () => dispose?.()
-    }, 'dsh-creative-studio: routes')
+    }, 'dsh-openreelbench: routes')
   })
 
   /**
@@ -123,18 +123,18 @@ export function apply(ctx: Context, config: Config): void {
       // three lifetimes rather than one document.
       ...buildPipelineSkills(resolved).map((skill) => skills.register(skill)),
       ...buildStageSkills(resolved).map((skill) => skills.register(skill)),
-      skills.register(STUDIO_STORYTELLING_SKILL),
-      skills.register(STUDIO_CINEMATOGRAPHY_SKILL),
-      skills.register(STUDIO_REVIEWER_SKILL),
-      skills.register(STUDIO_SOUND_DESIGN_SKILL),
-      skills.register(STUDIO_USAGE_SKILL),
+      skills.register(OPENREEL_STORYTELLING_SKILL),
+      skills.register(OPENREEL_CINEMATOGRAPHY_SKILL),
+      skills.register(OPENREEL_REVIEWER_SKILL),
+      skills.register(OPENREEL_SOUND_DESIGN_SKILL),
+      skills.register(OPENREEL_USAGE_SKILL),
     ]
   }
 
   ctx.effect(() => {
     mountSkills()
     return unmountSkills
-  }, 'dsh-creative-studio: skills')
+  }, 'dsh-openreelbench: skills')
 
   /**
    * The settings section rides the plugin fiber: a host without a settings
@@ -143,7 +143,7 @@ export function apply(ctx: Context, config: Config): void {
    * cordis.yml set and writes only the user's deltas on top.
    */
   ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, STUDIO_NS, Config, config, {
+    settingsCtx.settings.installSection(ctx, OPENREEL_NS, Config, config, {
       setSource: (current) => {
         source = current as () => Config
       },

@@ -93,18 +93,18 @@ export interface RailProps {
 
 export function Rail({ steps, onSelect }: RailProps): JSX.Element {
   return (
-    <nav className="dcs-rail" aria-label="管线步骤">
+    <nav className="orb-rail" aria-label="管线步骤">
       {steps.map((step, index) => {
-        const classes = ['dcs-step']
-        if (step.current) classes.push('dcs-step-current')
-        if (!step.reachable) classes.push('dcs-step-locked')
-        classes.push('dcs-step-' + step.status)
+        const classes = ['orb-step']
+        if (step.current) classes.push('orb-step-current')
+        if (!step.reachable) classes.push('orb-step-locked')
+        classes.push('orb-step-' + step.status)
         const locked = !step.reachable && !step.current
         const status = statusText(step)
         const Icon = STAGE_ICONS[step.stage.id]
         return (
           <Fragment key={step.stage.id}>
-            {index > 0 ? <span className="dcs-rail-link" aria-hidden="true" /> : null}
+            {index > 0 ? <span className="orb-rail-link" aria-hidden="true" /> : null}
             <button
               type="button"
               className={classes.join(' ')}
@@ -112,16 +112,16 @@ export function Rail({ steps, onSelect }: RailProps): JSX.Element {
               title={locked ? '前一步没完成，这一步进不去' : step.stage.hint}
               onClick={() => onSelect(step.stage.id)}
             >
-              <span className="dcs-step-index">
+              <span className="orb-step-index">
                 {step.status === 'completed'
                   ? '✓'
                   : Icon !== undefined
-                    ? <Icon className="dcs-step-glyph" />
+                    ? <Icon className="orb-step-glyph" />
                     : index + 1}
               </span>
-              <span className="dcs-step-body">
-                <span className="dcs-step-label">{step.stage.label}</span>
-                <span className={'dcs-step-status dcs-tone-' + status.tone}>{status.label}</span>
+              <span className="orb-step-body">
+                <span className="orb-step-label">{step.stage.label}</span>
+                <span className={'orb-step-status orb-tone-' + status.tone}>{status.label}</span>
               </span>
             </button>
           </Fragment>

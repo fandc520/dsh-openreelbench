@@ -139,55 +139,55 @@ export function Welcome({
   const busy = phase !== null
 
   return (
-    <div className="dcs-welcome">
-      <header className="dcs-hero">
-        <div className="dcs-poster">
+    <div className="orb-welcome">
+      <header className="orb-hero">
+        <div className="orb-poster">
           <svg
-            className="dcs-poster-art"
+            className="orb-poster-art"
             viewBox="0 0 720 240"
             preserveAspectRatio="xMidYMax slice"
             aria-hidden="true"
             focusable="false"
           >
             <defs>
-              <linearGradient id="dcs-poster-bg" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="orb-poster-bg" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#111537" />
                 <stop offset="100%" stopColor="#05060f" />
               </linearGradient>
-              <radialGradient id="dcs-glow-violet">
+              <radialGradient id="orb-glow-violet">
                 <stop offset="0%" stopColor="#7c5cff" stopOpacity="0.5" />
                 <stop offset="100%" stopColor="#7c5cff" stopOpacity="0" />
               </radialGradient>
-              <radialGradient id="dcs-glow-teal">
+              <radialGradient id="orb-glow-teal">
                 <stop offset="0%" stopColor="#2dd4bf" stopOpacity="0.42" />
                 <stop offset="100%" stopColor="#2dd4bf" stopOpacity="0" />
               </radialGradient>
-              <radialGradient id="dcs-glow-indigo">
+              <radialGradient id="orb-glow-indigo">
                 <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.46" />
                 <stop offset="100%" stopColor="#4f46e5" stopOpacity="0" />
               </radialGradient>
-              <radialGradient id="dcs-poster-vignette">
+              <radialGradient id="orb-poster-vignette">
                 <stop offset="55%" stopColor="#05060f" stopOpacity="0" />
                 <stop offset="100%" stopColor="#05060f" stopOpacity="0.5" />
               </radialGradient>
-              <filter id="dcs-poster-blur" x="-60%" y="-60%" width="220%" height="220%">
+              <filter id="orb-poster-blur" x="-60%" y="-60%" width="220%" height="220%">
                 <feGaussianBlur stdDeviation="42" />
               </filter>
             </defs>
 
-            <rect width="720" height="240" fill="url(#dcs-poster-bg)" />
+            <rect width="720" height="240" fill="url(#orb-poster-bg)" />
 
-            <g filter="url(#dcs-poster-blur)">
-              <ellipse className="dcs-poster-drift-a" cx="150" cy="64" rx="240" ry="110" fill="url(#dcs-glow-violet)" />
-              <ellipse className="dcs-poster-drift-b" cx="568" cy="46" rx="230" ry="100" fill="url(#dcs-glow-teal)" />
-              <ellipse className="dcs-poster-drift-c" cx="368" cy="196" rx="280" ry="110" fill="url(#dcs-glow-indigo)" />
+            <g filter="url(#orb-poster-blur)">
+              <ellipse className="orb-poster-drift-a" cx="150" cy="64" rx="240" ry="110" fill="url(#orb-glow-violet)" />
+              <ellipse className="orb-poster-drift-b" cx="568" cy="46" rx="230" ry="100" fill="url(#orb-glow-teal)" />
+              <ellipse className="orb-poster-drift-c" cx="368" cy="196" rx="280" ry="110" fill="url(#orb-glow-indigo)" />
             </g>
 
             <g>
               {STARS.map((star, index) => (
                 <circle
                   key={index}
-                  className="dcs-poster-star"
+                  className="orb-poster-star"
                   cx={star.x}
                   cy={star.y}
                   r={star.r}
@@ -197,26 +197,26 @@ export function Welcome({
               ))}
             </g>
 
-            <rect width="720" height="240" fill="url(#dcs-poster-vignette)" />
+            <rect width="720" height="240" fill="url(#orb-poster-vignette)" />
           </svg>
           {/* The film strip is HTML, not SVG: inside the poster it would scale
               with the banner's width, and a wide window widened the sprocket
               holes. Fixed pixels keep the strip identical at every size. */}
-          <div className="dcs-poster-strip" aria-hidden="true" />
-          <div className="dcs-poster-body">
-            <span className="dcs-hero-sub">ComfyUI Creative Studio</span>
-            <h1 className="dcs-hero-title">ComfyUI 创意工作室</h1>
-            <p className="dcs-hero-tagline">
+          <div className="orb-poster-strip" aria-hidden="true" />
+          <div className="orb-poster-body">
+            <span className="orb-hero-sub">OpenReelbench · powered by ComfyUI</span>
+            <h1 className="orb-hero-title">开源视频创意台</h1>
+            <p className="orb-hero-tagline">
               基于 ComfyUI 与 DSH 开源生态的内容创作平台 —— 专业创作管线 · 原生 AI 人机协同
             </p>
           </div>
         </div>
       </header>
 
-      <div className="dcs-composer">
+      <div className="orb-composer">
         <textarea
           ref={inputRef}
-          className="dcs-composer-input"
+          className="orb-composer-input"
           value={text}
           placeholder={PLACEHOLDER}
           rows={3}
@@ -230,12 +230,12 @@ export function Welcome({
             }
           }}
         />
-        <div className="dcs-composer-foot">
-          <span className="dcs-hint">⌘/Ctrl + Enter 发送</span>
-          <span className="dcs-spacer" />
+        <div className="orb-composer-foot">
+          <span className="orb-hint">⌘/Ctrl + Enter 发送</span>
+          <span className="orb-spacer" />
           <button
             type="button"
-            className="dcs-btn dcs-btn-primary"
+            className="orb-btn orb-btn-primary"
             disabled={busy || text.trim() === ''}
             onClick={() => void submit()}
           >
@@ -244,28 +244,28 @@ export function Welcome({
         </div>
       </div>
 
-      {error !== null ? <p className="dcs-note dcs-note-error">{error}</p> : null}
-      {notice !== null ? <p className="dcs-note">{notice}</p> : null}
+      {error !== null ? <p className="orb-note orb-note-error">{error}</p> : null}
+      {notice !== null ? <p className="orb-note">{notice}</p> : null}
 
-      <section className="dcs-section">
-        <h2 className="dcs-section-title">
-          <IconClapper className="dcs-section-icon" />
+      <section className="orb-section">
+        <h2 className="orb-section-title">
+          <IconClapper className="orb-section-icon" />
           创作媒体类型
         </h2>
-        <div className="dcs-pipelines">
+        <div className="orb-pipelines">
           {(catalog?.pipelines ?? []).map((pipeline) => {
             const Icon = PIPELINE_ICONS[pipeline.id] ?? IconSpark
             return (
               <button
                 key={pipeline.id}
                 type="button"
-                className="dcs-pipeline"
+                className="orb-pipeline"
                 disabled={busy}
                 title={pipeline.description + '（' + pipeline.best_for + '）'}
                 onClick={() => pickPipeline(pipeline.command)}
               >
-                <Icon className="dcs-pipeline-icon" />
-                <span className="dcs-pipeline-name">{pipeline.name}</span>
+                <Icon className="orb-pipeline-icon" />
+                <span className="orb-pipeline-name">{pipeline.name}</span>
               </button>
             )
           })}
@@ -273,20 +273,20 @@ export function Welcome({
       </section>
 
       {projects.length > 0 ? (
-        <section className="dcs-section">
+        <section className="orb-section">
           <button
             type="button"
-            className="dcs-disclosure"
+            className="orb-disclosure"
             aria-expanded={historyOpen}
             onClick={() => setHistoryOpen((value) => !value)}
           >
-            <span className="dcs-disclosure-caret">{historyOpen ? '▾' : '▸'}</span>
-            <IconHistory className="dcs-section-icon" />
+            <span className="orb-disclosure-caret">{historyOpen ? '▾' : '▸'}</span>
+            <IconHistory className="orb-section-icon" />
             历史项目
-            <span className="dcs-count">{projects.length}</span>
+            <span className="orb-count">{projects.length}</span>
           </button>
           {historyOpen ? (
-            <div className="dcs-projects">
+            <div className="orb-projects">
               {projects.map((project) => (
                 <ProjectCard
                   key={project.id}

@@ -1,5 +1,5 @@
 /**
- * `studio_edit` — editing the film after the pictures exist.
+ * `openreel_edit` — editing the film after the pictures exist.
  *
  * The fifth tool, and the reason it exists at all is the rule in CONVENTIONS
  * §8: a step the panel can do directly must ALSO be reachable by the agent,
@@ -15,17 +15,17 @@
  * where the render is judged. Putting an approval in front of every trim would
  * gate an act whose whole point is that it is cheap to try.
  */
-import { type ToolDefinition, type StudioRuntime, requireString, optionalRecord, text } from './tools.js'
+import { type ToolDefinition, type PluginRuntime, requireString, optionalRecord, text } from './tools.js'
 import { CutError, deleteCut, listCuts, parseCut, readCut, writeCut } from './cuts.js'
 import { AssetError, trimAudioAsset } from './assets.js'
 import { StateViolationError } from './state.js'
 
 const NL = String.fromCharCode(10)
 
-export function editDefinition(runtime: StudioRuntime): ToolDefinition {
+export function editDefinition(runtime: PluginRuntime): ToolDefinition {
   const { machine } = runtime
   return {
-    name: 'studio_edit',
+    name: 'openreel_edit',
     description:
       'Edit the film: save or delete a cut (an edit version), and trim a narration clip. '
       + 'A CUT IS NON-DESTRUCTIVE — it stores per-section pauses, trims, subtitle text and shot '
@@ -204,7 +204,7 @@ function renderEditResult(value: Record<string, unknown>): string {
     const cut = value.cut as { id: string; name: string; sections: unknown[] }
     return (value.replaced === true ? 'Replaced cut ' : 'Saved cut ')
       + cut.id + '  "' + cut.name + '"  with ' + cut.sections.length + ' section override(s).'
-      + NL + 'Render it with studio_compose, passing cut: "' + cut.id + '".'
+      + NL + 'Render it with openreel_compose, passing cut: "' + cut.id + '".'
   }
 
   if (action === 'delete_cut') {

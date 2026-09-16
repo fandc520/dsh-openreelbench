@@ -1,7 +1,7 @@
 # 插件开发标准 —— UI 注入
 
 > 适用对象：给 DeepSeek Harness（DSH）写带界面的插件。
-> 本仓库（dsh-creative-studio）是这份标准的活样例：设置页（`settings.section`）、
+> 本仓库（dsh-openreelbench）是这份标准的活样例：设置页（`settings.section`）、
 > 设置数据（`settingsScope` 命名空间）都在 `src/client/` 里，可以直接抄。
 > 宿主侧的机制定义在 DSH 仓库：`packages/client/ui-settings/src/client/contract/slots.ts`
 > （设置域插槽类型）与 `packages/extensions/cordis-client-runner/src/client/slot-catalog.ts`
@@ -25,7 +25,7 @@
 ## 1. 插件的两面结构
 
 ```
-dsh-creative-studio/
+dsh-openreelbench/
 ├── src/index.ts            # 宿主半面：工具 / 技能 / installSettingsSection
 ├── src/client/index.ts     # 浏览器半面入口：export name / inject / apply(ctx)
 ├── src/client/*.tsx        # React 组件
@@ -37,9 +37,9 @@ dsh-creative-studio/
 浏览器半面入口的固定形状：
 
 ```ts
-export const name = 'dsh-creative-studio'          // 与宿主半面同名
+export const name = 'dsh-openreelbench'          // 与宿主半面同名
 export const inject = ['slots', 'settingsScope']   // 需要的服务（cordis fiber）
-export function apply(ctx: StudioClientContext): void { ... }
+export function apply(ctx: ClientContext): void { ... }
 ```
 
 `package.json` 里对应的声明：
@@ -107,10 +107,10 @@ props。`settings.section` 的 owner props 是 `{ close: () => void }`——组�
 ```ts
 ctx.slots.inject('settings.section', () => ctx.slots.register({
   name: 'settings.section',
-  id: STUDIO_NAMESPACE,        // 用自己的命名空间作 id：nav 行键 = 存储命名空间，页和数据一个单元
+  id: OPENREEL_NAMESPACE,        // 用自己的命名空间作 id：nav 行键 = 存储命名空间，页和数据一个单元
   order: 40,                   // 侧边栏位置：general=0, models=10, plugins=15, agent-presets=20
-  label: () => 'AI 创意工作室', // nav 行文案；多语言用 locale dict + thunk
-}, () => h(StudioSettingsSection, { scope })))
+  label: () => 'OpenReel 创意台', // nav 行文案；多语言用 locale dict + thunk
+}, () => h(SettingsSection, { scope })))
 ```
 
 组件接收：owner props `close`（本页不用）+ 闭包传入的 `scope`。整页在
@@ -124,7 +124,7 @@ ctx.slots.inject('settings.section', () => ctx.slots.register({
 ```ts
 // 本插件曾经这么写，配置因此出现在「设置 → 插件」页里：
 ctx.slots.register({
-  name: 'settings.plugin.item', key: STUDIO_NAMESPACE, ...
+  name: 'settings.plugin.item', key: OPENREEL_NAMESPACE, ...
 }, h(StudioSettingsCard, { scope }))
 ```
 
@@ -141,15 +141,15 @@ ctx.slots.register({
 
 ```ts
 // 宿主半面 src/index.ts —— 注册命名空间（无 UI，纯数据）：
-installSettingsSection(ctx, STUDIO_NS, Config, config, {
+installSettingsSection(ctx, OPENREEL_NS, Config, config, {
   setSource: (current) => { source = current },   // 设置层写回
   onChange: () => { Object.assign(resolved, source()) },  // 改动即时生效
 })
 ```
 ```ts
 // 浏览器半面 src/client/scope.ts —— 拿同一命名空间的句柄：
-export const STUDIO_NAMESPACE = 'studio'           // 必须与宿主一致
-const scope = ctx.settingsScope.bind<Config>({ namespace: STUDIO_NAMESPACE })
+export const OPENREEL_NAMESPACE = 'openreel'           // 必须与宿主一致
+const scope = ctx.settingsScope.bind<Config>({ namespace: OPENREEL_NAMESPACE })
 ```
 ```ts
 // 组件里消费（src/client/scope.ts 的 useScope = useSyncExternalStore 包装）：
@@ -169,7 +169,7 @@ await scope.set('workspaceRoot', 'D:/AiStudio')    // 一次一个顶层字段�
 - [ ] 条目的 `id` 是自己的命名空间，不蹭 shipped id（蹭 = 替换别人的格子）
 - [ ] `order` 写了、与同类条目错开；`label` 是文案而非调试串；多语言用 locale dict + thunk
 - [ ] 组件需要的数据尽量走闭包或 inject 面，不在组件里 import 平台包
-- [ ] 宿主注册的命名空间与 client 的 `STUDIO_NAMESPACE` 字符串一致（单点常量，别复制两份）
+- [ ] 宿主注册的命名空间与 client 的 `OPENREEL_NAMESPACE` 字符串一致（单点常量，别复制两份）
 - [ ] 宿主 schema 与 `fields.ts` 是同一份契约：加了配置字段，两边一起加
 - [ ] `package.json` 的 `dsh.client.inject` 只列实际依赖的包
 
@@ -233,7 +233,7 @@ npm run build:client      # tsdown → client/client.js (+ .map)
   shell.overlay（全框浮层：徽标 / toast / 状态胶囊）
   设置面板（由 settings.trigger 打开）
   ├ settings.header · settings.action · settings.close（壳文案位）
-  ├ settings.section（侧边栏条目 + 内容页）★ 本插件用位：id=studio, order=40
+  ├ settings.section（侧边栏条目 + 内容页）★ 本插件用位：id=openreel, order=40
   ├ settings.general.item（「通用」页里的一行偏好）
   ├ settings.plugins.tab（「插件」段内部页签）
   └ settings.plugin.item（「插件」页里的插件卡片，key=命名空间）
@@ -328,7 +328,7 @@ npm run build:client      # tsdown → client/client.js (+ .map)
 
 ```text
 想在设置里放配置
-  ├ 独立一整页 → settings.section（★ 本插件已用：id=studio, order=40）
+  ├ 独立一整页 → settings.section（★ 本插件已用：id=openreel, order=40）
   ├ 通用页里一行 → settings.general.item
   └ 插件页一张卡 → settings.plugin.item（能不用就不用，见 3.2）
 想在消息流里挂东西

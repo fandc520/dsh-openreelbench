@@ -1,5 +1,5 @@
 /**
- * The media card — `tool.call.toolview` for `studio_show` and `studio_compose`.
+ * The media card — `tool.call.toolview` for `openreel_show` and `openreel_compose`.
  *
  * A tool result reaches the browser as text plus a `meta` payload the host
  * attached through `presentationMeta`. Text is what a transcript keeps and what
@@ -9,8 +9,8 @@
  * wording that exists for the model's benefit.
  *
  * It is deliberately generic: any project-relative path the host resolved into
- * a `/studio/media` URL renders here, whether it is a finished film, one take,
- * or a single frame. That is why `studio_show` exists at all — the agent has
+ * a `/openreel/media` URL renders here, whether it is a finished film, one take,
+ * or a single frame. That is why `openreel_show` exists at all — the agent has
  * plenty of ways to make media and, until now, no way to put it on screen.
  */
 import { createElement as h, useEffect, useState } from 'react'
@@ -94,17 +94,17 @@ function TextPreview({ item }: { item: MediaItem }): ReturnType<typeof h> {
       ? '读不出来。'
       : body ?? '读取中…'
 
-  return h('pre', { className: 'dcs-card-text' }, content)
+  return h('pre', { className: 'orb-card-text' }, content)
 }
 
 function Frame({ item, onZoom }: { item: MediaItem; onZoom: () => void }): ReturnType<typeof h> {
   const [failed, setFailed] = useState(false)
 
   const body = failed
-    ? h('div', { className: 'dcs-card-missing' }, '打不开：' + item.name)
+    ? h('div', { className: 'orb-card-missing' }, '打不开：' + item.name)
     : item.kind === 'video'
       ? h('video', {
-          className: 'dcs-card-video',
+          className: 'orb-card-video',
           src: item.url,
           controls: true,
           preload: 'metadata',
@@ -112,7 +112,7 @@ function Frame({ item, onZoom }: { item: MediaItem; onZoom: () => void }): Retur
         })
       : item.kind === 'audio'
         ? h('audio', {
-            className: 'dcs-card-audio',
+            className: 'orb-card-audio',
             src: item.url,
             controls: true,
             preload: 'metadata',
@@ -122,7 +122,7 @@ function Frame({ item, onZoom }: { item: MediaItem; onZoom: () => void }): Retur
           ? h(TextPreview, { item })
           : item.kind === 'image'
             ? h('img', {
-                className: 'dcs-card-image',
+                className: 'orb-card-image',
                 src: item.url,
                 alt: item.name,
                 loading: 'lazy',
@@ -132,21 +132,21 @@ function Frame({ item, onZoom }: { item: MediaItem; onZoom: () => void }): Retur
             // Nothing a browser can show inline. Say what it is and offer it,
             // rather than pretending a preview exists.
             : h('a', {
-                className: 'dcs-card-file',
+                className: 'orb-card-file',
                 href: item.url + '&download=1',
                 target: '_blank',
                 rel: 'noreferrer',
               }, '下载 ' + item.name)
 
-  return h('figure', { className: 'dcs-card-frame dcs-card-frame--' + item.kind },
+  return h('figure', { className: 'orb-card-frame orb-card-frame--' + item.kind },
     body,
-    h('figcaption', { className: 'dcs-card-caption' },
-      h('span', { className: 'dcs-card-name', title: item.path }, item.name),
-      h('span', { className: 'dcs-card-size' }, sizeLabel(item.bytes)),
+    h('figcaption', { className: 'orb-card-caption' },
+      h('span', { className: 'orb-card-name', title: item.path }, item.name),
+      h('span', { className: 'orb-card-size' }, sizeLabel(item.bytes)),
       // Every kind gets this, including the ones shown inline: seeing a file
       // and keeping it are different wants, and the preview answers only one.
       h('a', {
-        className: 'dcs-card-get',
+        className: 'orb-card-get',
         href: item.url + '&download=1',
         download: item.name,
         title: '下载',
@@ -159,7 +159,7 @@ export function MediaCard({ block }: MediaCardProps): ReturnType<typeof h> | nul
   const [zoom, setZoom] = useState<MediaItem | null>(null)
 
   if (block.isError === true) {
-    return h('div', { className: 'dcs-card dcs-card--error' },
+    return h('div', { className: 'orb-card orb-card--error' },
       '媒体回显失败：' + (block.error?.code ?? block.error?.name ?? '未知原因'))
   }
   // Still running, or a settled call whose host did not attach a payload:
@@ -168,9 +168,9 @@ export function MediaCard({ block }: MediaCardProps): ReturnType<typeof h> | nul
   const meta = readMeta(block)
   if (meta === undefined) return null
 
-  return h('div', { className: 'dcs-card' },
-    meta.note === undefined ? null : h('p', { className: 'dcs-card-note' }, meta.note),
-    h('div', { className: 'dcs-card-grid' },
+  return h('div', { className: 'orb-card' },
+    meta.note === undefined ? null : h('p', { className: 'orb-card-note' }, meta.note),
+    h('div', { className: 'orb-card-grid' },
       meta.items.map((item) => h(Frame, {
         key: item.path,
         item,
@@ -178,7 +178,7 @@ export function MediaCard({ block }: MediaCardProps): ReturnType<typeof h> | nul
       })),
     ),
     zoom === null ? null : h('div', {
-      className: 'dcs-card-zoom',
+      className: 'orb-card-zoom',
       role: 'dialog',
       onClick: () => setZoom(null),
     }, h('img', { src: zoom.url, alt: zoom.name })),

@@ -161,22 +161,22 @@ export function AssetPicker({ kinds, current, onPick, onClose }: AssetPickerProp
   ]
 
   return (
-    <div className="dcs-picker-overlay" onClick={onClose}>
-      <div className="dcs-picker" onClick={(event) => event.stopPropagation()}>
-        <div className="dcs-picker-bar">
-          <div className="dcs-picker-tabs">
+    <div className="orb-picker-overlay" onClick={onClose}>
+      <div className="orb-picker" onClick={(event) => event.stopPropagation()}>
+        <div className="orb-picker-bar">
+          <div className="orb-picker-tabs">
             {tabs.map((entry) => (
               <button
                 key={entry.id}
                 type="button"
-                className={'dcs-picker-tab' + (tab === entry.id ? ' dcs-picker-tab-active' : '')}
+                className={'orb-picker-tab' + (tab === entry.id ? ' orb-picker-tab-active' : '')}
                 onClick={() => setTab(entry.id)}
               >{entry.label}</button>
             ))}
           </div>
 
           <label
-            className="dcs-dropzone"
+            className="orb-dropzone"
             title="点击选择，或把文件拖进来 / 粘贴进来"
             onMouseEnter={() => { hovering.current = true }}
             onMouseLeave={() => { hovering.current = false }}
@@ -201,27 +201,27 @@ export function AssetPicker({ kinds, current, onPick, onClose }: AssetPickerProp
             {busy ? '上传中…' : '上传到服务器'}
           </label>
 
-          <span className="dcs-spacer" />
-          <button type="button" className="dcs-btn dcs-btn-small" onClick={onClose}>关闭</button>
+          <span className="orb-spacer" />
+          <button type="button" className="orb-btn orb-btn-small" onClick={onClose}>关闭</button>
         </div>
 
-        {flash !== null ? <p className="dcs-note dcs-note-ok">{flash}</p> : null}
-        {error !== null ? <p className="dcs-note dcs-note-error">{error}</p> : null}
+        {flash !== null ? <p className="orb-note orb-note-ok">{flash}</p> : null}
+        {error !== null ? <p className="orb-note orb-note-error">{error}</p> : null}
 
         {loading
-          ? <p className="dcs-picker-empty">读取中…</p>
+          ? <p className="orb-picker-empty">读取中…</p>
           : visible.length === 0
-            ? <p className="dcs-picker-empty">这里还没有{noun}。上传一个，或先生成一些。</p>
+            ? <p className="orb-picker-empty">这里还没有{noun}。上传一个，或先生成一些。</p>
             : (
-              <div className="dcs-picker-grid">
+              <div className="orb-picker-grid">
                 {columns.map((column, index) => (
-                  <div className="dcs-picker-col" key={index}>
+                  <div className="orb-picker-col" key={index}>
                     {column.map((file) => (
                       <div
                         key={file.source + ':' + file.name}
                         role="button"
                         tabIndex={0}
-                        className={'dcs-picker-card' + (file.name === current ? ' dcs-picker-card-active' : '')}
+                        className={'orb-picker-card' + (file.name === current ? ' orb-picker-card-active' : '')}
                         title={file.name + (file.workflowName == null ? '' : '　' + file.workflowName)}
                         onClick={() => onPick(file)}
                         onKeyDown={(event) => {
@@ -232,11 +232,11 @@ export function AssetPicker({ kinds, current, onPick, onClose }: AssetPickerProp
                         }}
                       >
                         {file.kind === 'image'
-                          ? <img className="dcs-picker-thumb" src={file.url} alt="" loading="lazy" />
-                          : <span className="dcs-picker-thumb dcs-picker-thumb-other">
+                          ? <img className="orb-picker-thumb" src={file.url} alt="" loading="lazy" />
+                          : <span className="orb-picker-thumb orb-picker-thumb-other">
                             {file.kind === 'audio' ? '♪' : '▤'}
                           </span>}
-                        <span className="dcs-picker-name">{file.name}</span>
+                        <span className="orb-picker-name">{file.name}</span>
                       </div>
                     ))}
                   </div>

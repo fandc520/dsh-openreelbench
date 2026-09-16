@@ -403,7 +403,7 @@ export class StateMachine {
       throw new StateViolationError(
         'NO_PROJECT',
         'no project ' + JSON.stringify(projectId) + ' under ' + this.deps.workspaceRoot()
-        + " — run studio_project with action 'init' first",
+        + " — run openreel_project with action 'init' first",
       )
     }
     return { layout, marker }
@@ -445,7 +445,7 @@ export class StateMachine {
     if (!StateMachine.PLAN_ARTIFACTS.has(name)) {
       throw new StateViolationError(
         'BAD_REQUEST',
-        "'" + name + "' is not a plan artifact; record it with studio_stage so it goes through its gate",
+        "'" + name + "' is not a plan artifact; record it with openreel_stage so it goes through its gate",
       )
     }
     const issues = validateArtifact(name, value)
@@ -782,7 +782,7 @@ export class StateMachine {
         'ASSET_MISSING',
         'ASSET MISSING: the render report names output file(s) that do not exist:\n'
         + missing.map((line) => '  - ' + line).join('\n')
-        + '\nRun studio_compose and record the paths it returns.',
+        + '\nRun openreel_compose and record the paths it returns.',
       )
     }
   }

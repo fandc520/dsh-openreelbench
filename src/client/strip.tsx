@@ -110,14 +110,14 @@ export function Strip({ children, className, ariaLabel, arrows = true }: StripPr
   }
 
   return (
-    <div className="dcs-strip-wrap">
+    <div className="orb-strip-wrap">
       {arrows && overflow.left ? (
-        <button type="button" className="dcs-strip-arrow dcs-strip-arrow-left"
+        <button type="button" className="orb-strip-arrow orb-strip-arrow-left"
           aria-label="向左" onClick={() => nudge(-1)}>‹</button>
       ) : null}
       <div
         ref={viewport}
-        className={'dcs-strip' + (className === undefined ? '' : ' ' + className)}
+        className={'orb-strip' + (className === undefined ? '' : ' ' + className)}
         aria-label={ariaLabel ?? ''}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -127,7 +127,7 @@ export function Strip({ children, className, ariaLabel, arrows = true }: StripPr
         {children}
       </div>
       {arrows && overflow.right ? (
-        <button type="button" className="dcs-strip-arrow dcs-strip-arrow-right"
+        <button type="button" className="orb-strip-arrow orb-strip-arrow-right"
           aria-label="向右" onClick={() => nudge(1)}>›</button>
       ) : null}
     </div>

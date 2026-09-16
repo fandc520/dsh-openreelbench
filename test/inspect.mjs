@@ -27,9 +27,9 @@ import { resolveVideoProfile } from '../lib/media-profile.js'
 const NL = String.fromCharCode(10)
 
 // The workspace root lives in DSH settings, which this script cannot read.
-// STUDIO_ROOT overrides it; the default matches the configured one on this
+// OPENREEL_ROOT overrides it; the default matches the configured one on this
 // machine. If the listing comes back empty, that is the thing to set.
-const config = Config({ workspaceRoot: process.env.STUDIO_ROOT ?? resolve('D:/AiStudio') })
+const config = Config({ workspaceRoot: process.env.OPENREEL_ROOT ?? resolve('D:/AiStudio') })
 const machine = new StateMachine({
   workspaceRoot: () => config.workspaceRoot,
   probeDuration: (path) => probeDuration(config.ffprobePath, path),

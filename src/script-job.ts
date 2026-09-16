@@ -21,7 +21,7 @@
  *
  * WHAT ARRIVED. The project id — the old request said "简报已经通过了" and named
  * no project at all, so a model with a compacted history could not call
- * `studio_stage` without looking one up. And the two live numbers the panel
+ * `openreel_stage` without looking one up. And the two live numbers the panel
  * already knows: the target length and the character budget it implies, which
  * the sheet can only state as a formula.
  */
@@ -41,8 +41,8 @@ export interface ScriptJobInput {
 
 const NEWLINE = String.fromCharCode(10)
 /** Exported so the handoff test can follow the gesture out of the screen. */
-export const SCRIPT_STAGE_SKILL = 'dsh-creative-studio-stage-script'
-export const SCRIPT_CRAFT_SKILL = 'dsh-creative-studio-storytelling'
+export const SCRIPT_STAGE_SKILL = 'dsh-openreelbench-stage-script'
+export const SCRIPT_CRAFT_SKILL = 'dsh-openreelbench-storytelling'
 
 export function buildScriptJob(input: ScriptJobInput): string {
   // The sheet gives the rule (chars per second); the panel knows both numbers,

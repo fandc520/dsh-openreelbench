@@ -87,10 +87,10 @@ export function ProjectCard({ project, disabled, onOpen, onRename, onRemove }: P
 
   if (mode === 'renaming') {
     return (
-      <div className="dcs-project dcs-project-editing" ref={root}>
+      <div className="orb-project orb-project-editing" ref={root}>
         <input
           ref={renameInput}
-          className="dcs-input"
+          className="orb-input"
           value={title}
           disabled={busy}
           onChange={(event) => setTitle(event.target.value)}
@@ -99,10 +99,10 @@ export function ProjectCard({ project, disabled, onOpen, onRename, onRemove }: P
             if (event.key === 'Escape') { setTitle(project.title); setMode('idle') }
           }}
         />
-        <div className="dcs-project-actions">
-          <button type="button" className="dcs-btn dcs-btn-small" disabled={busy}
+        <div className="orb-project-actions">
+          <button type="button" className="orb-btn orb-btn-small" disabled={busy}
             onClick={() => { setTitle(project.title); setMode('idle') }}>取消</button>
-          <button type="button" className="dcs-btn dcs-btn-small dcs-btn-primary" disabled={busy}
+          <button type="button" className="orb-btn orb-btn-small orb-btn-primary" disabled={busy}
             onClick={() => void commitRename()}>{busy ? '保存中…' : '保存'}</button>
         </div>
       </div>
@@ -111,15 +111,15 @@ export function ProjectCard({ project, disabled, onOpen, onRename, onRemove }: P
 
   if (mode === 'confirming') {
     return (
-      <div className="dcs-project dcs-project-editing" ref={root}>
-        <span className="dcs-project-title">移除「{project.title}」？</span>
-        <span className="dcs-project-meta">
+      <div className="orb-project orb-project-editing" ref={root}>
+        <span className="orb-project-title">移除「{project.title}」？</span>
+        <span className="orb-project-meta">
           移到回收站，不是删除——素材和成片都还在，可以手动移回来。
         </span>
-        <div className="dcs-project-actions">
-          <button type="button" className="dcs-btn dcs-btn-small" disabled={busy}
+        <div className="orb-project-actions">
+          <button type="button" className="orb-btn orb-btn-small" disabled={busy}
             onClick={() => setMode('idle')}>取消</button>
-          <button type="button" className="dcs-btn dcs-btn-small dcs-btn-danger" disabled={busy}
+          <button type="button" className="orb-btn orb-btn-small orb-btn-danger" disabled={busy}
             onClick={() => void commitRemove()}>{busy ? '移除中…' : '移除'}</button>
         </div>
       </div>
@@ -127,22 +127,22 @@ export function ProjectCard({ project, disabled, onOpen, onRename, onRemove }: P
   }
 
   return (
-    <div className="dcs-project" ref={root}>
+    <div className="orb-project" ref={root}>
       <button
         type="button"
-        className="dcs-project-body"
+        className="orb-project-body"
         disabled={disabled}
         onClick={() => onOpen(project.id)}
       >
-        <span className="dcs-project-title">{project.title}</span>
-        <span className="dcs-project-meta">
+        <span className="orb-project-title">{project.title}</span>
+        <span className="orb-project-meta">
           {project.created_at.slice(0, 10)} · {formatBytes(project.total_bytes)}
         </span>
       </button>
 
       <button
         type="button"
-        className="dcs-kebab"
+        className="orb-kebab"
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         aria-label="更多操作"
@@ -153,12 +153,12 @@ export function ProjectCard({ project, disabled, onOpen, onRename, onRemove }: P
       </button>
 
       {menuOpen ? (
-        <div className="dcs-menu" role="menu">
-          <button type="button" role="menuitem" className="dcs-menu-item"
+        <div className="orb-menu" role="menu">
+          <button type="button" role="menuitem" className="orb-menu-item"
             onClick={() => { setMenuOpen(false); onOpen(project.id) }}>编辑</button>
-          <button type="button" role="menuitem" className="dcs-menu-item"
+          <button type="button" role="menuitem" className="orb-menu-item"
             onClick={() => { setMenuOpen(false); setMode('renaming') }}>重命名</button>
-          <button type="button" role="menuitem" className="dcs-menu-item dcs-menu-item-danger"
+          <button type="button" role="menuitem" className="orb-menu-item orb-menu-item-danger"
             onClick={() => { setMenuOpen(false); setMode('confirming') }}>移除</button>
         </div>
       ) : null}

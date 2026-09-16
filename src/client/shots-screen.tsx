@@ -21,7 +21,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 
-import { SHOT_LANGUAGE_FIELDS, type StudioState, api, bindingWorkflows } from './api.ts'
+import { SHOT_LANGUAGE_FIELDS, type PluginState, api, bindingWorkflows } from './api.ts'
 import { type AgentPhase, BusyLabel } from './busy.tsx'
 import { IconImage, IconPlay, IconSliders } from './icons.tsx'
 import { type AssetFile, AssetPicker, inputAssetUrl, useAssetUrls } from './asset-picker.tsx'
@@ -30,7 +30,7 @@ import { Strip } from './strip.tsx'
 import { buildShotJob } from '../shot-job.js'
 
 export interface ShotsScreenProps {
-  state: StudioState
+  state: PluginState
   onReload: () => Promise<void>
   onSend: (text: string) => Promise<void>
   onGoToStage: (stageId: string) => void
@@ -81,7 +81,7 @@ interface RawAsset {
  * *what*. A planned slot with no asset is a hole to fill, which is exactly what
  * the strip should show.
  */
-function buildShots(state: StudioState): Shot[] {
+function buildShots(state: PluginState): Shot[] {
   const script = state.artifacts.script as
     | { sections?: Array<{ id?: string; text?: string; label?: string; visual?: { prompt?: string } }> }
     | undefined
@@ -153,7 +153,7 @@ function buildShots(state: StudioState): Shot[] {
 
 /** The manifest as it should be after an edit to one section's shot list. */
 function rewriteSection(
-  state: StudioState,
+  state: PluginState,
   sectionId: string,
   shots: ReadonlyArray<Pick<Shot, 'prompt' | 'weight' | 'assetId' | 'path'>>,
 ): Record<string, unknown> {
@@ -315,7 +315,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
   const isHero = active !== undefined && shotEntry(active)?.hero_moment === true
 
   /** The built prompt for a shot, by position within its section. */
-  function promptFor(shot: Shot): StudioState['prompts'][number] | undefined {
+  function promptFor(shot: Shot): PluginState['prompts'][number] | undefined {
     return state.prompts.find(
       (entry) => entry.sectionId === shot.sectionId && entry.shotIndex === shot.index,
     )
@@ -645,7 +645,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
         status: 'completed',
         artifacts: { asset_manifest_shots: manifest ?? { version: '1.0', assets: [] } },
         human_approved: true,
-        note: '在创意工作台确认',
+        note: '在OpenReel 创意台确认',
       })
       await onReload()
       onGoToStage('compose')
@@ -658,7 +658,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
 
   const imageSrc = active?.path === undefined
     ? undefined
-    : '/studio/media?project=' + encodeURIComponent(state.project.id)
+    : '/openreel/media?project=' + encodeURIComponent(state.project.id)
       + '&path=' + encodeURIComponent(active.path)
 
   /** Cards are laid out proportionally, with a floor so a short shot stays clickable. */
@@ -666,38 +666,38 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
     'max(84px, ' + ((seconds / Math.max(total, 0.001)) * 100).toFixed(2) + '%)'
 
   return (
-    <div className="dcs-screen">
-      <header className="dcs-screen-head">
-        <h2 className="dcs-screen-title">分镜</h2>
-        <span className="dcs-spacer" />
-        <span className={'dcs-pill ' + (approved ? 'dcs-pill-ok' : '')}>
+    <div className="orb-screen">
+      <header className="orb-screen-head">
+        <h2 className="orb-screen-title">分镜</h2>
+        <span className="orb-spacer" />
+        <span className={'orb-pill ' + (approved ? 'orb-pill-ok' : '')}>
           {approved ? '已审核' : stage?.status === 'in_progress' ? '进行中' : '待确认'}
         </span>
       </header>
 
       {result !== null ? (
-        <p className={'dcs-note ' + (result.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{result.text}</p>
+        <p className={'orb-note ' + (result.kind === 'ok' ? 'orb-note-ok' : 'orb-note-error')}>{result.text}</p>
       ) : null}
 
-      <section className="dcs-card">
-        <div className="dcs-card-head">
-          <IconImage className="dcs-section-icon" />
-          <h3 className="dcs-card-title">分镜生成</h3>
-          <span className="dcs-card-meta">
+      <section className="orb-card">
+        <div className="orb-card-head">
+          <IconImage className="orb-section-icon" />
+          <h3 className="orb-card-title">分镜生成</h3>
+          <span className="orb-card-meta">
             <span><b>{done}</b>/{shots.length} 镜已生成 · 全片 {total.toFixed(1)} 秒</span>
           </span>
-          <span className="dcs-spacer" />
+          <span className="orb-spacer" />
           {/* Always a dropdown, even with one candidate: a read-only name looks
               like a label, and a select says "this is a choice you own" — plus
               an unbound capability shows where to fix it instead of a blank. */}
-          <label className="dcs-inline-pick">
-            <span className="dcs-hint">工作流</span>
+          <label className="orb-inline-pick">
+            <span className="orb-hint">工作流</span>
             <select
-              className="dcs-select dcs-select-small"
+              className="orb-select orb-select-small"
               value={imageWorkflow}
               disabled={phase !== null || busy !== null}
               title={imageChoices.length === 0
-                ? '设置 → AI 创意工作室 → ComfyUI 工作流绑定 → 配图（文生图）'
+                ? '设置 → OpenReel 创意台 → ComfyUI 工作流绑定 → 配图（文生图）'
                 : undefined}
               onChange={(event) => setImagePick(event.target.value)}
             >
@@ -708,7 +708,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
               ))}
             </select>
           </label>
-          <span className="dcs-spacer" />
+          <span className="orb-spacer" />
           {/* The common case after a partial run: some pictures landed, one
               failed or was added later. Regenerating the lot to fill a hole
               costs the whole batch again, so the hole gets its own button —
@@ -716,7 +716,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
           {missing.length === 0 || missing.length === shots.length ? null : (
             <button
               type="button"
-              className="dcs-btn dcs-btn-small"
+              className="orb-btn orb-btn-small"
               disabled={phase !== null || busy !== null}
               onClick={() => void generate(missing)}
               title="只生成还没有图的那几镜，已经有的不动"
@@ -725,7 +725,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
             </button>
           )}
         </div>
-        <div className="dcs-card-body">
+        <div className="orb-card-body">
           {/* One shell for both quality checks, shared with the compose screen.
               Always rendered: an empty screen cannot tell you that anything was
               checked, so a pass costs one collapsed line and a finding opens. */}
@@ -764,39 +764,39 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
 
         {active !== undefined ? (
           <>
-            <div className="dcs-shot-detail">
-              <div className="dcs-shot-side">
-                <div className="dcs-shot-image">
+            <div className="orb-shot-detail">
+              <div className="orb-shot-side">
+                <div className="orb-shot-image">
                   {imageSrc === undefined
-                    ? <div className="dcs-shot-empty">这一镜还没生成</div>
+                    ? <div className="orb-shot-empty">这一镜还没生成</div>
                     : <img src={imageSrc} alt={active.sectionLabel} />}
                 </div>
 
-                <div className="dcs-shot-head">
-                  <span className="dcs-shot-where">
+                <div className="orb-shot-head">
+                  <span className="orb-shot-where">
                     {active.sectionLabel} · 第 {active.index + 1} 镜 / {sectionShots(active.sectionId).length}
                   </span>
-                  <span className="dcs-hint">{active.duration.toFixed(1)} 秒</span>
+                  <span className="orb-hint">{active.duration.toFixed(1)} 秒</span>
                 </div>
 
                 {/* Prose, not a field. The narration is the one thing here
                     nobody edits — it is context for the four decisions below, and
                     a titled block gave it the same weight as the things that are
                     actually being chosen. */}
-                <p className="dcs-shot-text" title="这一段要念出来的字，分镜跟着它走">
-                  <span className="dcs-shot-text-label">台词：</span>
+                <p className="orb-shot-text" title="这一段要念出来的字，分镜跟着它走">
+                  <span className="orb-shot-text-label">台词：</span>
                   {active.text || '（这一段没有台词）'}
                 </p>
               </div>
 
-              <div className="dcs-shot-meta">
-                <div className="dcs-shot-block">
+              <div className="orb-shot-meta">
+                <div className="orb-shot-block">
                   <span
-                    className="dcs-shot-block-title"
+                    className="orb-shot-block-title"
                     title="这一镜拍什么，只写主体。相机 / 镜头 / 光线 / 风格由下面的镜头语言和 playbook 分层拼上——「最终提示词」就是拼好的结果。"
                   >画面提示词</span>
                   <textarea
-                    className="dcs-input dcs-textarea"
+                    className="orb-input orb-textarea"
                     rows={3}
                     value={prompt}
                     placeholder="英文提示词：只写画面主体"
@@ -806,20 +806,20 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                   />
                 </div>
 
-                <div className="dcs-shot-block dcs-shot-block-lang">
-                  <span className="dcs-shot-block-title" title="这四层逐镜变化，是让十张图真的不一样的地方">
+                <div className="orb-shot-block orb-shot-block-lang">
+                  <span className="orb-shot-block-title" title="这四层逐镜变化，是让十张图真的不一样的地方">
                     镜头语言
                   </span>
-                  <div className="dcs-lang-grid">
+                  <div className="orb-lang-grid">
                     {SHOT_LANGUAGE_FIELDS.map((field) => {
                       const own = languageOf(active)[field.key]
                       const inherited = styleDefaults[field.key]
                       return (
-                        <label className="dcs-lang-cell" key={field.key}>
-                          <span className="dcs-lang-name" title={field.hint}>{field.label}</span>
+                        <label className="orb-lang-cell" key={field.key}>
+                          <span className="orb-lang-name" title={field.hint}>{field.label}</span>
                           <select
-                            className={'dcs-select dcs-lang-select'
-                              + (own === undefined && inherited !== undefined ? ' dcs-select-inherited' : '')}
+                            className={'orb-select orb-lang-select'
+                              + (own === undefined && inherited !== undefined ? ' orb-select-inherited' : '')}
                             value={own === undefined ? '' : String(own)}
                             disabled={busy !== null}
                             onChange={(event) => void setLanguage(field.key, event.target.value)}
@@ -844,15 +844,15 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                 </div>
 
                 {builtPrompt === undefined ? null : (
-                  <div className="dcs-shot-block">
-                    <span className="dcs-shot-block-title" title="插件拼好的整条，生成时原样使用">
+                  <div className="orb-shot-block">
+                    <span className="orb-shot-block-title" title="插件拼好的整条，生成时原样使用">
                       最终提示词
                     </span>
-                    <div className="dcs-built">
+                    <div className="orb-built">
                       {builtPrompt.layers.map((entry) => (
                         <span
                           key={entry.layer}
-                          className={'dcs-built-layer' + (entry.fromDefaults ? ' dcs-built-inherited' : '')}
+                          className={'orb-built-layer' + (entry.fromDefaults ? ' orb-built-inherited' : '')}
                           title={'第 ' + entry.layer + ' 层 · ' + entry.name
                             + (entry.fromDefaults ? '（来自风格默认）' : '')}
                         >{entry.text}</span>
@@ -865,17 +865,17 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
 
             {/* The strip's toolbar: one row of shot-level commands, parked right
                 above the timeline they act on. */}
-            <div className="dcs-shot-tools">
-              <label className="dcs-inline-pick">
-                <span className="dcs-hint">段落占比</span>
+            <div className="orb-shot-tools">
+              <label className="orb-inline-pick">
+                <span className="orb-hint">段落占比</span>
                 {isLastShot ? (
-                  <span className="dcs-derived" title="最后一镜自动补齐剩下的时间，改前面几镜即可">
+                  <span className="orb-derived" title="最后一镜自动补齐剩下的时间，改前面几镜即可">
                     {shareOf(active).toFixed(2)}　自动
                   </span>
                 ) : (
                   <input
                     key={active.key + ':' + active.weight}
-                    className="dcs-input dcs-input-seconds"
+                    className="orb-input orb-input-seconds"
                     inputMode="decimal"
                     defaultValue={shareOf(active).toFixed(2)}
                     disabled={busy !== null}
@@ -887,54 +887,54 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                   />
                 )}
               </label>
-              <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
+              <button type="button" className="orb-btn orb-btn-small" disabled={busy !== null}
                 onClick={() => void move(-1)} title="在本段内前移">←</button>
               <button
                 type="button"
-                className={'dcs-btn dcs-btn-small' + (isHero ? ' dcs-btn-hero' : '')}
+                className={'orb-btn orb-btn-small' + (isHero ? ' orb-btn-hero' : '')}
                 disabled={busy !== null}
                 onClick={() => void toggleHero()}
                 title="全片的画面顶点。标了之后前后两镜的镜别要和它不一样，否则顶不起来。"
               >{isHero ? '★ 高光' : '☆ 高光'}</button>
-              <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
+              <button type="button" className="orb-btn orb-btn-small" disabled={busy !== null}
                 onClick={() => void move(1)} title="在本段内后移">→</button>
-              <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
+              <button type="button" className="orb-btn orb-btn-small" disabled={busy !== null}
                 onClick={() => void addShot()} title="给这一段再加一镜，时长从本段切分">添加</button>
-              <button type="button" className="dcs-btn dcs-btn-small dcs-btn-quiet-danger" disabled={busy !== null}
+              <button type="button" className="orb-btn orb-btn-small orb-btn-quiet-danger" disabled={busy !== null}
                 onClick={() => void removeShot()}>删除</button>
               {draftPrompt !== null ? (
-                <button type="button" className="dcs-btn dcs-btn-small" disabled={busy !== null}
+                <button type="button" className="orb-btn orb-btn-small" disabled={busy !== null}
                   onClick={() => void savePrompt()}>保存提示词</button>
               ) : null}
             </div>
           </>
         ) : (
-          <p className="dcs-note">脚本还没有段落，先回上一步。</p>
+          <p className="orb-note">脚本还没有段落，先回上一步。</p>
         )}
 
         {/* Same film body as the timeline: this is the same object seen
             earlier in its life, and giving it a different frame made two
             views of one thing look like two unrelated widgets. */}
-        <div className="dcs-film">
-          <div className="dcs-film-perf" aria-hidden="true" />
-          <div className="dcs-film-body">
+        <div className="orb-film">
+          <div className="orb-film-perf" aria-hidden="true" />
+          <div className="orb-film-body">
         <Strip ariaLabel="分镜序列">
             {state.timeline.map((timing) => (
-              <div className="dcs-shot-group" key={timing.sectionId} style={{ width: widthOf(timing.duration) }}>
-                <div className="dcs-shot-group-label" title={timing.sectionId}>
+              <div className="orb-shot-group" key={timing.sectionId} style={{ width: widthOf(timing.duration) }}>
+                <div className="orb-shot-group-label" title={timing.sectionId}>
                   {timing.label} · {timing.duration.toFixed(1)}s
                 </div>
-                <div className="dcs-shot-cards">
+                <div className="orb-shot-cards">
                   {sectionShots(timing.sectionId).map((shot) => {
                     const src = shot.path === undefined
                       ? undefined
-                      : '/studio/media?project=' + encodeURIComponent(state.project.id)
+                      : '/openreel/media?project=' + encodeURIComponent(state.project.id)
                         + '&path=' + encodeURIComponent(shot.path)
                     const wide = shot.duration > playbook.pacing.maxSectionSeconds
-                    const classes = ['dcs-shot-card']
-                    if (shot.key === active?.key) classes.push('dcs-shot-card-current')
-                    if (shot.path === undefined) classes.push('dcs-shot-card-empty')
-                    if (wide) classes.push('dcs-shot-card-wide')
+                    const classes = ['orb-shot-card']
+                    if (shot.key === active?.key) classes.push('orb-shot-card-current')
+                    if (shot.path === undefined) classes.push('orb-shot-card-empty')
+                    if (wide) classes.push('orb-shot-card-wide')
                     return (
                       <button
                         type="button"
@@ -947,9 +947,9 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                         onClick={() => setActiveKey(shot.key)}
                       >
                         {src === undefined
-                          ? <span className="dcs-shot-card-hole">+</span>
+                          ? <span className="orb-shot-card-hole">+</span>
                           : <img src={src} alt="" />}
-                        <span className="dcs-shot-card-time">{shot.duration.toFixed(1)}s</span>
+                        <span className="orb-shot-card-time">{shot.duration.toFixed(1)}s</span>
                       </button>
                     )
                   })}
@@ -958,15 +958,15 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
             ))}
         </Strip>
           </div>
-          <div className="dcs-film-perf" aria-hidden="true" />
+          <div className="orb-film-perf" aria-hidden="true" />
         </div>
 
         {active !== undefined ? (
-          <div className="dcs-shot-foot">
-            <span className="dcs-spacer" />
+          <div className="orb-shot-foot">
+            <span className="orb-spacer" />
             <button
               type="button"
-              className="dcs-btn dcs-btn-small dcs-btn-accent"
+              className="orb-btn orb-btn-small orb-btn-accent"
               disabled={phase !== null || busy !== null || shots.length === 0}
               onClick={() => void generate(shots)}
               title="整批重新生成，已有图会被替换"
@@ -975,7 +975,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
             </button>
             <button
               type="button"
-              className="dcs-btn dcs-btn-small dcs-btn-accent"
+              className="orb-btn orb-btn-small orb-btn-accent"
               disabled={phase !== null || busy !== null}
               onClick={() => void generate([active])}
             >
@@ -985,20 +985,20 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
         ) : null}
         </div>
       </section>
-      <section className="dcs-card">
-        <div className="dcs-card-head">
-          <IconSliders className="dcs-section-icon" />
-          <h3 className="dcs-card-title">生成参数与参考图</h3>
-          <span className="dcs-card-meta"><span>参考图 <b>{references.length}</b> 张</span></span>
+      <section className="orb-card">
+        <div className="orb-card-head">
+          <IconSliders className="orb-section-icon" />
+          <h3 className="orb-card-title">生成参数与参考图</h3>
+          <span className="orb-card-meta"><span>参考图 <b>{references.length}</b> 张</span></span>
         </div>
-        <div className="dcs-card-body">
-          <div className="dcs-duo-split">
-            <div className="dcs-duo-col">
-              <div className="dcs-col-head"><b>生成参数</b></div>
-              <div className="dcs-row dcs-row-tight">
+        <div className="orb-card-body">
+          <div className="orb-duo-split">
+            <div className="orb-duo-col">
+              <div className="orb-col-head"><b>生成参数</b></div>
+              <div className="orb-row orb-row-tight">
                 <input
                   type="checkbox"
-                  className="dcs-check-box"
+                  className="orb-check-box"
                   checked={loraOn}
                   disabled={busy !== null}
                   title={loraOn ? '这行会附在生成请求里' : '勾选后这行才会附在生成请求里'}
@@ -1008,7 +1008,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                   }}
                 />
                 <input
-                  className="dcs-input"
+                  className="orb-input"
                   value={loraHint}
                   placeholder="例如：LoRA 强度 0.8　/　综合强度 0.5-0.8-0.4"
                   spellCheck={false}
@@ -1021,23 +1021,23 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                   }}
                 />
               </div>
-              <p className="dcs-hint">填入要加载的 LoRA 和对应的强度，发送给 Agent 自行理解。</p>
+              <p className="orb-hint">填入要加载的 LoRA 和对应的强度，发送给 Agent 自行理解。</p>
             </div>
 
-            <div className="dcs-duo-col">
-              <div className="dcs-col-head"><b>参考图</b></div>
+            <div className="orb-duo-col">
+              <div className="orb-col-head"><b>参考图</b></div>
 
               {/* Slots, like the ComfyUI panel's load area: position matters,
                   because a workflow's loaders take them in order. */}
-              <div className="dcs-slots">
+              <div className="orb-slots">
                 {references.map((name, index) => (
-                  <div className="dcs-slot" key={name + index}>
-                    <span className="dcs-slot-index">{index + 1}</span>
-                    <img className="dcs-slot-media" src={referenceUrl(name)} alt="" loading="lazy" />
-                    <span className="dcs-slot-name" title={name}>{name}</span>
+                  <div className="orb-slot" key={name + index}>
+                    <span className="orb-slot-index">{index + 1}</span>
+                    <img className="orb-slot-media" src={referenceUrl(name)} alt="" loading="lazy" />
+                    <span className="orb-slot-name" title={name}>{name}</span>
                     <button
                       type="button"
-                      className="dcs-slot-x"
+                      className="orb-slot-x"
                       aria-label="移除这一槽"
                       disabled={busy !== null}
                       onClick={() => void removeReference(name)}
@@ -1046,38 +1046,38 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                 ))}
                 <button
                   type="button"
-                  className="dcs-slot dcs-slot-empty"
+                  className="orb-slot orb-slot-empty"
                   disabled={busy !== null}
                   title="从 ComfyUI 的素材里指定一张；浏览器里也可以上传新的"
                   onClick={() => setPickerOpen(true)}
                 >
-                  <span className="dcs-slot-index">{references.length + 1}</span>
-                  <span className="dcs-slot-add">指定参考图</span>
+                  <span className="orb-slot-index">{references.length + 1}</span>
+                  <span className="orb-slot-add">指定参考图</span>
                 </button>
               </div>
-              <p className="dcs-hint">指定 ComfyUI 中的参考图，以用于多图风格参考。</p>
+              <p className="orb-hint">指定 ComfyUI 中的参考图，以用于多图风格参考。</p>
             </div>
           </div>
         </div>
       </section>
 
 
-      <div className="dcs-cta">
+      <div className="orb-cta">
         <button
           type="button"
-          className="dcs-cta-primary"
+          className="orb-cta-primary"
           disabled={busy !== null || phase !== null || done < shots.length}
           title={done < shots.length ? '还差 ' + (shots.length - done) + ' 镜没生成' : undefined}
           onClick={() => void submit()}
         >
-          <IconPlay className="dcs-cta-icon" />
+          <IconPlay className="orb-cta-icon" />
           {busy === 'submit'
             ? '提交中…'
             : done < shots.length
               ? '还差 ' + (shots.length - done) + ' 镜'
               : approved ? '重新提交分镜' : '确认分镜，进入成片'}
         </button>
-        <p className="dcs-cta-hint">
+        <p className="orb-cta-hint">
           {approved
             ? '这一版已经确认过了。再提交一次会替换分镜，成片要重做。'
             : '这一页所有分镜确认后的下一步——之后才会开始合成。'}

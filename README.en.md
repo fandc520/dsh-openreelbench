@@ -1,6 +1,7 @@
-# dsh-creative-studio
+# dsh-openreelbench
 
-A [DeepSeek Harness](https://github.com/fandc520/dsh) plugin that turns a one-sentence
+**OpenReelbench** — the open-source video creative bench. A
+[DeepSeek Harness](https://github.com/fandc520/dsh) plugin that turns a one-sentence
 request into a narrated explainer video — voiceover, generated imagery, subtitles and all.
 
 中文文档:[README.md](README.md)
@@ -18,8 +19,7 @@ and the agent runs it through
 Switching workflows is a config change, not a code change.
 
 Two-sided structure: a host half (tool / skill / settings-namespace registration) plus a
-browser half (the settings-page UI). The panel lives under **Settings → AI Creative
-Studio** with its own sidebar entry; see
+browser half (the settings-page UI). The panel lives under **Settings → AI Creative Bench** with its own sidebar entry; see
 [the plugin development standard](docs/PLUGIN_DEVELOPMENT.md).
 
 ## Why a state machine
@@ -44,7 +44,7 @@ measured values.
 Requires Node ≥ 22.19 and `ffmpeg` / `ffprobe` on PATH.
 
 ```sh
-npx -p @deepseek-ai/dsh dsh plugin --profile <your profile> add github:fandc520/dsh-creative-studio
+npx -p @deepseek-ai/dsh dsh plugin --profile <your profile> add github:fandc520/dsh-openreelbench
 ```
 
 pnpm ≥ 10 blocks build scripts of git dependencies by default — allow them in the
@@ -54,13 +54,13 @@ profile after installing.
 Local development install:
 
 ```sh
-npx -p @deepseek-ai/dsh dsh plugin --profile <your profile> add D:\dev-projects\Ai-CreativityStudio\dsh-creative-studio
+npx -p @deepseek-ai/dsh dsh plugin --profile <your profile> add D:\dev-projects\Ai-CreativityStudio\dsh-openreelbench
 ```
 
 ## Configuration
 
-Two entries write the same values: the **`studio` section of the DSH settings page**,
-and the `studio` layer in `cordis.yml`. One schemastery schema drives both — the
+Two entries write the same values: the **`openreel` section of the DSH settings page**,
+and the `openreel` layer in `cordis.yml`. One schemastery schema drives both — the
 settings page treats `cordis.yml` as the base layer and only persists what you change.
 
 Changes take effect **immediately**, no restart: project root and ffprobe path are read
@@ -71,10 +71,10 @@ workflows). Only a change to the plugin's own code needs a restart.
 The `cordis.yml` layer looks like this:
 
 ```yaml
-- id: studio
-  name: dsh-creative-studio
+- id: openreel
+  name: dsh-openreelbench
   config:
-    workspaceRoot: ''            # empty = $DSH_HOME/data/dsh-creative-studio/projects
+    workspaceRoot: ''            # empty = $DSH_HOME/data/dsh-openreelbench/projects
     defaultDurationSeconds: 30
     video:                       # encoding parameters only; look & rhythm belong to the style playbook
       width: 1920
@@ -145,14 +145,14 @@ Custom styles go under `playbooks`; a same-name entry **replaces the built-in wh
           maxSectionSeconds: 24
 ```
 
-`studio_project action: "style"` hands the agent the current style's **paste-ready
+`openreel_project action: "style"` hands the agent the current style's **paste-ready
 prompt templates**. A single section can override the playbook's padding with
 `delivery_cues.pause_before_seconds` / `pause_after_seconds`.
 
 ### Voice
 
 Voice is **not in the binding table** — it is a project-level setting: pass `voice` to
-`studio_project action="init"`, or call `action="set_voice"` later. When empty, the
+`openreel_project action="init"`, or call `action="set_voice"` later. When empty, the
 tool output says `NOT SET` in plain words, and the agent must ask the user first
 (listing the TTS workflow's `voice` parameter options to pick from) before generating
 any narration.
@@ -164,15 +164,15 @@ it in the ComfyUI panel with a voice-design workflow; this side only references 
 
 | Tool | Responsibility |
 |---|---|
-| `studio_project` | `init` / `status` / `list` / `get` / `import` / `set_voice` / `style` / `bindings`. `import` brings ComfyUI output (absolute paths or http media-proxy URLs) into the project and returns the project-relative paths the manifests need |
-| `studio_stage` | **The state machine's only write path.** Writes artifacts + advances state; any failed validation throws |
-| `studio_compose` | ffprobe measures durations → lays out the timeline → writes subtitles → ffmpeg renders, returns a `render_report`. **It does not advance state** — the report must be handed to `studio_stage` for recording |
-| `studio_show` | Puts files that **already exist** in the project into the conversation for on-the-spot preview (film, narration, shots). Echo only — generates nothing, imports nothing, writes nothing |
+| `openreel_project` | `init` / `status` / `list` / `get` / `import` / `set_voice` / `style` / `bindings`. `import` brings ComfyUI output (absolute paths or http media-proxy URLs) into the project and returns the project-relative paths the manifests need |
+| `openreel_stage` | **The state machine's only write path.** Writes artifacts + advances state; any failed validation throws |
+| `openreel_compose` | ffprobe measures durations → lays out the timeline → writes subtitles → ffmpeg renders, returns a `render_report`. **It does not advance state** — the report must be handed to `openreel_stage` for recording |
+| `openreel_show` | Puts files that **already exist** in the project into the conversation for on-the-spot preview (film, narration, shots). Echo only — generates nothing, imports nothing, writes nothing |
 
-The two-step split is deliberate: `studio_compose` only produces a file; whether the
-trip counts is decided by `studio_stage`, after verifying the output file really exists.
+The two-step split is deliberate: `openreel_compose` only produces a file; whether the
+trip counts is decided by `openreel_stage`, after verifying the output file really exists.
 
-The settings page registers through `installSettingsSection` under the `studio`
+The settings page registers through `installSettingsSection` under the `openreel`
 namespace; on a host without a settings service (headless) the section is simply not
 registered, and `cordis.yml` values keep working.
 
@@ -181,8 +181,8 @@ Through `ctx.skills.register` the plugin registers **two** runtime skills
 
 | Skill | Covers | Loads when |
 |---|---|---|
-| `dsh-creative-studio-explainer` | How to make the film: the four stages, gate protocol, script & performance guidance, style contract | When starting a creation |
-| `dsh-creative-studio-usage` | How the tools behave: who advances state, how input is normalized, error-code handling, retry semantics, path rules, the division of labor with dsh-comfyui | On errors, or when unsure about a tool's side effects |
+| `dsh-openreelbench-explainer` | How to make the film: the four stages, gate protocol, script & performance guidance, style contract | When starting a creation |
+| `dsh-openreelbench-usage` | How the tools behave: who advances state, how input is normalized, error-code handling, retry semantics, path rules, the division of labor with dsh-comfyui | On errors, or when unsure about a tool's side effects |
 
 Both render their binding table and style contract live from the current config.
 
@@ -232,7 +232,7 @@ the kind of failure that lets an all-green pipeline run on the wrong material.
 ### Music
 
 The compose page has a **music** track. Enter a ComfyUI music workflow's name, click
-"Add music", and the agent first reads the `dsh-creative-studio-sound-design` skill to
+"Add music", and the agent first reads the `dsh-openreelbench-sound-design` skill to
 pick the piece, then generates through that workflow, and finally imports it into the
 project with `kind: "music"` — **no `scene_id`**, because music belongs to the whole
 film.

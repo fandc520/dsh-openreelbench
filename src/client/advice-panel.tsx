@@ -58,52 +58,52 @@ export function AdvicePanel({ title, rows, onJump, action }: AdvicePanelProps): 
   const [toggled, setToggled] = useState<boolean | null>(null)
   const open = toggled ?? !clean
 
-  return h('div', { className: 'dcs-plan-advice' + (open ? ' dcs-plan-advice-open' : '') },
-    h('div', { className: 'dcs-plan-advice-bar' },
+  return h('div', { className: 'orb-plan-advice' + (open ? ' orb-plan-advice-open' : '') },
+    h('div', { className: 'orb-plan-advice-bar' },
       h('button', {
         type: 'button',
-        className: 'dcs-plan-advice-head',
+        className: 'orb-plan-advice-head',
         onClick: () => setToggled(!open),
         'aria-expanded': open,
       },
-        h('span', { className: 'dcs-plan-advice-caret' }, open ? '▾' : '▸'),
-        h('span', { className: 'dcs-plan-advice-title' }, title),
+        h('span', { className: 'orb-plan-advice-caret' }, open ? '▾' : '▸'),
+        h('span', { className: 'orb-plan-advice-title' }, title),
         clean
-          ? h('span', { className: 'dcs-plan-advice-ok' }, '全部通过')
-          : h('span', { className: 'dcs-plan-advice-warn' }, problems.length + ' 处建议'),
+          ? h('span', { className: 'orb-plan-advice-ok' }, '全部通过')
+          : h('span', { className: 'orb-plan-advice-warn' }, problems.length + ' 处建议'),
       ),
       action ?? null,
     ),
 
-    !open ? null : h('div', { className: 'dcs-plan-advice-body' },
+    !open ? null : h('div', { className: 'orb-plan-advice-body' },
       ...rows.flatMap((row) => [
-        h('div', { className: 'dcs-plan-advice-row', key: row.label },
-          h('span', { className: 'dcs-plan-advice-label' }, row.label),
+        h('div', { className: 'orb-plan-advice-row', key: row.label },
+          h('span', { className: 'orb-plan-advice-label' }, row.label),
           row.clean
-            ? h('span', { className: 'dcs-plan-advice-ok' },
+            ? h('span', { className: 'orb-plan-advice-ok' },
                 row.summary,
-                row.hint === undefined ? null : h('span', { className: 'dcs-hint' }, '　' + row.hint),
+                row.hint === undefined ? null : h('span', { className: 'orb-hint' }, '　' + row.hint),
               )
             : h('span', {
-                className: 'dcs-plan-advice-warn'
-                  + (row.severity === undefined ? '' : ' dcs-plan-advice-' + row.severity),
+                className: 'orb-plan-advice-warn'
+                  + (row.severity === undefined ? '' : ' orb-plan-advice-' + row.severity),
               }, row.summary),
         ),
         ...(row.clean || row.details === undefined || row.details.length === 0
           ? []
-          : [h('ul', { className: 'dcs-plan-advice-list', key: row.label + ':detail' },
+          : [h('ul', { className: 'orb-plan-advice-list', key: row.label + ':detail' },
               ...row.details.map((detail) => h('li', {
                 key: detail.key,
-                ...(detail.tip === true ? { className: 'dcs-variation-tip' } : {}),
+                ...(detail.tip === true ? { className: 'orb-variation-tip' } : {}),
               },
                 detail.text,
                 detail.jumpTo === undefined || detail.jumpTo.length === 0 || onJump === undefined
                   ? null
-                  : h('span', { className: 'dcs-variation-shots' },
+                  : h('span', { className: 'orb-variation-shots' },
                       ...detail.jumpTo.map((id) => h('button', {
                         type: 'button',
                         key: id,
-                        className: 'dcs-variation-jump',
+                        className: 'orb-variation-jump',
                         onClick: () => onJump(id),
                         title: '跳到这一镜',
                       }, id)),

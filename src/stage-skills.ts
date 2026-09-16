@@ -30,7 +30,7 @@ import { resolvePlaybook } from './playbooks.js'
 import type { RuntimeSkill } from './skill.js'
 
 /** The prefix every stage skill shares. `stage-` keeps them together in a catalog. */
-export const STAGE_SKILL_PREFIX = 'dsh-creative-studio-stage-'
+export const STAGE_SKILL_PREFIX = 'dsh-openreelbench-stage-'
 
 /** The gesture that loads one stage's instructions, for the pipeline skill to cite. */
 export function stageSkillName(key: string): string {
@@ -109,18 +109,18 @@ export function buildStageSkills(config: Config): RuntimeSkill[] {
 
 ### 动笔前先读项目标记
 
-**\`studio_project action: "status"\` 返回的 \`project\` 就是项目标记。**
+**\`openreel_project action: "status"\` 返回的 \`project\` 就是项目标记。**
 \`title\` / \`target_duration_seconds\` / \`style\` / \`target_platform\` 四项，
-**用户在创意工作台的立项页上自己选过**，选的结果就存在那里。
+**用户在OpenReel 创意台的立项页上自己选过**，选的结果就存在那里。
 
 所以这四项**不要按默认值填，也不要自己推**——照标记抄。
 面板发来的请求里通常也会把它们列一遍，那是同一份东西，方便你不用先查。
 
 两边都有时以**项目标记**为准：那是用户点出来的，请求只是把它复述给你。
 
-**建完项目就立刻起草一版，不要等用户再说一遍。** 用户在创意工作台里看到的是一个
+**建完项目就立刻起草一版，不要等用户再说一遍。** 用户在OpenReel 创意台里看到的是一个
 表单——空表单等于让他从零写，而他刚刚已经把需求讲过一次了。正确节奏是：
-\`studio_project init\` 之后**紧接着**写 brief 并以 \`awaiting_human\` 提交，
+\`openreel_project init\` 之后**紧接着**写 brief 并以 \`awaiting_human\` 提交，
 然后用一段话把要点讲给他听。
 
 用户可能会要**换一个方向**（面板上有「重新生成」按钮，会发一句话给你）。
@@ -140,7 +140,7 @@ export function buildStageSkills(config: Config): RuntimeSkill[] {
 | \`xiaohongshu\` | 1080x1440 竖屏 3:4 |
 | \`generic\` | 用设置里的默认值 |
 
-用户也能在创意工作台的项目页直接选，选的结果存在项目标记上——
+用户也能在OpenReel 创意台的项目页直接选，选的结果存在项目标记上——
 和上面那四项一样，**以项目标记为准**。
 所以你要改画幅，改 \`brief.target_platform\` 可能不生效；
 让用户在面板上选，或者明确告诉他去改。
@@ -237,14 +237,14 @@ export function buildStageSkills(config: Config): RuntimeSkill[] {
       whenToUse: "脚本过闸之后要配音时。",
       content: `# assets_audio（配音）
 
-**先确认音色。** 项目上的 narration voice 为空时，\`studio_project\` 的输出会明写
+**先确认音色。** 项目上的 narration voice 为空时，\`openreel_project\` 的输出会明写
 \`NOT SET\`。这时**先问用户**——把 TTS 工作流 voice 参数的选项列给他挑，或者请他先去
 ComfyUI 面板用音色设计工作流做一个「解说」音色。定下来用
-\`studio_project action: "set_voice"\` 记到项目上。**不要自己挑一个音色就开跑**：
+\`openreel_project action: "set_voice"\` 记到项目上。**不要自己挑一个音色就开跑**：
 整片配错音色等于整片重做。音色设计本身是准备流程，不在这条管线里。
 
-**用户在创意工作台点「自动生成」时，你要做的是**：用
-\`studio_project action: "set_voice"\` 写 \`voice_design_name\` 和 \`voice_design_prompt\`。
+**用户在OpenReel 创意台点「自动生成」时，你要做的是**：用
+\`openreel_project action: "set_voice"\` 写 \`voice_design_name\` 和 \`voice_design_prompt\`。
 这两个字段直接回填到他面前的表单里，所以**一次调用就写完，不要先在对话里问他**——
 项目的标题、简报和风格你都读得到，据此拟一版即可，不满意他会点「重新生成」。
 
@@ -280,8 +280,8 @@ ComfyUI 面板用音色设计工作流做一个「解说」音色。定下来用
 ${PROMPT_CONVENTION}
 
 **逐段提交，不要攒批。** 每收到一段返回就立刻 import 并把这一段写进
-\`asset_manifest_audio\`、用 \`studio_stage\` 以 \`in_progress\` 记一次。
-等全部跑完再一起处理，最后一段失败就会把前面每一段都丢掉；而且创意工作台盯的是清单，
+\`asset_manifest_audio\`、用 \`openreel_stage\` 以 \`in_progress\` 记一次。
+等全部跑完再一起处理，最后一段失败就会把前面每一段都丢掉；而且OpenReel 创意台盯的是清单，
 在那之前它一片空白，用户不知道是在跑还是卡了。
 
 跑完写 \`asset_manifest_audio\`，走审批闸：\`awaiting_human\` → 用户认可 → \`completed\`。
@@ -292,7 +292,7 @@ ${PROMPT_CONVENTION}
 
 （做错就是 \`ASSET MISSING\`）
 
-- 生成完用 \`studio_project\` 的 \`action: "import"\` 把文件搬进项目，它会返回
+- 生成完用 \`openreel_project\` 的 \`action: "import"\` 把文件搬进项目，它会返回
   项目相对路径。**不要自己拼路径**，也不要把 ComfyUI 的输出目录直接写进 manifest
 - 每个 item 要传 \`scene_id\`。**文件名由插件生成，你不要起名**——
   规范是 \`<序号>-<段id>[.v<n>].<扩展名>\`，序号来自脚本里的段顺序
@@ -331,7 +331,7 @@ ${PROMPT_CONVENTION}
 > 现在固定的只剩最后一句风格，占比降到 53%。**不要再手工拼前后缀，那是在把它改回去。**
 
 **写 \`scene_plan\` 这一步不生成任何图片。**
-它只定计划，用 \`studio_stage\` 以 \`in_progress\` 提交（stage 是
+它只定计划，用 \`openreel_stage\` 以 \`in_progress\` 提交（stage 是
 \`assets_shots\`）。计划过目之后才跑图——先出图再改计划，改的那几镜得重跑。
 
 你要决定的是另外两件事，写进 \`scene_plan\`：
@@ -359,7 +359,7 @@ ${PROMPT_CONVENTION}
 
 ### 分镜计划 \`scene_plan\`
 
-> **设计镜头语言时先加载 \`/dsh-creative-studio-cinematography\`。**
+> **设计镜头语言时先加载 \`/dsh-openreelbench-cinematography\`。**
 > 配音过闸时面板会自动带上这个手势，正文会作为指令注入。
 > 那份技能讲的是「旁白的功能怎么映射成镜别」和「全片的紧松节奏」——
 > 六个字段全空时五层里有四层是空的，画面必然雷同。
@@ -368,7 +368,7 @@ ${PROMPT_CONVENTION}
 这一段还有第二份产物：\`scene_plan\`，记的是**每个分镜打算拍什么**，在生成之前就写。
 它不走闸（闸看的是图有没有出来，不是想没想好），但**照样过 schema 校验**。
 
-面板保存分镜时会自动写它。你要写就用 \`studio_stage\` 带上 \`scene_plan\`，形状是：
+面板保存分镜时会自动写它。你要写就用 \`openreel_stage\` 带上 \`scene_plan\`，形状是：
 
 \`\`\`jsonc
 {
@@ -408,7 +408,7 @@ ${PROMPT_CONVENTION}
 
 ### 生成之前会查一遍重复度
 
-用 \`studio_stage\` 写 \`scene_plan\` 时，**返回里会直接带一份重复度报告**（\`variation\`），
+用 \`openreel_stage\` 写 \`scene_plan\` 时，**返回里会直接带一份重复度报告**（\`variation\`），
 不用你另外去问。面板也会在生成按钮上方显示同一份。查这些：
 
 | | 查什么 |
@@ -444,7 +444,7 @@ ${PROMPT_CONVENTION}
 - 每一镜下面那句**参考台词氛围**是**气氛参考，不是画面内容**。
   它帮你把握这一镜的情绪，**不要把台词本身画进画面**——画面里不出现文字。
 
-**逐张提交，不要攒批。** 每收到一张返回就立刻 import、写进 \`asset_manifest_shots\`、用 \`studio_stage\` 以 \`in_progress\` 记一次。
+**逐张提交，不要攒批。** 每收到一张返回就立刻 import、写进 \`asset_manifest_shots\`、用 \`openreel_stage\` 以 \`in_progress\` 记一次。
 同一段有多张时按顺序写 \`shot_index\`。
 等全部跑完再一起处理，最后一张失败就会把前面每一张都丢掉。
 
@@ -452,7 +452,7 @@ ${PROMPT_CONVENTION}
 
 （做错就是 \`ASSET MISSING\`）
 
-- 生成完用 \`studio_project\` 的 \`action: "import"\` 把文件搬进项目，它会返回
+- 生成完用 \`openreel_project\` 的 \`action: "import"\` 把文件搬进项目，它会返回
   项目相对路径。**不要自己拼路径**，也不要把 ComfyUI 的输出目录直接写进 manifest
 - 每个 item 要传 \`scene_id\`。**文件名由插件生成，你不要起名**——
   规范是 \`<序号>-<段id>[.v<n>].<扩展名>\`，序号来自脚本里的段顺序
@@ -469,16 +469,16 @@ ${PROMPT_CONVENTION}
     {
       name: stageSkillName("compose"),
       source: 'runtime',
-      description: "合成成片并记录 render_report：studio_compose 怎么调、返回的报告要原样交给 studio_stage（自己拼装几乎一定 SCHEMA INVALID）、以及怎么把成片带进对话。",
+      description: "合成成片并记录 render_report：openreel_compose 怎么调、返回的报告要原样交给 openreel_stage（自己拼装几乎一定 SCHEMA INVALID）、以及怎么把成片带进对话。",
       whenToUse: "两个素材段都过闸之后要出片时，或要记录一次合成结果时。",
       content: `# compose（合成）
 
-调 \`studio_compose\`，它读脚本和 asset_manifest，ffprobe 量时长、按风格的节奏排时间轴、
+调 \`openreel_compose\`，它读脚本和 asset_manifest，ffprobe 量时长、按风格的节奏排时间轴、
 生成字幕、ffmpeg 出片，返回一份 \`render_report\`。
 
 ### 出片前的幻灯片风险闸
 
-\`studio_compose\` 出片前会打一次分，五个维度：
+\`openreel_compose\` 出片前会打一次分，五个维度：
 
 | 维度 | 看什么 |
 |---|---|
@@ -501,7 +501,7 @@ ${PROMPT_CONVENTION}
 
 ### 字幕：旁挂还是烧录
 
-\`studio_compose\` 有两个可选参数，**面板会在提示里明确告诉你用哪个**：
+\`openreel_compose\` 有两个可选参数，**面板会在提示里明确告诉你用哪个**：
 
 | 参数 | 值 | 什么时候 |
 |---|---|---|
@@ -516,11 +516,11 @@ ${PROMPT_CONVENTION}
 
 ## 记录
 
-**把它返回的 report 原样交给 \`studio_stage\`**（\`stage: "compose"\`, \`status: "completed"\`）。
+**把它返回的 report 原样交给 \`openreel_stage\`**（\`stage: "compose"\`, \`status: "completed"\`）。
 
 「原样」是字面意思：**整个对象照搬，一个字段都不要动、不要补、不要重排**。
 不要自己拼一份，也不要「整理」成看起来更整齐的样子——路径和时长是 ffprobe 实测的，
-\`studio_stage\` 会拿它们去核对文件真实存在。
+\`openreel_stage\` 会拿它们去核对文件真实存在。
 
 真踩过的两次返工，都是重新拼装造成的：
 
@@ -544,11 +544,11 @@ ${PROMPT_CONVENTION}
 \`\`\`
 
 顶层**只认这五个键**、每个 output **只认上面八个键**，多一个就会被判 \`SCHEMA INVALID\`。所以照搬永远是对的，
-自己拼装几乎一定要返工——\`studio_compose\` 返回的就是这个形状。
+自己拼装几乎一定要返工——\`openreel_compose\` 返回的就是这个形状。
 
 记完了，把成片带进对话：
 
-    studio_show project=<项目id> paths=["output/xxx.mp4"]
+    openreel_show project=<项目id> paths=["output/xxx.mp4"]
 
 它只做一件事——把项目里已有的文件放到聊天里，让人当场能看。
 不生成、不导入、不落盘，路径就是 manifest 或 render_report 里的原样路径。

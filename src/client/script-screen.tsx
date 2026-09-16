@@ -10,7 +10,7 @@
  *   - Style rules (section length, character budget) run here, per keystroke.
  *     The playbook is already in the browser and these are the numbers a writer
  *     is steering by while typing.
- *   - Schema rules run on the host through `POST /studio/validate`, debounced.
+ *   - Schema rules run on the host through `POST /openreel/validate`, debounced.
  *     Re-implementing them here would put a second copy of the contract in the
  *     browser, and the copy the gate enforces would be the other one.
  *
@@ -21,7 +21,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { type StudioState, api } from './api.ts'
+import { type PluginState, api } from './api.ts'
 import { type AgentPhase, BusyLabel } from './busy.tsx'
 import { IconPen, IconPlay, IconSpark } from './icons.tsx'
 import { buildScriptJob } from '../script-job.js'
@@ -29,7 +29,7 @@ import { buildScriptJob } from '../script-job.js'
 const NEWLINE = String.fromCharCode(10)
 
 export interface ScriptScreenProps {
-  state: StudioState
+  state: PluginState
   onReload: () => Promise<void>
   onSend: (text: string) => Promise<void>
   /** Move the workbench to another stage's screen. */
@@ -67,7 +67,7 @@ function str(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
-function draftFrom(state: StudioState): DraftScript {
+function draftFrom(state: PluginState): DraftScript {
   const script = state.artifacts.script as
     | { title?: unknown; sections?: unknown; voice_performance?: Record<string, unknown> }
     | undefined
@@ -291,7 +291,7 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
         status: 'completed',
         artifacts: { script: buildScript(draft, state.style.id) },
         human_approved: true,
-        note: '在创意工作台确认',
+        note: '在OpenReel 创意台确认',
       })
       setTouched(false)
       await onReload()
@@ -308,88 +308,88 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
   }
 
   return (
-    <div className="dcs-screen">
-      <header className="dcs-screen-head">
-        <h2 className="dcs-screen-title">脚本</h2>
-        <span className="dcs-spacer" />
-        <span className={'dcs-pill ' + (approved ? 'dcs-pill-ok' : 'dcs-pill-wait')}>
+    <div className="orb-screen">
+      <header className="orb-screen-head">
+        <h2 className="orb-screen-title">脚本</h2>
+        <span className="orb-spacer" />
+        <span className={'orb-pill ' + (approved ? 'orb-pill-ok' : 'orb-pill-wait')}>
           {approved ? '已审核' : '待确认'}
         </span>
       </header>
 
-      <p className="dcs-hint">
+      <p className="orb-hint">
         以下段落时长为<b>预估值</b>，最终由实际生成片段的时长决定。
         {adviceCount > 0
-          ? <>　<span className="dcs-tone-wait">黄框</span>是风格建议，不影响提交；红框才是必须改的。</>
+          ? <>　<span className="orb-tone-wait">黄框</span>是风格建议，不影响提交；红框才是必须改的。</>
           : null}
       </p>
 
-      <section className="dcs-card">
-        <div className="dcs-card-head">
-          <IconPen className="dcs-section-icon" />
-          <h3 className="dcs-card-title">脚本分段</h3>
-          <span className="dcs-card-meta">
+      <section className="orb-card">
+        <div className="orb-card-head">
+          <IconPen className="orb-section-icon" />
+          <h3 className="orb-card-title">脚本分段</h3>
+          <span className="orb-card-meta">
             <span><b>{draft.sections.length}</b> 段</span>
             <span>预估 <b>{totalSeconds.toFixed(1)}</b> 秒 / 目标 {state.project.target_duration_seconds} 秒</span>
-            <span className={totalChars > budget * 1.15 ? 'dcs-tone-wait' : undefined}>
+            <span className={totalChars > budget * 1.15 ? 'orb-tone-wait' : undefined}>
               <b>{totalChars}</b> 字 / 预算约 {budget}
             </span>
           </span>
         </div>
-        <div className="dcs-card-body">
+        <div className="orb-card-body">
           {draft.sections.length === 0 && phase === null ? (
-            <p className="dcs-note">还没有脚本。可以让 Agent 按简报起草一版，也可以自己加段。</p>
+            <p className="orb-note">还没有脚本。可以让 Agent 按简报起草一版，也可以自己加段。</p>
           ) : null}
 
-          <div className="dcs-sections">
+          <div className="orb-sections">
         {draft.sections.map((section, index) => {
           const issues = rowIssues[index] ?? { blocking: [], advice: [] }
           const dup = duplicateIds.has(section.id.trim())
           const hardFail = issues.blocking.length > 0 || dup
-          const rowClass = 'dcs-section-row'
-            + (hardFail ? ' dcs-section-error' : issues.advice.length > 0 ? ' dcs-section-advised' : '')
+          const rowClass = 'orb-section-row'
+            + (hardFail ? ' orb-section-error' : issues.advice.length > 0 ? ' orb-section-advised' : '')
           return (
             <div className={rowClass} key={index}>
-              <div className="dcs-section-head">
-                <span className="dcs-section-index">{index + 1}</span>
+              <div className="orb-section-head">
+                <span className="orb-section-index">{index + 1}</span>
                 <input
-                  className="dcs-input dcs-input-id"
+                  className="orb-input orb-input-id"
                   value={section.id}
                   placeholder="编号"
                   title="段落编号。配音和配图文件按它归档，也是 Agent 指认这一段的方式。"
                   onChange={(e) => edit(index, { id: e.target.value })}
                 />
                 <input
-                  className="dcs-input dcs-input-label"
+                  className="orb-input orb-input-label"
                   value={section.label}
                   placeholder="场次名（选填）"
                   title="只是给人看的名字，例如「开场·撞击预告」。不影响生成。"
                   onChange={(e) => edit(index, { label: e.target.value })}
                 />
-                <span className="dcs-seconds-wrap">
+                <span className="orb-seconds-wrap">
                   <input
-                    className="dcs-input dcs-input-seconds"
+                    className="orb-input orb-input-seconds"
                     inputMode="decimal"
                     value={section.seconds}
                     placeholder="时长"
                     title="预估时长，用来判断分段是否合理。成片以实测配音为准。"
                     onChange={(e) => edit(index, { seconds: e.target.value })}
                   />
-                  <span className="dcs-unit">秒</span>
+                  <span className="orb-unit">秒</span>
                 </span>
-                <span className="dcs-spacer" />
-                <button type="button" className="dcs-icon" title="上移" disabled={index === 0}
+                <span className="orb-spacer" />
+                <button type="button" className="orb-icon" title="上移" disabled={index === 0}
                   onClick={() => move(index, -1)}>↑</button>
-                <button type="button" className="dcs-icon" title="下移"
+                <button type="button" className="orb-icon" title="下移"
                   disabled={index === draft.sections.length - 1} onClick={() => move(index, 1)}>↓</button>
-                <button type="button" className="dcs-icon dcs-icon-danger" title="删除这一段"
+                <button type="button" className="orb-icon orb-icon-danger" title="删除这一段"
                   onClick={() => removeSection(index)}>×</button>
               </div>
 
-              <div className="dcs-line">
-                <span className="dcs-line-label" title="这一段要念出来的字，也是字幕内容">台词</span>
+              <div className="orb-line">
+                <span className="orb-line-label" title="这一段要念出来的字，也是字幕内容">台词</span>
                 <textarea
-                  className="dcs-input dcs-textarea"
+                  className="orb-input orb-textarea"
                   rows={2}
                   value={section.text}
                   placeholder="要念出来的字。不要写「（停顿）」「【画面：…】」——它们会被念出来。"
@@ -397,13 +397,13 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
                 />
               </div>
 
-              <div className="dcs-line">
+              <div className="orb-line">
                 <span
-                  className="dcs-line-label"
+                  className="orb-line-label"
                   title="这一段画面的主体。它是分镜页每一镜的起点——分镜没写自己的主体时，用的就是这一句。风格和镜头语言由插件分层拼上，不要写在这里。"
                 >画面</span>
                 <textarea
-                  className="dcs-input dcs-textarea dcs-prompt"
+                  className="orb-input orb-textarea orb-prompt"
                   rows={2}
                   value={section.prompt}
                   placeholder="英文提示词：只写画面主体。风格、镜头、光线由插件分层拼，别写在这"
@@ -412,37 +412,37 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
                 />
               </div>
 
-              <div className="dcs-line">
-                <span className="dcs-line-label" title="怎么念这一段，以及念完停多久">表达</span>
-                <div className="dcs-row">
+              <div className="orb-line">
+                <span className="orb-line-label" title="怎么念这一段，以及念完停多久">表达</span>
+                <div className="orb-row">
                   <input
-                    className="dcs-input"
+                    className="orb-input"
                     value={section.deliveryNote}
                     placeholder="选填：一句话说清怎么念，例如「铺垫，收尾放慢」"
                     onChange={(e) => edit(index, { deliveryNote: e.target.value })}
                   />
-                  <span className="dcs-seconds-wrap">
+                  <span className="orb-seconds-wrap">
                     <input
-                      className="dcs-input dcs-input-seconds"
+                      className="orb-input orb-input-seconds"
                       inputMode="decimal"
                       value={section.pauseAfter}
                       placeholder="—"
                       title="念完之后停顿几秒，覆盖风格默认值"
                       onChange={(e) => edit(index, { pauseAfter: e.target.value })}
                     />
-                    <span className="dcs-unit">秒停顿</span>
+                    <span className="orb-unit">秒停顿</span>
                   </span>
                 </div>
               </div>
 
               {hardFail ? (
-                <ul className="dcs-problems">
+                <ul className="orb-problems">
                   {dup ? <li>编号与其他段重复</li> : null}
                   {issues.blocking.map((problem) => <li key={problem}>{problem}</li>)}
                 </ul>
               ) : null}
               {issues.advice.length > 0 ? (
-                <ul className="dcs-advice">
+                <ul className="orb-advice">
                   {issues.advice.map((note) => <li key={note}>{note}</li>)}
                 </ul>
               ) : null}
@@ -452,7 +452,7 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
           </div>
 
           {schemaIssues.length > 0 ? (
-            <ul className="dcs-problems">
+            <ul className="orb-problems">
               {schemaIssues.slice(0, 6).map((issue) => (
                 <li key={issue.path + issue.message}>{issue.path}：{issue.message}</li>
               ))}
@@ -460,33 +460,33 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
             </ul>
           ) : null}
 
-          <button type="button" className="dcs-add-section" onClick={addSection}>＋ 加一段</button>
+          <button type="button" className="orb-add-section" onClick={addSection}>＋ 加一段</button>
         </div>
         {/* Regeneration acts on the whole script, so it sits at the card's
             bottom-right: read the draft, then decide to roll it again. */}
-        <div className="dcs-card-foot">
-          <span className="dcs-spacer" />
-          <button type="button" className="dcs-btn dcs-btn-small dcs-btn-accent" disabled={phase !== null || busy}
+        <div className="orb-card-foot">
+          <span className="orb-spacer" />
+          <button type="button" className="orb-btn orb-btn-small orb-btn-accent" disabled={phase !== null || busy}
             onClick={() => void askForScript(hasScript ? 'regenerate' : 'draft')}>
-            <IconSpark className="dcs-btn-icon" />
+            <IconSpark className="orb-btn-icon" />
             <BusyLabel phase={phase} idle={hasScript ? '重新生成' : '让 Agent 起草'} />
           </button>
         </div>
       </section>
 
-      <div className="dcs-cta">
-        <button type="button" className="dcs-cta-primary" disabled={busy || phase !== null || blocking}
+      <div className="orb-cta">
+        <button type="button" className="orb-cta-primary" disabled={busy || phase !== null || blocking}
           onClick={() => void submit()}>
-          <IconPlay className="dcs-cta-icon" />
+          <IconPlay className="orb-cta-icon" />
           {busy ? '提交中…' : approved ? '重新提交脚本' : '确认脚本，进入配音'}
         </button>
-        <p className="dcs-cta-hint">
+        <p className="orb-cta-hint">
           {approved
             ? '这一版已经确认过了。再提交一次会替换脚本，配音、配图和成片都要重做。'
             : '这一页所有段落确认后的下一步——之后才会开始配音。'}
         </p>
         {result !== null ? (
-          <p className={'dcs-note ' + (result.kind === 'ok' ? 'dcs-note-ok' : 'dcs-note-error')}>{result.text}</p>
+          <p className={'orb-note ' + (result.kind === 'ok' ? 'orb-note-ok' : 'orb-note-error')}>{result.text}</p>
         ) : null}
       </div>
     </div>

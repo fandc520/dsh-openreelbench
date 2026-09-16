@@ -43,7 +43,7 @@ import { workflowLine } from './job-conventions.js'
 const NEWLINE = String.fromCharCode(10)
 
 /** The sheet carries the recording protocol; the request only points at it. */
-export const SHOTS_STAGE_SKILL = 'dsh-creative-studio-stage-assets-shots'
+export const SHOTS_STAGE_SKILL = 'dsh-openreelbench-stage-assets-shots'
 
 /**
  * Every prompt is handed over finished.

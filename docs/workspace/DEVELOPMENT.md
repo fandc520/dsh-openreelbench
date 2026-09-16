@@ -9,7 +9,7 @@
 | | |
 |---|---|
 | 阶段 | **M1 已完成**；M2 设计已定稿（见第八节），未开工 |
-| 插件 | `dsh-creative-studio/`（本工作区子目录）· 双面（host 约 3600 行 + client 约 550 行 TS） |
+| 插件 | `dsh-openreelbench/`（本工作区子目录）· 双面（host 约 3600 行 + client 约 550 行 TS） |
 | 测试 | `pnpm test` 48 项全绿（只需 ffmpeg）；另有真实 ComfyUI 集成测试 |
 | 部署 | 已装进用户在用的 `web` profile，`workspaceRoot: D:/AiStudio` |
 | 已出片 | `moon-origin-test`（LLM 驱动全程跑通）· `comfy-live`（无 LLM 集成测试） |
@@ -118,9 +118,9 @@ brief（审批闸）→ script（审批闸）→ assets → compose
 ### 文件
 
 ```
-dsh-creative-studio/
+dsh-openreelbench/
 ├── package.json          host-only（无 ./client、无 dsh.client）· prepare: build
-├── cordis.patch.yml      - insert: [{ id: studio, name: dsh-creative-studio }]
+├── cordis.patch.yml      - insert: [{ id: openreel, name: dsh-openreelbench }]
 ├── test/
 │   ├── smoke.mjs         48 项，只需 ffmpeg
 │   └── integration-comfyui.mjs   真实 ComfyUI 端到端
@@ -144,12 +144,12 @@ dsh-creative-studio/
 
 | 工具 | 职责 | 关键约束 |
 |---|---|---|
-| `studio_project` | init / status / list / get / **import** / set_voice / **style** / bindings | 工作区根来自显式配置，不用 `process.cwd()`；`import` 把 ComfyUI 产出搬进项目并返回相对路径 |
-| `studio_stage` | 写产物 + 推进状态，**状态机唯一入口** | 写入前跑 schema + 审批闸 + 前置 + 资产存在性校验，**不合格必须真的抛错** |
-| `studio_compose` | 读 asset_manifest，ffmpeg 出片 | 先 ffprobe 回填真实时长再对齐；可中断。**它不推进状态**，报告交回 `studio_stage` 记录 |
+| `openreel_project` | init / status / list / get / **import** / set_voice / **style** / bindings | 工作区根来自显式配置，不用 `process.cwd()`；`import` 把 ComfyUI 产出搬进项目并返回相对路径 |
+| `openreel_stage` | 写产物 + 推进状态，**状态机唯一入口** | 写入前跑 schema + 审批闸 + 前置 + 资产存在性校验，**不合格必须真的抛错** |
+| `openreel_compose` | 读 asset_manifest，ffmpeg 出片 | 先 ffprobe 回填真实时长再对齐；可中断。**它不推进状态**，报告交回 `openreel_stage` 记录 |
 
-`studio_compose` 与 `studio_stage` 分两步是刻意的：渲染只是产生了一个文件，
-**算不算数由 `studio_stage` 核对输出文件真实存在之后才认**。
+`openreel_compose` 与 `openreel_stage` 分两步是刻意的：渲染只是产生了一个文件，
+**算不算数由 `openreel_stage` 核对输出文件真实存在之后才认**。
 
 ### M0 明确不做
 
@@ -171,7 +171,7 @@ dsh-creative-studio/
 
 ### 工作流接入：绑定表只给名称
 
-**studio 不连 ComfyUI。** `config.bindings.<能力>.workflow` 只存 dsh-comfyui
+**openreelbench 不连 ComfyUI。** `config.bindings.<能力>.workflow` 只存 dsh-comfyui
 工作流库里的**名称**，**不复述任何参数**。Agent 调 `comfyui_workflow action: list`
 拿完整参数清单，再用 `action: run` 跑。
 
@@ -181,20 +181,20 @@ dsh-creative-studio/
   且随用户在面板里的改动实时变；抄一份必然漂移。用户库里 TTS 正文参数叫 `prompt` 不叫 `text`，
   还有带空格的 `A or B` 和未识别语义的 `param_6`，硬编码参数名一定碎
 - **用名称不用 id**——id 是 `randomUUID()`，同一张画布重新提取一次就变，配置静默失效
-- **硬校验留在回填**：`studio_stage` 验证文件真实存在，并用 ffprobe 覆盖调用方申报的时长
+- **硬校验留在回填**：`openreel_stage` 验证文件真实存在，并用 ffprobe 覆盖调用方申报的时长
 
 留空时工具明说「未绑定」，要求 Agent 去 list 里找，不许自己挑一条。
 
 **可视化导入/提参数不要重做**——dsh-comfyui 面板已有（`/comfyui/workflows`、
 `/workflows/recognize`、`/comfy-workflows/analyze`、`/comfy-workflows/extract` 五条路由加
-`params.ts`）。studio 再做一遍等于两套工作流库、两个 UUID 空间。
+`params.ts`）。openreelbench 再做一遍等于两套工作流库、两个 UUID 空间。
 
 ### 音色是项目级设置，不是绑定
 
-`project.json` 上的 `voice` 字段，`studio_project` 的 `init` / `set_voice` 写入。
+`project.json` 上的 `voice` 字段，`openreel_project` 的 `init` / `set_voice` 写入。
 为空时工具输出明写 `NOT SET`，Agent 必须先问用户再生成配音——整片配错音色等于整片重做。
 
-**设计新音色是准备流程，不在管线内**：用户在 ComfyUI 面板用音色设计工作流做好，studio 只负责引用。
+**设计新音色是准备流程，不在管线内**：用户在 ComfyUI 面板用音色设计工作流做好，openreelbench 只负责引用。
 用户库里 `Qwen3-VoiceDesign`（造音色，写入角色音色库）与 `Qwen3-TTS(Text)`（逐段配音，
 `voice_name` 读同一个库）本来就是这个关系，闭环在 ComfyUI 内部。
 
@@ -248,7 +248,7 @@ config 只留**编码参数**（分辨率/帧率/codec/crf/preset）；
 内置项写成 TypeScript 常量而不是 YAML 文件：随包分发、受类型检查、不需要 YAML 解析依赖。
 自定义项是普通配置，用户在 cordis.yml 或设置页里编辑。
 
-新增 `studio_project action: "style"`，返回可直接粘贴的提示词模板。
+新增 `openreel_project action: "style"`，返回可直接粘贴的提示词模板。
 
 ### 表演指导 + 样音闸
 
@@ -269,12 +269,12 @@ config 只留**编码参数**（分辨率/帧率/codec/crf/preset）；
 
 | 半边 | 做什么 |
 |---|---|
-| host `installSettingsSection(ctx, 'studio', Config, entry, hooks)` | 注册命名空间、上报 schema、持久化用户增量 |
-| client `slots.inject('settings.section', …)` id=`studio` | 侧栏一个条目 + 内容页。**没有它设置页里什么都不会出现** |
+| host `installSettingsSection(ctx, 'openreel', Config, entry, hooks)` | 注册命名空间、上报 schema、持久化用户增量 |
+| client `slots.inject('settings.section', …)` id=`openreel` | 侧栏一个条目 + 内容页。**没有它设置页里什么都不会出现** |
 
 两边靠命名空间字符串配对，互不知道对方存在——这正是外部分发的插件也能有设置页的原因。
 
-`cordis.yml` 的 entry 作为 base 层，设置页只写用户增量。注册在 `studio` 命名空间，`cordis.yml` 的 entry 作为 base 层，设置页只写用户增量。
+`cordis.yml` 的 entry 作为 base 层，设置页只写用户增量。注册在 `openreel` 命名空间，`cordis.yml` 的 entry 作为 base 层，设置页只写用户增量。
 所有配置项都加了中文 `.description()`——设置页渲染的就是 schemastery schema。
 
 **关键设计：改动即时生效，不用重启。**
@@ -368,7 +368,7 @@ reviewer 技能、成本追踪——推迟到 M2 之后。
 | # | 决策 | 状态 |
 |---|---|---|
 | 1 | ~~中文 TTS 工作流~~ | 已定：`Qwen3-TTS(Text)` |
-| 2 | ~~插件包名与位置~~ | 已定：`dsh-creative-studio`，2026-08-29 从 `D:\` 移进本工作区（见「九、工作区合并」）|
+| 2 | ~~插件包名与位置~~ | 已定：`dsh-openreelbench`，2026-08-29 从 `D:\` 移进本工作区（见「九、工作区合并」）|
 | 3 | ~~工作流接入方式~~ | 已定：绑定表只给名称，参数去 list 查 |
 | 4 | ~~输出目录~~ | 已定：`D:/AiStudio`，可在设置页改 |
 | 5 | **解说音色** | 库里四个中文音色没有一个是为解说设计的，需要用 `Qwen3-VoiceDesign` 做一个 |
@@ -379,9 +379,9 @@ reviewer 技能、成本追踪——推迟到 M2 之后。
 
 ---
 
-## 八、M2 计划：创意工作台 + 工作室看板（2026-08-29 定稿）
+## 八、M2 计划：OpenReel 创意台 + 工作室看板（2026-08-29 定稿）
 
-> 面板命名规范：**创意工作台**（管线流程，`conversation.view`）· **工作室看板**（跨项目内容与数据，`shell.overlay`）。
+> 面板命名规范：**OpenReel 创意台**（管线流程，`conversation.view`）· **工作室看板**（跨项目内容与数据，`shell.overlay`）。
 
 ### 设计转向：不是「对话流卡片」，是双面协同
 
@@ -394,7 +394,7 @@ reviewer 技能、成本追踪——推迟到 M2 之后。
 OM 的 Backlot 就是这个思路且是实现过的：`backlot/state.py` 715 行（`_build_stage_rail`
 管线轨、`_build_storyboard` 分镜表、gate-skip 检测）+ `backlot/ui/board.js` 1142 行。
 
-结论是**二者结合**：创意工作台做人类操作面，对话流卡片做 Agent 侧同步显示，两边写同一个状态机。
+结论是**二者结合**：OpenReel 创意台做人类操作面，对话流卡片做 Agent 侧同步显示，两边写同一个状态机。
 
 ### 五个流程界面
 
@@ -416,7 +416,7 @@ OM 的 Backlot 就是这个思路且是实现过的：`backlot/state.py` 715 行
 ### 工作室看板（`shell.overlay`，独立于管线）
 
 **定位不是「资产库」，是插件自己的工作台。** 挂在 `shell.overlay`（全框浮层，root 作用域），
-和创意工作台并存：创意工作台管**一次生产的流程**，工作室看板管**跨会话、跨项目的全部内容与数据**。
+和OpenReel 创意台并存：OpenReel 创意台管**一次生产的流程**，工作室看板管**跨会话、跨项目的全部内容与数据**。
 
 M2 先只做**资产预览**这一块，但容器按面板设计，后面往里加页签而不是重做：
 
@@ -434,8 +434,8 @@ M2 先只做**资产预览**这一块，但容器按面板设计，后面往里�
 
 数据源是目录扫描，所以依赖下面的落盘规范。
 
-**为什么它挂 root 而创意工作台挂 session**：工作室看板跨会话看全部产出，不需要往会话发消息；
-创意工作台必须能提交给 Agent，而 `conversation.send` 在 root 作用域直接抛错（见下）。
+**为什么它挂 root 而OpenReel 创意台挂 session**：工作室看板跨会话看全部产出，不需要往会话发消息；
+OpenReel 创意台必须能提交给 Agent，而 `conversation.send` 在 root 作用域直接抛错（见下）。
 两边各取所需，不是妥协。
 
 ### 落盘路径规范（命名权从 Agent 收回插件）
@@ -461,7 +461,7 @@ output/<项目id>.mp4 / .srt
 ### 媒体路由（M2 唯一的一块新 host 服务代码）
 
 ```
-GET /studio/media?project=<id>&path=<项目相对路径>
+GET /openreel/media?project=<id>&path=<项目相对路径>
 ```
 
 用现成的 `resolveInProject()` 挡路径穿越（已写好并测过）。同一条路由服务预览和下载，
@@ -496,7 +496,7 @@ Pipeline = {
 这条同一路径**，不能直接改 `checkpoints/*.json`。走进去，schema 校验、资产存在性校验、
 闸校验、前置校验一个都不少；绕过去，四类校验全失效，治理就废了。
 
-所以提交按钮 → HTTP 路由 → `StateMachine.write()`，和 `studio_stage` 走同一个函数。
+所以提交按钮 → HTTP 路由 → `StateMachine.write()`，和 `openreel_stage` 走同一个函数。
 
 界面的**锁定规则**天然来自前置校验：前一段没 completed，后一个界面不可进入、不可点击。
 
@@ -520,15 +520,15 @@ Pipeline = {
 
 **M2.1 数据面** ✅ 2026-08-29（`src/http.ts` + `src/routes.ts`，测试 70 项全绿）
 
-- [x] `GET /studio/state?project=<id>` —— 管线轨 + 五段状态 + 全部产物 + 风格 playbook + 成片 URL
-- [x] `GET /studio/media?project&path` —— 预览与下载，支持 `Range`（206）让播放器能拖动；越界返回 400 `BAD_PATH`
-- [x] `GET /studio/library` —— 按介质分组（音频/图片/视频/成片），非按目录，所以将来出视频素材自动多一组
-- [x] `POST /studio/stage` —— 面板提交，走 `StateMachine.write()`；同源校验；违规码映射成 400/404/409
+- [x] `GET /openreel/state?project=<id>` —— 管线轨 + 五段状态 + 全部产物 + 风格 playbook + 成片 URL
+- [x] `GET /openreel/media?project&path` —— 预览与下载，支持 `Range`（206）让播放器能拖动；越界返回 400 `BAD_PATH`
+- [x] `GET /openreel/library` —— 按介质分组（音频/图片/视频/成片），非按目录，所以将来出视频素材自动多一组
+- [x] `POST /openreel/stage` —— 面板提交，走 `StateMachine.write()`；同源校验；违规码映射成 400/404/409
 - [ ] 提交后通知 Agent：`ctx.conversation.send(text)`（inject `'conversation'`）—— 属客户端，M2.2 做
 
 **M2.2 面板骨架**
 
-- [ ] 创意工作台挂 `conversation.view`（会话视图 tab 环，新 id + label）
+- [ ] OpenReel 创意台挂 `conversation.view`（会话视图 tab 环，新 id + label）
 - [ ] 工作室看板挂 `shell.overlay`（全框浮层，新 id），M2 只放资产预览页签
 - [ ] 管线轨组件：5 段 + 当前位置 + 闸状态 + 锁定态
 - [ ] 界面路由：按 `Pipeline.stages[].screen` 分发到组件表
@@ -545,12 +545,12 @@ Pipeline = {
 
 **M2.5 对话流卡片**（原方案保留为 Agent 侧同步显示）
 
-- [ ] `tool.call.toolview` key=`studio_stage`：闸口大卡 / 其余一行，从 `argsRaw` 渲染
-- [x] `tool.call.toolview` key=`studio_compose` / `studio_show`：通用媒体卡 ✅ 2026-08-31
+- [ ] `tool.call.toolview` key=`openreel_stage`：闸口大卡 / 其余一行，从 `argsRaw` 渲染
+- [x] `tool.call.toolview` key=`openreel_compose` / `openreel_show`：通用媒体卡 ✅ 2026-08-31
 
 ### 开工前的三件事（2026-08-29 全部已定）
 
-1. **面板挂在哪** —— 创意工作台 `conversation.view`（session 作用域，能 `send`）；
+1. **面板挂在哪** —— OpenReel 创意台 `conversation.view`（session 作用域，能 `send`）；
    工作室看板 `shell.overlay`（root 作用域，跨会话看产出）。**依据是下面第 2 条的作用域约束。**
 
 2. **面板提交后怎么通知 Agent** —— `ctx.conversation.send(text)`，走的是和输入框同一条
@@ -559,7 +559,7 @@ Pipeline = {
 
    **硬约束**：`scopeId()` 在 root 作用域直接抛
    `conversation.send requires a session scope`（同文件 :332）。所以要提交的面板
-   必须在 session 作用域里——这条把创意工作台的挂载点判死了。
+   必须在 session 作用域里——这条把OpenReel 创意台的挂载点判死了。
 
 3. **`moon-origin-test` 兼容** —— **已迁移完成**（2026-08-29）。6 个素材按新规范重命名
    （`s1.wav` → `01-s1.wav`），manifest 按类型拆成 audio/video 两份，`assets.json`
@@ -571,7 +571,7 @@ Pipeline = {
 
 ### 参考
 
-- `dsh-creative-studio/docs/PLUGIN_DEVELOPMENT.md` —— **挑位之前先查这份**。
+- `dsh-openreelbench/docs/PLUGIN_DEVELOPMENT.md` —— **挑位之前先查这份**。
   48 个挂载点全表、三档风险标记、设置页三条注入路径决策表、注册检查表
 - `OpenMontage/backlot/` —— 同思路的可运行实现：`state.py` 的 `_build_stage_rail` /
   `_build_storyboard`，`ui/board.js` 的界面
@@ -579,9 +579,9 @@ Pipeline = {
 
 ## 九、工作区合并（2026-08-29）
 
-插件原来在 `D:\dsh-creative-studio`，与规划工作区分居两处：两套文档、两份 codegraph 索引、
+插件原来在 `D:\dsh-openreelbench`，与规划工作区分居两处：两套文档、两份 codegraph 索引、
 两个会话上下文，看一眼设计再改一行代码要跨目录。已合并成一个根：
-插件整体移进 `d:\dev-projects\Ai-CreativityStudio\dsh-creative-studio`。
+插件整体移进 `d:\dev-projects\Ai-CreativityStudio\dsh-openreelbench`。
 
 **为什么是把插件搬进来，不是反过来**——插件是要发布的包（`files` 白名单 + `github:` 安装路径），
 把 121 工具分析、几 MB HTML 和 OM 上游克隆塞进去会污染它；而且会话历史与 memory 的 key 是
@@ -591,10 +591,10 @@ Pipeline = {
 
 | 位置 | 改成 |
 |---|---|
-| `package.json` 依赖 | `link:D:/dev-projects/Ai-CreativityStudio/dsh-creative-studio` |
+| `package.json` 依赖 | `link:D:/dev-projects/Ai-CreativityStudio/dsh-openreelbench` |
 | `pnpm-lock.yaml` | 同上（specifier 与 version 两行）|
 | `node_modules/.package-map.json` | `link:` 与 `file:///` 两个值 |
-| `node_modules/dsh-creative-studio` | 重建为指向新路径的**原生**符号链接（`MSYS=winsymlinks:nativestrict ln -s`）|
+| `node_modules/dsh-openreelbench` | 重建为指向新路径的**原生**符号链接（`MSYS=winsymlinks:nativestrict ln -s`）|
 
 pnpm 的包用硬链接指向全局 store，同盘 `mv` 不影响 `node_modules`，无需重装。
 插件目录里的 `.codegraph/codegraph.db` 存绝对路径，移动后重新索引。
@@ -606,16 +606,16 @@ pnpm 的包用硬链接指向全局 store，同盘 `mv` 不影响 `node_modules`
 
 ## 十、成片环节收尾（2026-08-31）
 
-### 通用媒体回显：`studio_show` + 一张卡
+### 通用媒体回显：`openreel_show` + 一张卡
 
 **问题**：Agent 能造出媒体，却没有任何办法把它放到人眼前。
 先前只有 dsh-comfyui 的卡片，绑死在它自己的产物上。
 
-**做法**：新增第四个工具 `studio_show`（project + paths + note），
-只做一件事——把项目里**已存在**的文件解析成 `/studio/media` URL 交给卡片。
+**做法**：新增第四个工具 `openreel_show`（project + paths + note），
+只做一件事——把项目里**已存在**的文件解析成 `/openreel/media` URL 交给卡片。
 不生成、不导入、不落盘。路径穿越和不存在的文件都在 host 侧拒掉。
 
-卡片挂 `tool.call.toolview`，两个 key 共用一个组件：`studio_show` 和 `studio_compose`——
+卡片挂 `tool.call.toolview`，两个 key 共用一个组件：`openreel_show` 和 `openreel_compose`——
 **成片自己就该显示自己，不该等人再要一次**。
 
 关键契约：卡片只读 `presentationMeta`，**从不解析渲染文本**。
@@ -656,7 +656,7 @@ Agent 记录 compose 时连着两次校验失败，都是**重新拼装 render_r
 已在 skill 的 compose 段补完整字段表（顶层五键、每 output 八键、哪四个必填），
 并把「原样」写死成不留余地的话。归档为 CONVENTIONS 4.4。
 
-面板发给 Agent 的合成提示语同步收紧，并追加一句「记完用 `studio_show` 把成片带进对话」。
+面板发给 Agent 的合成提示语同步收紧，并追加一句「记完用 `openreel_show` 把成片带进对话」。
 
 测试 130 → 136。
 
@@ -675,7 +675,7 @@ Agent 记录 compose 时连着两次校验失败，都是**重新拼装 render_r
 （`test/render.mjs`，桩 dispatcher 跑首屏，**不引 `react-dom`**——bundle 只允许 import `react`）。
 14 种格式逐个过，表里出现 `a` 即失败。归档为 CONVENTIONS 5.3。
 
-顺带确认播放器可拖进度：`/studio/media` 有 `accept-ranges: bytes` + 206 + `content-range`。
+顺带确认播放器可拖进度：`/openreel/media` 有 `accept-ranges: bytes` + 206 + `content-range`。
 
 测试 136 → **141**。
 
@@ -741,7 +741,7 @@ OM 已经踩过并给出了 5 层框架（镜头 / 运动 / 主体 / 光线 / �
 ### 仍然挂着的旧项
 
 - `工作室看板`（`shell.overlay` + 资产浏览器）——设计定了，没动工
-- `tool.call.toolview` 给 `studio_stage` 的审批卡（M2.5）
+- `tool.call.toolview` 给 `openreel_stage` 的审批卡（M2.5）
 - 音色候选快照回填到项目 marker
 - 打包批量配音（用户判断「目前没那个必要」）
 
@@ -778,7 +778,7 @@ ARTIFACT_STAGE  产物归属哪段，scene_plan → assets_shots——新增
 
 1. `project.shot_plan` 变成**视图**，从 scene_plan 投影，界面读法不变
 2. 旧项目首次保存时，`fromMarkerPlan()` 把 marker 上的计划整体提上来
-3. **`/studio/project` 不再接受 `shot_plan` 写入**——留着就是两个真相来源，
+3. **`/openreel/project` 不再接受 `shot_plan` 写入**——留着就是两个真相来源，
    而 marker 那份没有校验管着它
 
 #### 一条容易踩的契约，已用测试钉住
@@ -890,7 +890,7 @@ OM 对 `medium` 的短语是 **"medium shot from waist up"**——
 
 ### 提示词不再交给 Agent 拼
 
-- `/studio/state` 新增 `prompts`（派生字段，**不在 `artifacts` 里**——那些要原样回传）
+- `/openreel/state` 新增 `prompts`（派生字段，**不在 `artifacts` 里**——那些要原样回传）
 - 分镜页发给 Agent 的消息从「风格前缀 + 主体 + 风格后缀」改成**直接给拼好的整条**
 - `renderVisualContract()` 不再输出模板，改成说明「你只需要决定拍什么 + 镜头语言」
 - 分镜页加了六个下拉框和一个分层预览（每层一个 chip，继承自风格的用虚线框）
@@ -994,16 +994,16 @@ OM 六个维度，**三个在静帧管线上没有数据**。照搬会变成三�
 
 ### 补漏一：Agent 根本看不到 variation
 
-**我上一轮留下的真漏洞。** skill 里写着「结果在 `/studio/state` 的 `variation` 里」——
+**我上一轮留下的真漏洞。** skill 里写着「结果在 `/openreel/state` 的 `variation` 里」——
 **Agent 调不了 HTTP 路由**。对它来说这道检查等于不存在，
 它会一路走到 compose 被 slideshow 拦下才知道出事，而那时图已经全生成完了，
 **正好错过这道检查存在的全部意义**。
 
-修法：`studio_stage` 在提交内容含 `scene_plan` 时**把报告一并返回**，
+修法：`openreel_stage` 在提交内容含 `scene_plan` 时**把报告一并返回**，
 并且写进 render 出来的文本里（Agent 读的是文本，不是 payload）。
 不用新工具、不用轮询——你刚写完计划，这就是它哪儿重了。
 
-顺带：`studio_project action: "get"` 的枚举里补上 `scene_plan`，
+顺带：`openreel_project action: "get"` 的枚举里补上 `scene_plan`，
 Agent 之前连自己写的计划都读不回来。
 
 ### 补漏二：节奏问题藏到了花钱之后
@@ -1046,7 +1046,7 @@ OM 引了一项研究，说评审质量沿这三个轴直接决定下游产出�
 
 #### 交付时机
 
-`review_focus` 挂在管线定义上，`studio_project action: "status"`
+`review_focus` 挂在管线定义上，`openreel_project action: "status"`
 **返回下一段的审查重点**并渲染进文本——
 事后读到的审查重点是复盘，事前读到才是任务书。
 
@@ -1114,11 +1114,11 @@ OM 也没有这个（它的 `clip_embedder.py` 是素材检索用的）。**待�
 
 | 引擎 | 算在哪 | 给谁看 | 拦不拦 |
 |---|---|---|---|
-| **5 层提示引擎** | `/studio/state` 每次读 | 分镜页「最终提示词」分层 chip；发给 Agent 的生成请求 | —— |
-| **variation** | `/studio/state` + `studio_stage` 提交 `scene_plan` 时 | 分镜页横幅（生成按钮上方）；Agent 的工具返回 | 不拦 |
-| **slideshow** | `/studio/state` + `studio_compose` 执行时 | 分镜页只显示节奏两项；成片页显示全部 | **拦**，`force` 可覆盖 |
-| **reviewer** | 无计算，是 skill | Agent；`studio_project action:"status"` 返回下一段重点 | 不拦 |
-| **平台画幅** | `studio_compose` 执行时 | 立项页下拉；compose 的 warnings | —— |
+| **5 层提示引擎** | `/openreel/state` 每次读 | 分镜页「最终提示词」分层 chip；发给 Agent 的生成请求 | —— |
+| **variation** | `/openreel/state` + `openreel_stage` 提交 `scene_plan` 时 | 分镜页横幅（生成按钮上方）；Agent 的工具返回 | 不拦 |
+| **slideshow** | `/openreel/state` + `openreel_compose` 执行时 | 分镜页只显示节奏两项；成片页显示全部 | **拦**，`force` 可覆盖 |
+| **reviewer** | 无计算，是 skill | Agent；`openreel_project action:"status"` 返回下一段重点 | 不拦 |
+| **平台画幅** | `openreel_compose` 执行时 | 立项页下拉；compose 的 warnings | —— |
 
 ---
 
@@ -1126,7 +1126,7 @@ OM 也没有这个（它的 `clip_embedder.py` 是素材检索用的）。**待�
 
 #### 0. 起手
 
-重启 DSH。设置页「AI 创意工作室」应能打开，工作流绑定还在。
+重启 DSH。设置页「OpenReel 创意台」应能打开，工作流绑定还在。
 
 #### 1. 立项页 —— 投放平台
 
@@ -1177,7 +1177,7 @@ OM 也没有这个（它的 `clip_embedder.py` 是素材检索用的）。**待�
 #### 6. Agent 侧
 
 - [ ] Agent 写 `scene_plan` 后，工具返回里应带「分镜重复度 x.x/5」并逐条列出
-- [ ] 让 Agent 调 `studio_project action:"status"`，返回文本末尾应有「自审重点（下一段）」清单
+- [ ] 让 Agent 调 `openreel_project action:"status"`，返回文本末尾应有「自审重点（下一段）」清单
 - [ ] Agent 现在能 `action:"get"` 读 `scene_plan`
 
 #### 7. 成片页 —— 幻灯片风险
@@ -1202,7 +1202,7 @@ OM 也没有这个（它的 `clip_embedder.py` 是素材检索用的）。**待�
 1. **分镜页横幅的显示条件** —— 改过两次（先只看 variation，后加 pacing）。
    可能出现「该显示不显示」或「空横幅」
 2. **六个下拉的写入** —— 路由层测过，**UI 层没测过**。
-   如果改了不保存，看浏览器控制台的网络请求 `POST /studio/scene-plan`
+   如果改了不保存，看浏览器控制台的网络请求 `POST /openreel/scene-plan`
 3. **★ 高光** —— 今天刚修好合并白名单。如果仍然刷新就掉，说明还有第二处漏
 
 ---
@@ -1223,7 +1223,7 @@ OM 也没有这个（它的 `clip_embedder.py` 是素材检索用的）。**待�
 |---|---|---|
 | 4 | `decision_log` | 留痕：为什么选这个风格、这个音色 |
 | 5 | 工作室看板（`shell.overlay`） | 设计过没建，资产浏览器 |
-| 6 | `tool.call.toolview` 给 `studio_stage` | 阶段推进现在只有文本 |
+| 6 | `tool.call.toolview` 给 `openreel_stage` | 阶段推进现在只有文本 |
 
 #### 观察项，先不动
 
@@ -1315,7 +1315,7 @@ npm run inspect <项目id>            打印全部派生结果
 打印：项目与平台画幅 → 脚本里的画面描述 → 分镜计划（标注是存储的还是推导的）
 → 每一镜的五层拆解（标注哪层来自风格默认）→ variation 逐条 → slideshow 五维 → 时间轴。
 
-**只读，不写。** 工作区默认 `D:/AiStudio`，用 `STUDIO_ROOT` 覆盖。
+**只读，不写。** 工作区默认 `D:/AiStudio`，用 `OPENREEL_ROOT` 覆盖。
 
 实测 `scifi-ai-reality`：variation 2.4 acceptable，
 指出「8 镜全没写镜别 / 没有光线 / 没有高光 / 没有质感词」；
@@ -1375,13 +1375,13 @@ const SKILL_GESTURE = /(^|\s)\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/g
 **设计计划是反过来的**：它是文字、免费、可逆，而且不做的话分镜页打开时
 六个下拉全空——那不是「留白等用户填」，是**五层提示里缺了四层**。
 
-现在过闸时发一条带 `/dsh-creative-studio-cinematography` 的消息，
+现在过闸时发一条带 `/dsh-openreelbench-cinematography` 的消息，
 明确要求「只定计划，不生成任何图片，不要提交 completed」。
 
 ### 测试守什么
 
 **手势拼错会静默失败**——消息照发，正文永不加载，模型在毫无指导的情况下设计镜头语言。
-所以从构建产物里查 `/dsh-creative-studio-cinematography` 是否存在，
+所以从构建产物里查 `/dsh-openreelbench-cinematography` 是否存在，
 并校验名字符合宿主的手势文法。故意拼错一个字母验证过会 FAIL。
 
 还有一条：**技能里提到的每个枚举都必须是 schema 认的**，
@@ -1542,7 +1542,7 @@ flat-brief (energetic)      5 分  在念幻灯片
 
 ### 首次提交
 
-`git init` 建在 `dsh-creative-studio/`（用户选定），39 文件 12216 行，测试 **237 全绿**。
+`git init` 建在 `dsh-openreelbench/`（用户选定），39 文件 12216 行，测试 **237 全绿**。
 
 - `.gitignore` 加了 `client/`——它和 `lib/` 一样是构建产物，`prepare` 会重新生成
 - 加了 `.gitattributes` `* text=auto eol=lf`——
@@ -1619,7 +1619,7 @@ flat-brief (energetic)      5 分  在念幻灯片
   解说与画面天然同步（一段就是一句话加一张图）、画面里不出现文字（负向提示词里就写着）。
   **点名说「这两条已经保证」，模型才不会在上面花注意力**
 
-加载方式和分镜那份一样：脚本页发请求时带 `/dsh-creative-studio-storytelling` 手势。
+加载方式和分镜那份一样：脚本页发请求时带 `/dsh-openreelbench-storytelling` 手势。
 
 ### `subtitle-style.ts` —— 字幕排版
 
@@ -1655,7 +1655,7 @@ Netflix 自己的简体中文指引是每行 16 字。我们的 playbook 里是 
 > 同一个项目，发给能读旁挂 .srt 的平台和发给不能读的，答案不同——
 > **这是关于「这一次要发去哪」的决定，不是关于「这台机器怎么装」的决定。**
 
-`studio_compose` 加了 `burn_subtitles` 和 `subtitle_background` 两个参数，
+`openreel_compose` 加了 `burn_subtitles` 和 `subtitle_background` 两个参数，
 面板在提示里明确告诉 Agent 用哪个。
 
 ### 测试：真烧一次
@@ -1734,7 +1734,7 @@ FontSize 46  ·  MarginV 64  ·  安全区 90%  ·  描边 3px
 
 ### 顺带
 
-- 烧录开关从全局设置搬成**逐次可覆盖**：`studio_compose` 新增
+- 烧录开关从全局设置搬成**逐次可覆盖**：`openreel_compose` 新增
   `burn_subtitles` 和 `subtitle_background`（`outline` / `box`）参数，
   设置里的值退为默认
 - 新增 `subtitleFont` 设置。**字体装不上时 libass 会静默换字体，不报错**
@@ -1757,7 +1757,7 @@ FontSize 46  ·  MarginV 64  ·  安全区 90%  ·  描边 3px
 两者都是「加载器要读的文件」，但**被不同工作流在不同环节消费**——
 合成一个列表，槽位顺序一旦对上，图像工作流就会拿到一个音频文件。
 
-路由 `POST /studio/project` 接收 `voice_references`，照 `references` 的规矩
+路由 `POST /openreel/project` 接收 `voice_references`，照 `references` 的规矩
 trim 并丢掉空串与非字符串：**空文件名会作为「加载名为空的文件」送进加载器节点。**
 
 ### 搬这一份时暴露的三个硬编码
@@ -1895,13 +1895,13 @@ W3C 要求音乐比前景语音低 20 dB，BBC 说再往下压 4 dB——两条�
 
 ### 1. 参考音频并回音色面板
 
-原来是 `dcs-triangle` 里第三个跨列容器。挑音色库里的音色、和拿一段样本克隆一个音色，
+原来是 `orb-triangle` 里第三个跨列容器。挑音色库里的音色、和拿一段样本克隆一个音色，
 **是同一个问题的两个答案**，拆成两个容器让它们看起来像两个不相干的功能。
-现在并进「音色」面板，中间用 `.dcs-subhead` 分隔。`dcs-triangle-wide` 随之删掉——没人用了。
+现在并进「音色」面板，中间用 `.orb-subhead` 分隔。`orb-triangle-wide` 随之删掉——没人用了。
 
 ### 2. 技能手势就是插件注入，但它失败时是静默的
 
-用户问：配乐请求里的 `/dsh-creative-studio-sound-design` 是不是「外部提醒调用」，
+用户问：配乐请求里的 `/dsh-openreelbench-sound-design` 是不是「外部提醒调用」，
 该不该改成插件注入。
 
 查了宿主实现（`packages/skill/tool-skill/src/index.ts`）：**这条手势本身就是注入路径**。
@@ -1916,7 +1916,7 @@ W3C 要求音乐比前景语音低 20 dB，BBC 说再往下压 4 dB——两条�
 模型于是在完全没有指导的情况下照样选了一首曲子——
 失败看起来像「选得不好」，而不是「技能没加载」。
 
-所以加了 `GET /studio/skill?name=`：问宿主注册表这个名字**在不在、以及是否 user-invocable**
+所以加了 `GET /openreel/skill?name=`：问宿主注册表这个名字**在不在、以及是否 user-invocable**
 （手势查的就是后者，路由必须查同一个）。配乐面板发送前先问，加载不了就**拒发**并说明原因：
 
 - `registry: false` → 宿主根本没有技能服务，别去找技能的毛病
@@ -1935,7 +1935,7 @@ W3C 要求音乐比前景语音低 20 dB，BBC 说再往下压 4 dB——两条�
 **运行中的 DSH 加载的是两小时前的模块。**
 
 同一个原因也解释了第 2 条里 Agent 说的「系统没有加载 skills」——
-那个进程里根本没有 `STUDIO_SOUND_DESIGN_SKILL`，手势名字解析不了，于是退化成散文。
+那个进程里根本没有 `OPENREEL_SOUND_DESIGN_SKILL`，手势名字解析不了，于是退化成散文。
 
 > **「磁盘上的文件是新的，运行时的行为是旧的」是进程陈旧的特征症状。**
 > 先比时间戳，别先怀疑代码。
@@ -1951,11 +1951,11 @@ W3C 要求音乐比前景语音低 20 dB，BBC 说再往下压 4 dB——两条�
 
 ### 1. 音乐块跑到刻度上面去了
 
-`.dcs-music-block` 写了 `position: absolute`，而 `.dcs-lane-blocks` 是一个
+`.orb-music-block` 写了 `position: absolute`，而 `.orb-lane-blocks` 是一个
 **没有定位的 flex 行**。绝对定位的子元素于是向上找到最近的已定位祖先——
 落在轨道顶端，正好压在刻度尺上。
 
-字幕轨能用绝对定位，是因为它自己额外加了 `.dcs-lane-cues { position: relative }`——
+字幕轨能用绝对定位，是因为它自己额外加了 `.orb-lane-cues { position: relative }`——
 字幕条各有各的偏移，必须绝对定位。**音乐床只有一块、铺满整条轨**，
 根本不需要绝对定位，改成填满的 flex 子元素就对了。
 
@@ -2059,19 +2059,19 @@ clamp 仍然只有一处，只是上移了一层，而 `Preview` 保持可以直
 全部已经在页面上定完了。把它们编成一段话交给模型，只是多一次往返、
 多一个转述出错的机会，换不来任何判断。
 
-现在按钮直接打 `POST /studio/compose`。**工具留着**——
+现在按钮直接打 `POST /openreel/compose`。**工具留着**——
 全自动流程没有按钮可按，最后一步还是要模型来。
 
 两条路径走**同一个函数** `composeProject()`：前置检查、幻灯片拦截、
 画幅解析、警告，全在里面。否则治理会变成「模型这条路成立、面板那条路绕过」。
 
-报告仍然经 `machine.write()` 落盘，和 `studio_stage` 是同一个调用——
+报告仍然经 `machine.write()` 落盘，和 `openreel_stage` 是同一个调用——
 面板可以推进管线，但不能在推进时绕过 schema 和资产校验。
 路由自己写 checkpoint 会快一点，也正好是要禁止的那条捷径。
 
 ### 顺带发现：剪辑版本从来没有真正被渲染过
 
-`studio_compose` **没有 `cut` 参数**。面板发给 Agent 的话里写着
+`openreel_compose` **没有 `cut` 参数**。面板发给 Agent 的话里写着
 「剪辑版本 `cut-xxx`」，模型无处可放，于是静默丢掉——
 **每一次合成出的都是计划版本**。而输出仍然是一支正常的片子，所以一直没被发现。
 
@@ -2207,21 +2207,21 @@ clamp 仍然只有一处，只是上移了一层，而 `Preview` 保持可以直
 
 ---
 
-## 二十八、补齐 Agent 通路：`studio_edit` 与 `set_platform`
+## 二十八、补齐 Agent 通路：`openreel_edit` 与 `set_platform`
 
 CONVENTIONS §8.2 记下的欠账清掉了。面板能做、Agent 做不到的三件事补上：
 
 | 动作 | 之前 | 现在 |
 |---|---|---|
-| 保存 / 删除 / 列出剪辑版本 | 只有 `/studio/cuts` | `studio_edit` 的 `cuts` / `save_cut` / `delete_cut` |
-| 裁剪音频头尾 | 只有 `/studio/asset/trim` | `studio_edit` 的 `trim_audio` |
-| 目标平台 | 只有 `/studio/project` | `studio_project` 的 `set_platform` |
+| 保存 / 删除 / 列出剪辑版本 | 只有 `/openreel/cuts` | `openreel_edit` 的 `cuts` / `save_cut` / `delete_cut` |
+| 裁剪音频头尾 | 只有 `/openreel/asset/trim` | `openreel_edit` 的 `trim_audio` |
+| 目标平台 | 只有 `/openreel/project` | `openreel_project` 的 `set_platform` |
 
 两条路都调**同一个函数**：`save_cut` 走 `parseCut`（面板路由用的那一个），
 `trim_audio` 走 `trimAudioAsset`。所以钳制规则只有一份——测试里
 「面板路径怎么钳，Agent 路径就怎么钳」是直接对着同一批越界值断言的。
 
-`studio_edit` 单独成模块而不是塞进 `tools.ts`：剪辑版本的 schema 占了它大半篇幅，
+`openreel_edit` 单独成模块而不是塞进 `tools.ts`：剪辑版本的 schema 占了它大半篇幅，
 而描述「一个 cut 能长什么样」本来就是这件事的主要工作量。
 
 **`set_platform` 会把解析出来的画幅一起回报。** 这个字段存在的全部理由，
@@ -2457,7 +2457,7 @@ CONVENTIONS §8.2 记下的欠账清掉了。面板能做、Agent 做不到的�
 | `cinematography` | 4127 | 旁白功能→镜别 · 序列比单张重要 · 六个字段各自怎么定 · 高光镜 |
 | `sound-design` | 1861 | 两条硬规矩 · BPM 按语速档 · 曲风 · **方向转写成提示词** |
 | `reviewer` | 2268 | CHAI 三条 · 四级严重度 · 每一段看什么 |
-| `usage` | 2661 | **五个工具的边界**（原本写三个，漏了 `studio_edit` 和 `studio_show`）· 错误码处置 · 重试幂等 · 路径规则 |
+| `usage` | 2661 | **五个工具的边界**（原本写三个，漏了 `openreel_edit` 和 `openreel_show`）· 错误码处置 · 重试幂等 · 路径规则 |
 
 ### 三条贯穿全局的规则
 

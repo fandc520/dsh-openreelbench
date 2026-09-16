@@ -12,9 +12,9 @@
 
 const NEWLINE = String.fromCharCode(10)
 
-export const AUDIO_STAGE_SKILL = 'dsh-creative-studio-stage-assets-audio'
-export const SHOTS_STAGE_SKILL = 'dsh-creative-studio-stage-assets-shots'
-export const SHOTS_CRAFT_SKILL = 'dsh-creative-studio-cinematography'
+export const AUDIO_STAGE_SKILL = 'dsh-openreelbench-stage-assets-audio'
+export const SHOTS_STAGE_SKILL = 'dsh-openreelbench-stage-assets-shots'
+export const SHOTS_CRAFT_SKILL = 'dsh-openreelbench-cinematography'
 
 /**
  * Voice design: the "自动生成" button that fills the two form fields.
@@ -28,7 +28,7 @@ export function buildVoiceProposalJob(projectId: string): string {
   return [
     '/' + AUDIO_STAGE_SKILL,
     '',
-    '给项目 `' + projectId + '` 提一个解说音色方案，写到项目上，我在创意工作台里看。',
+    '给项目 `' + projectId + '` 提一个解说音色方案，写到项目上，我在OpenReel 创意台里看。',
   ].join(NEWLINE)
 }
 
