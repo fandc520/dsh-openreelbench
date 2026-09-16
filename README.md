@@ -15,10 +15,39 @@ brief ──[闸]──> script ──[闸]──> assets ──> compose
 的 `comfyui_workflow` 去跑。换工作流只改配置，不改代码。
 
 双面结构：宿主半面（工具 / 技能 / 设置命名空间注册）+ 浏览器半面（设置页 UI）。
-设置页在「设置 → OpenReel 创意台」独立侧边栏入口下，见 [插件开发标准](docs/PLUGIN_DEVELOPMENT.md)。
+## 界面
+
+<p align="center">
+  <img src="images/workbench.png" width="70%" alt="工作台" /><br/>
+  <em>工作台 —— 项目列表与管线入口</em>
+</p>
+
+<p align="center">
+  <img src="images/project.png" width="70%" alt="项目设置" /><br/>
+  <em>项目设置</em>
+</p>
+
+<p align="center">
+  <img src="images/script.png" width="70%" alt="脚本" /><br/>
+  <em>脚本 —— 分段即分镜</em>
+</p>
+
+<p align="center">
+  <img src="images/narration.png" width="70%" alt="配音" /><br/>
+  <em>配音 —— 音色、样音与批量生成</em>
+</p>
+
+<p align="center">
+  <img src="images/shots.png" width="70%" alt="分镜" /><br/>
+  <em>分镜 —— scene_plan 与五层提示词</em>
+</p>
+
+<p align="center">
+  <img src="images/compose.png" width="70%" alt="合成" /><br/>
+  <em>合成 —— 时间轴、字幕与配乐</em>
+</p>
 
 ## 为什么要一个状态机
-
 管线的价值不在"有一组工具"，在于**推不动的地方真的推不动**：
 
 - 脚本没经用户确认，`assets` 写不进去 —— `GATE VIOLATION`

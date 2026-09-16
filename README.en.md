@@ -22,6 +22,38 @@ Two-sided structure: a host half (tool / skill / settings-namespace registration
 browser half (the settings-page UI). The panel lives under **Settings → AI Creative Bench** with its own sidebar entry; see
 [the plugin development standard](docs/PLUGIN_DEVELOPMENT.md).
 
+## Screenshots
+
+<p align="center">
+  <img src="images/workbench.png" width="70%" alt="the workbench" /><br/>
+  <em>The workbench — project list and pipeline entry</em>
+</p>
+
+<p align="center">
+  <img src="images/project.png" width="70%" alt="project settings" /><br/>
+  <em>Project settings</em>
+</p>
+
+<p align="center">
+  <img src="images/script.png" width="70%" alt="the script sheet" /><br/>
+  <em>The script sheet — a section is a shot</em>
+</p>
+
+<p align="center">
+  <img src="images/narration.png" width="70%" alt="narration" /><br/>
+  <em>Narration — voice, sample takes, batch generation</em>
+</p>
+
+<p align="center">
+  <img src="images/shots.png" width="70%" alt="shots" /><br/>
+  <em>Shots — scene plan and the five prompt layers</em>
+</p>
+
+<p align="center">
+  <img src="images/compose.png" width="70%" alt="compose" /><br/>
+  <em>Compose — timeline, subtitles and music</em>
+</p>
+
 ## Why a state machine
 
 The pipeline's value is not "a set of tools" — it is that **where progress should be
