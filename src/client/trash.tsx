@@ -16,6 +16,7 @@ import { useState } from 'react'
 
 import { type TrashEntry, api } from './api.ts'
 import { IconTrash } from './icons.tsx'
+import { tx } from './i18n.ts'
 
 export interface TrashSectionProps {
   entries: readonly TrashEntry[]
@@ -26,7 +27,7 @@ export interface TrashSectionProps {
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB'
-  if (bytes === 0) return '空'
+  if (bytes === 0) return tx('空')
   return Math.max(1, Math.round(bytes / 1024)) + ' KB'
 }
 
@@ -42,7 +43,7 @@ export function TrashSection({ entries, onChanged, onNotice, onError }: TrashSec
     try {
       const { id } = await api.restoreTrash(entry.entry)
       await onChanged()
-      onNotice('「' + entry.title + '」已还原为项目 ' + id + '。')
+      onNotice('「' + entry.title + tx('」已还原为项目 ') + id + '。')
     } catch (error) {
       onError((error as Error).message)
     } finally {
@@ -55,7 +56,7 @@ export function TrashSection({ entries, onChanged, onNotice, onError }: TrashSec
     try {
       await api.purgeTrash(entry.entry)
       await onChanged()
-      onNotice('「' + entry.title + '」已彻底删除。')
+      onNotice('「' + entry.title + tx('」已彻底删除。'))
     } catch (error) {
       onError((error as Error).message)
     } finally {
@@ -74,7 +75,7 @@ export function TrashSection({ entries, onChanged, onNotice, onError }: TrashSec
       >
         <span className="orb-disclosure-caret">{open ? '▾' : '▸'}</span>
         <IconTrash className="orb-section-icon" />
-        回收站
+        {tx('回收站')}
         <span className="orb-count">{entries.length}</span>
       </button>
 
@@ -87,24 +88,24 @@ export function TrashSection({ entries, onChanged, onNotice, onError }: TrashSec
                 <div className="orb-trash-body">
                   <span className="orb-project-title">{entry.title}</span>
                   <span className="orb-project-meta">
-                    {entry.removed_at.slice(0, 10)} 移除 · {formatBytes(entry.bytes)} · 原 id {entry.id}
+                    {entry.removed_at.slice(0, 10)}{tx(' 移除 · ')}{formatBytes(entry.bytes)}{tx(' · 原 id ')}{entry.id}
                   </span>
                 </div>
 
                 {confirming === entry.entry ? (
                   <div className="orb-trash-actions">
-                    <span className="orb-hint orb-note-error">彻底删除后无法恢复</span>
+                    <span className="orb-hint orb-note-error">{tx('彻底删除后无法恢复')}</span>
                     <button type="button" className="orb-btn orb-btn-small" disabled={working}
-                      onClick={() => setConfirming(null)}>取消</button>
+                      onClick={() => setConfirming(null)}>{tx('取消')}</button>
                     <button type="button" className="orb-btn orb-btn-small orb-btn-danger" disabled={working}
-                      onClick={() => void purge(entry)}>{working ? '删除中…' : '确认删除'}</button>
+                      onClick={() => void purge(entry)}>{working ? tx('删除中…') : tx('确认删除')}</button>
                   </div>
                 ) : (
                   <div className="orb-trash-actions">
                     <button type="button" className="orb-btn orb-btn-small" disabled={working}
-                      onClick={() => void restore(entry)}>{working ? '还原中…' : '还原'}</button>
+                      onClick={() => void restore(entry)}>{working ? tx('还原中…') : tx('还原')}</button>
                     <button type="button" className="orb-btn orb-btn-small orb-btn-quiet-danger" disabled={working}
-                      onClick={() => setConfirming(entry.entry)}>彻底删除</button>
+                      onClick={() => setConfirming(entry.entry)}>{tx('彻底删除')}</button>
                   </div>
                 )}
               </div>

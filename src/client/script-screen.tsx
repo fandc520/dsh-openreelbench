@@ -25,6 +25,9 @@ import { type PluginState, api } from './api.ts'
 import { type AgentPhase, BusyLabel } from './busy.tsx'
 import { IconPen, IconPlay, IconSpark } from './icons.tsx'
 import { buildScriptJob } from '../script-job.js'
+import { resolveContentLanguage } from '../content-language.js'
+
+import { tx } from './i18n.ts'
 
 const NEWLINE = String.fromCharCode(10)
 
@@ -143,6 +146,15 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
   const [schemaIssues, setSchemaIssues] = useState<Array<{ path: string; message: string }>>([])
   const [result, setResult] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /**
+   * The screen's own top, for the 回到顶部 button.
+   *
+   * `scrollIntoView` on this element rather than scrolling a named container:
+   * the scrolling ancestor is `.orb-workbench`, which this screen does not own
+   * and should not reach into by class name. Letting the browser find it keeps
+   * the button working if the shell ever changes where the scrollbar lives.
+   */
+  const top = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!touched) setDraft(baseline)
@@ -171,14 +183,14 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
     const blocking: string[] = []
     const advice: string[] = []
     const seconds = Number(section.seconds) || 0
-    if (section.text.trim() === '') blocking.push('台词是空的')
-    if (section.id.trim() === '') blocking.push('缺 id')
-    if (section.prompt.trim() === '') advice.push('没写画面提示词，Agent 只能自己编一个')
+    if (section.text.trim() === '') blocking.push(tx('台词是空的'))
+    if (section.id.trim() === '') blocking.push(tx('缺 id'))
+    if (section.prompt.trim() === '') advice.push(tx('没写画面提示词，Agent 只能自己编一个'))
     if (seconds > playbook.pacing.maxSectionSeconds) {
-      advice.push('比这个风格建议的 ' + playbook.pacing.maxSectionSeconds + ' 秒长，一张图可能撑不住，考虑拆段')
+      advice.push(tx('比这个风格建议的 ') + playbook.pacing.maxSectionSeconds + tx(' 秒长，一张图可能撑不住，考虑拆段'))
     }
     if (seconds > 0 && seconds < playbook.pacing.minSectionSeconds) {
-      advice.push('比这个风格建议的 ' + playbook.pacing.minSectionSeconds + ' 秒短，合成时会补到这个长度')
+      advice.push(tx('比这个风格建议的 ') + playbook.pacing.minSectionSeconds + tx(' 秒短，合成时会补到这个长度'))
     }
     return { blocking, advice }
   })
@@ -257,6 +269,10 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
         title: state.project.title,
         durationSeconds: state.project.target_duration_seconds,
         charsPerSecond: playbook.narration.chars_per_second,
+        // Resolved host-side and read back, never worked out here: the budget
+        // unit depends on it, and two copies of that decision is how a request
+        // asks for English at a Chinese word count.
+        language: resolveContentLanguage(state.contentLanguage, undefined),
         style: state.style.id,
         rewrite: kind !== 'draft',
       }))
@@ -268,12 +284,12 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
           setTouched(false)
           await onReload()
           setPhase(null)
-          setResult({ kind: 'ok', text: kind === 'draft' ? 'Agent 写好了，逐段看一遍。' : '换了一版，看看这个分法。' })
+          setResult({ kind: 'ok', text: kind === 'draft' ? tx('Agent 写好了，逐段看一遍。') : tx('换了一版，看看这个分法。') })
           return
         }
       }
       setPhase(null)
-      setResult({ kind: 'error', text: '等了两分钟没等到新脚本，去对话里看看 Agent 的进度。' })
+      setResult({ kind: 'error', text: tx('等了两分钟没等到新脚本，去对话里看看 Agent 的进度。') })
     } catch (error) {
       setPhase(null)
       setResult({ kind: 'error', text: (error as Error).message })
@@ -291,7 +307,7 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
         status: 'completed',
         artifacts: { script: buildScript(draft, state.style.id) },
         human_approved: true,
-        note: '在OpenReel 创意台确认',
+        note: tx('在OpenReel 创意台确认'),
       })
       setTouched(false)
       await onReload()
@@ -308,37 +324,37 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
   }
 
   return (
-    <div className="orb-screen">
+    <div className="orb-screen" ref={top}>
       <header className="orb-screen-head">
-        <h2 className="orb-screen-title">脚本</h2>
+        <h2 className="orb-screen-title">{tx('脚本')}</h2>
         <span className="orb-spacer" />
         <span className={'orb-pill ' + (approved ? 'orb-pill-ok' : 'orb-pill-wait')}>
-          {approved ? '已审核' : '待确认'}
+          {approved ? tx('已审核') : tx('待确认')}
         </span>
       </header>
 
       <p className="orb-hint">
-        以下段落时长为<b>预估值</b>，最终由实际生成片段的时长决定。
+        {tx('以下段落时长为')}<b>{tx('预估值')}</b>{tx('，最终由实际生成片段的时长决定。')}
         {adviceCount > 0
-          ? <>　<span className="orb-tone-wait">黄框</span>是风格建议，不影响提交；红框才是必须改的。</>
+          ? <>　<span className="orb-tone-wait">{tx('黄框')}</span>{tx('是风格建议，不影响提交；红框才是必须改的。')}</>
           : null}
       </p>
 
       <section className="orb-card">
         <div className="orb-card-head">
           <IconPen className="orb-section-icon" />
-          <h3 className="orb-card-title">脚本分段</h3>
+          <h3 className="orb-card-title">{tx('脚本分段')}</h3>
           <span className="orb-card-meta">
-            <span><b>{draft.sections.length}</b> 段</span>
-            <span>预估 <b>{totalSeconds.toFixed(1)}</b> 秒 / 目标 {state.project.target_duration_seconds} 秒</span>
+            <span><b>{draft.sections.length}</b> {tx('段')}</span>
+            <span>{tx('预估')} <b>{totalSeconds.toFixed(1)}</b>{tx(' 秒 / 目标 ')}{state.project.target_duration_seconds}{tx(' 秒')}</span>
             <span className={totalChars > budget * 1.15 ? 'orb-tone-wait' : undefined}>
-              <b>{totalChars}</b> 字 / 预算约 {budget}
+              <b>{totalChars}</b>{tx(' 字 / 预算约 ')}{budget}
             </span>
           </span>
         </div>
         <div className="orb-card-body">
           {draft.sections.length === 0 && phase === null ? (
-            <p className="orb-note">还没有脚本。可以让 Agent 按简报起草一版，也可以自己加段。</p>
+            <p className="orb-note">{tx('还没有脚本。可以让 Agent 按简报起草一版，也可以自己加段。')}</p>
           ) : null}
 
           <div className="orb-sections">
@@ -355,15 +371,15 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
                 <input
                   className="orb-input orb-input-id"
                   value={section.id}
-                  placeholder="编号"
-                  title="段落编号。配音和配图文件按它归档，也是 Agent 指认这一段的方式。"
+                  placeholder={tx('编号')}
+                  title={tx('段落编号。配音和配图文件按它归档，也是 Agent 指认这一段的方式。')}
                   onChange={(e) => edit(index, { id: e.target.value })}
                 />
                 <input
                   className="orb-input orb-input-label"
                   value={section.label}
-                  placeholder="场次名（选填）"
-                  title="只是给人看的名字，例如「开场·撞击预告」。不影响生成。"
+                  placeholder={tx('场次名（选填）')}
+                  title={tx('只是给人看的名字，例如「开场·撞击预告」。不影响生成。')}
                   onChange={(e) => edit(index, { label: e.target.value })}
                 />
                 <span className="orb-seconds-wrap">
@@ -371,28 +387,28 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
                     className="orb-input orb-input-seconds"
                     inputMode="decimal"
                     value={section.seconds}
-                    placeholder="时长"
-                    title="预估时长，用来判断分段是否合理。成片以实测配音为准。"
+                    placeholder={tx('时长')}
+                    title={tx('预估时长，用来判断分段是否合理。成片以实测配音为准。')}
                     onChange={(e) => edit(index, { seconds: e.target.value })}
                   />
-                  <span className="orb-unit">秒</span>
+                  <span className="orb-unit">{tx('秒')}</span>
                 </span>
                 <span className="orb-spacer" />
-                <button type="button" className="orb-icon" title="上移" disabled={index === 0}
+                <button type="button" className="orb-icon" title={tx('上移')} disabled={index === 0}
                   onClick={() => move(index, -1)}>↑</button>
-                <button type="button" className="orb-icon" title="下移"
+                <button type="button" className="orb-icon" title={tx('下移')}
                   disabled={index === draft.sections.length - 1} onClick={() => move(index, 1)}>↓</button>
-                <button type="button" className="orb-icon orb-icon-danger" title="删除这一段"
+                <button type="button" className="orb-icon orb-icon-danger" title={tx('删除这一段')}
                   onClick={() => removeSection(index)}>×</button>
               </div>
 
               <div className="orb-line">
-                <span className="orb-line-label" title="这一段要念出来的字，也是字幕内容">台词</span>
+                <span className="orb-line-label" title={tx('这一段要念出来的字，也是字幕内容')}>{tx('台词')}</span>
                 <textarea
                   className="orb-input orb-textarea"
                   rows={2}
                   value={section.text}
-                  placeholder="要念出来的字。不要写「（停顿）」「【画面：…】」——它们会被念出来。"
+                  placeholder={tx('要念出来的字。不要写「（停顿）」「【画面：…】」——它们会被念出来。')}
                   onChange={(e) => edit(index, { text: e.target.value })}
                 />
               </div>
@@ -400,25 +416,25 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
               <div className="orb-line">
                 <span
                   className="orb-line-label"
-                  title="这一段画面的主体。它是分镜页每一镜的起点——分镜没写自己的主体时，用的就是这一句。风格和镜头语言由插件分层拼上，不要写在这里。"
-                >画面</span>
+                  title={tx('这一段画面的主体。它是分镜页每一镜的起点——分镜没写自己的主体时，用的就是这一句。风格和镜头语言由插件分层拼上，不要写在这里。')}
+                >{tx('画面')}</span>
                 <textarea
                   className="orb-input orb-textarea orb-prompt"
                   rows={2}
                   value={section.prompt}
-                  placeholder="英文提示词：只写画面主体。风格、镜头、光线由插件分层拼，别写在这"
+                  placeholder={tx('英文提示词：只写画面主体。风格、镜头、光线由插件分层拼，别写在这')}
                   spellCheck={false}
                   onChange={(e) => edit(index, { prompt: e.target.value })}
                 />
               </div>
 
               <div className="orb-line">
-                <span className="orb-line-label" title="怎么念这一段，以及念完停多久">表达</span>
+                <span className="orb-line-label" title={tx('怎么念这一段，以及念完停多久')}>{tx('表达')}</span>
                 <div className="orb-row">
                   <input
                     className="orb-input"
                     value={section.deliveryNote}
-                    placeholder="选填：一句话说清怎么念，例如「铺垫，收尾放慢」"
+                    placeholder={tx('选填：一句话说清怎么念，例如「铺垫，收尾放慢」')}
                     onChange={(e) => edit(index, { deliveryNote: e.target.value })}
                   />
                   <span className="orb-seconds-wrap">
@@ -427,17 +443,17 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
                       inputMode="decimal"
                       value={section.pauseAfter}
                       placeholder="—"
-                      title="念完之后停顿几秒，覆盖风格默认值"
+                      title={tx('念完之后停顿几秒，覆盖风格默认值')}
                       onChange={(e) => edit(index, { pauseAfter: e.target.value })}
                     />
-                    <span className="orb-unit">秒停顿</span>
+                    <span className="orb-unit">{tx('秒停顿')}</span>
                   </span>
                 </div>
               </div>
 
               {hardFail ? (
                 <ul className="orb-problems">
-                  {dup ? <li>编号与其他段重复</li> : null}
+                  {dup ? <li>{tx('编号与其他段重复')}</li> : null}
                   {issues.blocking.map((problem) => <li key={problem}>{problem}</li>)}
                 </ul>
               ) : null}
@@ -456,11 +472,11 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
               {schemaIssues.slice(0, 6).map((issue) => (
                 <li key={issue.path + issue.message}>{issue.path}：{issue.message}</li>
               ))}
-              {schemaIssues.length > 6 ? <li>…还有 {schemaIssues.length - 6} 条</li> : null}
+              {schemaIssues.length > 6 ? <li>{tx('…还有 ')}{schemaIssues.length - 6}{tx(' 条')}</li> : null}
             </ul>
           ) : null}
 
-          <button type="button" className="orb-add-section" onClick={addSection}>＋ 加一段</button>
+          <button type="button" className="orb-add-section" onClick={addSection}>{tx('＋ 加一段')}</button>
         </div>
         {/* Regeneration acts on the whole script, so it sits at the card's
             bottom-right: read the draft, then decide to roll it again. */}
@@ -469,7 +485,7 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
           <button type="button" className="orb-btn orb-btn-small orb-btn-accent" disabled={phase !== null || busy}
             onClick={() => void askForScript(hasScript ? 'regenerate' : 'draft')}>
             <IconSpark className="orb-btn-icon" />
-            <BusyLabel phase={phase} idle={hasScript ? '重新生成' : '让 Agent 起草'} />
+            <BusyLabel phase={phase} idle={hasScript ? tx('重新生成') : tx('让 Agent 起草')} />
           </button>
         </div>
       </section>
@@ -478,16 +494,27 @@ export function ScriptScreen({ state, onReload, onSend, onGoToStage }: ScriptScr
         <button type="button" className="orb-cta-primary" disabled={busy || phase !== null || blocking}
           onClick={() => void submit()}>
           <IconPlay className="orb-cta-icon" />
-          {busy ? '提交中…' : approved ? '重新提交脚本' : '确认脚本，进入配音'}
+          {busy ? tx('提交中…') : approved ? tx('重新提交脚本') : tx('确认脚本，进入配音')}
         </button>
         <p className="orb-cta-hint">
           {approved
-            ? '这一版已经确认过了。再提交一次会替换脚本，配音、配图和成片都要重做。'
-            : '这一页所有段落确认后的下一步——之后才会开始配音。'}
+            ? tx('这一版已经确认过了。再提交一次会替换脚本，配音、配图和成片都要重做。')
+            : tx('这一页所有段落确认后的下一步——之后才会开始配音。')}
         </p>
         {result !== null ? (
           <p className={'orb-note ' + (result.kind === 'ok' ? 'orb-note-ok' : 'orb-note-error')}>{result.text}</p>
         ) : null}
+      </div>
+
+      {/* A long script is a long scroll, and the section you want to fix after
+          reading to the bottom is usually near the top. Only here: this is the
+          one screen whose length grows with the work. */}
+      <div className="orb-to-top">
+        <button
+          type="button"
+          className="orb-btn orb-btn-small"
+          onClick={() => top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        >↑ {tx('回到顶部')}</button>
       </div>
     </div>
   )

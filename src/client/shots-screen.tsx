@@ -29,6 +29,8 @@ import { AdvicePanel } from './advice-panel.tsx'
 import { Strip } from './strip.tsx'
 import { buildShotJob } from '../shot-job.js'
 
+import { tx } from './i18n.ts'
+
 export interface ShotsScreenProps {
   state: PluginState
   onReload: () => Promise<void>
@@ -204,6 +206,14 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
   const stage = state.stages.find((entry) => entry.stage === 'assets_shots')
   const approved = stage?.status === 'completed' && stage.human_approved
   const playbook = state.style.playbook
+  /**
+   * The frame every picture has to come back at.
+   *
+   * Resolved host-side from the platform's baseline and the render scale, and
+   * read straight off the state — the same object compose reads. The fallback
+   * is the landscape baseline, for a host too old to send it.
+   */
+  const frame = state.frame ?? { width: 1920, height: 1080, shape: tx('横屏 16:9'), scale: 1 }
   const total = state.timeline.reduce((sum, timing) => sum + timing.duration, 0)
   const done = shots.filter((shot) => shot.path !== undefined).length
 
@@ -233,7 +243,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
         lora_strength: on ? 1 : 0,
       })
       await onReload()
-      say('ok', !on || hint === '' ? '附加参数不会出现在生成请求里。' : '附加参数已记下，下次生成会带上。')
+      say('ok', !on || hint === '' ? tx('附加参数不会出现在生成请求里。') : tx('附加参数已记下，下次生成会带上。'))
     } catch (error) {
       say('error', (error as Error).message)
     } finally {
@@ -336,6 +346,11 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
     return buildShotJob({
       projectId: state.project.id,
       workflow: imageWorkflow,
+      // The frame the host resolved: platform baseline x render scale. Not
+      // recomputed here — this and compose must ask for the same pixels, and
+      // two copies of that arithmetic is how they stopped agreeing.
+      width: frame.width,
+      height: frame.height,
       negativePrompt: playbook.visual.negative_prompt,
       references,
       ...((state.project.lora_strength ?? 0) === 1 && hint !== '' ? { extraParams: hint } : {}),
@@ -358,7 +373,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
   /** Watch the manifest until the agent's pictures land. */
   async function generate(list: readonly Shot[]): Promise<void> {
     if (phase !== null || busy !== null) return
-    if (imageWorkflow === '') { say('error', '还没绑定配图工作流。去设置页的「ComfyUI 工作流绑定」里填上。'); return }
+    if (imageWorkflow === '') { say('error', tx('还没绑定配图工作流。去设置页的「ComfyUI 工作流绑定」里填上。')); return }
     if (list.length === 0) return
     setResult(null)
     setPhase('sending')
@@ -374,12 +389,12 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
           // The slots just became real; keeping the local placeholders would
           // count them twice.
           setPhase(null)
-          say('ok', '分镜回来了，逐张看一下。')
+          say('ok', tx('分镜回来了，逐张看一下。'))
           return
         }
       }
       setPhase(null)
-      say('error', '等了十分钟没等到分镜。去对话里看看 Agent 卡在哪。')
+      say('error', tx('等了十分钟没等到分镜。去对话里看看 Agent 卡在哪。'))
     } catch (error) {
       setPhase(null)
       say('error', (error as Error).message)
@@ -467,14 +482,14 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
     const sectionId = active.sectionId
     const at = sectionShots(sectionId).length
     await savePlan(sectionId, [...planFor(sectionId), { weight: 1 }],
-      '加了第 ' + (at + 1) + ' 镜到「' + active.sectionLabel + '」，这一段的时间已经重新分配。')
+      tx('加了第 ') + (at + 1) + tx(' 镜到「') + active.sectionLabel + tx('」，这一段的时间已经重新分配。'))
     setActiveKey(sectionId + '#' + at)
   }
 
   async function removeShot(): Promise<void> {
     if (active === undefined) return
     const list = sectionShots(active.sectionId)
-    if (list.length <= 1) { say('error', '每段至少要留一个分镜。'); return }
+    if (list.length <= 1) { say('error', tx('每段至少要留一个分镜。')); return }
     const sectionId = active.sectionId
     const at = active.index
     const kept = list.filter((shot) => shot.key !== active.key)
@@ -482,8 +497,8 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
     // the plan decides how many shots there are, so leaving it there would
     // bring the slot straight back on the next reload.
     await savePlan(sectionId, kept.map((shot) => ({ prompt: shot.prompt, weight: shot.weight })),
-      '删掉了「' + active.sectionLabel + '」的第 ' + (at + 1) + ' 镜')
-    if (active.path !== undefined) await writeSection(sectionId, kept, '同步资产清单')
+      tx('删掉了「') + active.sectionLabel + tx('」的第 ') + (at + 1) + tx(' 镜'))
+    if (active.path !== undefined) await writeSection(sectionId, kept, tx('同步资产清单'))
     setActiveKey(sectionId + '#' + Math.max(0, at - 1))
   }
 
@@ -496,7 +511,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
     const next = [...list]
     const [moved] = next.splice(from, 1)
     next.splice(to, 0, moved!)
-    await writeSection(active.sectionId, next, '调整了「' + active.sectionLabel + '」的分镜顺序')
+    await writeSection(active.sectionId, next, tx('调整了「') + active.sectionLabel + tx('」的分镜顺序'))
     setActiveKey(active.sectionId + '#' + to)
   }
 
@@ -520,27 +535,27 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
     if (active === undefined) return
     const list = sectionShots(active.sectionId)
     const lastIndex = list.length - 1
-    if (lastIndex <= 0) { say('error', '这一段只有一个分镜，占比固定是 1。'); return }
-    if (active.index === lastIndex) { say('error', '最后一镜的占比由前面几镜决定，改前面的。'); return }
-    if (!(value > 0 && value < 1)) { say('error', '占比要在 0 和 1 之间。'); return }
+    if (lastIndex <= 0) { say('error', tx('这一段只有一个分镜，占比固定是 1。')); return }
+    if (active.index === lastIndex) { say('error', tx('最后一镜的占比由前面几镜决定，改前面的。')); return }
+    if (!(value > 0 && value < 1)) { say('error', tx('占比要在 0 和 1 之间。')); return }
 
     const fixed = list.map((shot, index) => index === active.index ? value : shareOf(shot))
     const othersSum = fixed.reduce((sum, share, index) => index === lastIndex ? sum : sum + share, 0)
     const remainder = 1 - othersSum
     if (remainder < 0.02) {
-      say('error', '前面几镜加起来已经占满了，最后一镜没有时间可分。')
+      say('error', tx('前面几镜加起来已经占满了，最后一镜没有时间可分。'))
       return
     }
     const entries = list.map((shot, index) => ({
       prompt: shot.prompt,
       weight: index === lastIndex ? remainder : fixed[index]!,
     }))
-    await savePlan(active.sectionId, entries, '改了段落占比，最后一镜自动补齐')
+    await savePlan(active.sectionId, entries, tx('改了段落占比，最后一镜自动补齐'))
     // Generated shots also carry their weight in the manifest, which is what
     // compose reads; keep the two in step.
     if (list.some((shot) => shot.path !== undefined)) {
       await writeSection(active.sectionId,
-        list.map((shot, index) => ({ ...shot, weight: entries[index]!.weight! })), '同步资产清单')
+        list.map((shot, index) => ({ ...shot, weight: entries[index]!.weight! })), tx('同步资产清单'))
     }
   }
 
@@ -554,8 +569,8 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
   async function addReference(file: AssetFile): Promise<void> {
     setPickerOpen(false)
     setPickedUrls((previous) => new Map(previous).set(file.name, file.url))
-    if (references.includes(file.name)) { say('error', '这张参考图已经在列表里了。'); return }
-    await saveReferences([...references, file.name], '加了一张参考图：' + file.name)
+    if (references.includes(file.name)) { say('error', tx('这张参考图已经在列表里了。')); return }
+    await saveReferences([...references, file.name], tx('加了一张参考图：') + file.name)
   }
 
   /** References belong to the project, so writing one is a marker update. */
@@ -574,7 +589,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
   }
 
   async function removeReference(name: string): Promise<void> {
-    await saveReferences(references.filter((entry) => entry !== name), '去掉了一张参考图')
+    await saveReferences(references.filter((entry) => entry !== name), tx('去掉了一张参考图'))
   }
 
   /**
@@ -614,7 +629,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
     else next[field] = field === 'lens_mm' ? Number(raw) : raw
     const entries = planFor(active.sectionId).map((entry, index) =>
       index === active.index ? { ...entry, shot_language: next } : entry)
-    await savePlan(active.sectionId, entries, '镜头语言已保存')
+    await savePlan(active.sectionId, entries, tx('镜头语言已保存'))
   }
 
   /** Mark or unmark this shot as the film's visual peak. */
@@ -622,19 +637,19 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
     if (active === undefined) return
     const entries = planFor(active.sectionId).map((entry, index) =>
       index === active.index ? { ...entry, hero_moment: !isHero } : entry)
-    await savePlan(active.sectionId, entries, isHero ? '取消了高光' : '标记为高光镜')
+    await savePlan(active.sectionId, entries, isHero ? tx('取消了高光') : tx('标记为高光镜'))
   }
 
   async function savePrompt(): Promise<void> {
     if (active === undefined || draftPrompt === null) return
     const entries = planFor(active.sectionId).map((entry, index) =>
       index === active.index ? { ...entry, prompt: draftPrompt } : entry)
-    await savePlan(active.sectionId, entries, '画面提示词已保存')
+    await savePlan(active.sectionId, entries, tx('画面提示词已保存'))
     setDraftPrompt(null)
   }
 
   async function submit(): Promise<void> {
-    if (done < shots.length) { say('error', '还有 ' + (shots.length - done) + ' 个分镜没生成。'); return }
+    if (done < shots.length) { say('error', tx('还有 ') + (shots.length - done) + tx(' 个分镜没生成。')); return }
     setBusy('submit')
     setResult(null)
     try {
@@ -645,7 +660,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
         status: 'completed',
         artifacts: { asset_manifest_shots: manifest ?? { version: '1.0', assets: [] } },
         human_approved: true,
-        note: '在OpenReel 创意台确认',
+        note: tx('在OpenReel 创意台确认'),
       })
       await onReload()
       onGoToStage('compose')
@@ -668,10 +683,10 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
   return (
     <div className="orb-screen">
       <header className="orb-screen-head">
-        <h2 className="orb-screen-title">分镜</h2>
+        <h2 className="orb-screen-title">{tx('分镜')}</h2>
         <span className="orb-spacer" />
         <span className={'orb-pill ' + (approved ? 'orb-pill-ok' : '')}>
-          {approved ? '已审核' : stage?.status === 'in_progress' ? '进行中' : '待确认'}
+          {approved ? tx('已审核') : stage?.status === 'in_progress' ? tx('进行中') : tx('待确认')}
         </span>
       </header>
 
@@ -682,48 +697,40 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
       <section className="orb-card">
         <div className="orb-card-head">
           <IconImage className="orb-section-icon" />
-          <h3 className="orb-card-title">分镜生成</h3>
+          <h3 className="orb-card-title">{tx('分镜生成')}</h3>
           <span className="orb-card-meta">
-            <span><b>{done}</b>/{shots.length} 镜已生成 · 全片 {total.toFixed(1)} 秒</span>
+            {/* The frame belongs on this card: it is what the button is about
+                to ask for, and the one number whose being wrong is invisible
+                until the pictures come back the wrong shape. */}
+            <span>
+              <b>{done}</b>/{shots.length}{tx(' 镜已生成 · 全片 ')}{total.toFixed(1)}{tx(' 秒')} ·{' '}
+              <b title={tx('画幅由立项页的投放平台决定，尺寸再乘设置里的生成系数 ') + frame.scale}>
+                {frame.width}×{frame.height}
+              </b>
+            </span>
           </span>
           <span className="orb-spacer" />
           {/* Always a dropdown, even with one candidate: a read-only name looks
               like a label, and a select says "this is a choice you own" — plus
               an unbound capability shows where to fix it instead of a blank. */}
           <label className="orb-inline-pick">
-            <span className="orb-hint">工作流</span>
+            <span className="orb-hint">{tx('工作流')}</span>
             <select
               className="orb-select orb-select-small"
               value={imageWorkflow}
               disabled={phase !== null || busy !== null}
               title={imageChoices.length === 0
-                ? '设置 → OpenReel 创意台 → ComfyUI 工作流绑定 → 配图（文生图）'
+                ? tx('设置 → OpenReel 创意台 → ComfyUI 工作流绑定 → 配图（文生图）')
                 : undefined}
               onChange={(event) => setImagePick(event.target.value)}
             >
               {imageChoices.length === 0 ? (
-                <option value="">（未绑定 · 去设置页添加）</option>
+                <option value="">{tx('（未绑定 · 去设置页添加）')}</option>
               ) : imageChoices.map((name, index) => (
-                <option key={name} value={name}>{index === 0 ? name + '（默认）' : name}</option>
+                <option key={name} value={name}>{index === 0 ? name + tx('（默认）') : name}</option>
               ))}
             </select>
           </label>
-          <span className="orb-spacer" />
-          {/* The common case after a partial run: some pictures landed, one
-              failed or was added later. Regenerating the lot to fill a hole
-              costs the whole batch again, so the hole gets its own button —
-              hidden when there is no hole, since then it does nothing. */}
-          {missing.length === 0 || missing.length === shots.length ? null : (
-            <button
-              type="button"
-              className="orb-btn orb-btn-small"
-              disabled={phase !== null || busy !== null}
-              onClick={() => void generate(missing)}
-              title="只生成还没有图的那几镜，已经有的不动"
-            >
-              <BusyLabel phase={phase} idle={'生成缺失（' + missing.length + '）'} />
-            </button>
-          )}
         </div>
         <div className="orb-card-body">
           {/* One shell for both quality checks, shared with the compose screen.
@@ -731,16 +738,16 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
               checked, so a pass costs one collapsed line and a finding opens. */}
         {variation === null ? null : (
           <AdvicePanel
-            title="创作建议"
+            title={tx('创作建议')}
             onJump={jumpToShot}
             rows={[
               {
-                label: '镜头变化',
+                label: tx('镜头变化'),
                 clean: variation.violations.length === 0,
                 summary: variation.violations.length === 0
-                  ? '通过'
-                  : variation.score.toFixed(1) + ' / 5 · ' + variation.violations.length + ' 条',
-                hint: shotSizeCount + ' 种镜别 · ' + lightingCount + ' 种光线',
+                  ? tx('通过')
+                  : variation.score.toFixed(1) + ' / 5 · ' + variation.violations.length + tx(' 条'),
+                hint: shotSizeCount + tx(' 种镜别 · ') + lightingCount + tx(' 种光线'),
                 ...(variation.verdict === 'revise' || variation.verdict === 'fail'
                   ? { severity: variation.verdict } : {}),
                 details: [
@@ -751,9 +758,9 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                 ],
               },
               {
-                label: '镜头节奏',
+                label: tx('镜头节奏'),
                 clean: pacing.length === 0,
-                summary: pacing.length === 0 ? '通过' : (paceHint ?? '偏慢'),
+                summary: pacing.length === 0 ? tx('通过') : (paceHint ?? tx('偏慢')),
                 ...(paceHint === undefined ? {} : { hint: paceHint }),
               },
             ]}
@@ -768,24 +775,24 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
               <div className="orb-shot-side">
                 <div className="orb-shot-image">
                   {imageSrc === undefined
-                    ? <div className="orb-shot-empty">这一镜还没生成</div>
+                    ? <div className="orb-shot-empty">{tx('这一镜还没生成')}</div>
                     : <img src={imageSrc} alt={active.sectionLabel} />}
                 </div>
 
                 <div className="orb-shot-head">
                   <span className="orb-shot-where">
-                    {active.sectionLabel} · 第 {active.index + 1} 镜 / {sectionShots(active.sectionId).length}
+                    {active.sectionLabel}{tx(' · 第 ')}{active.index + 1}{tx(' 镜 / ')}{sectionShots(active.sectionId).length}
                   </span>
-                  <span className="orb-hint">{active.duration.toFixed(1)} 秒</span>
+                  <span className="orb-hint">{active.duration.toFixed(1)}{tx(' 秒')}</span>
                 </div>
 
                 {/* Prose, not a field. The narration is the one thing here
                     nobody edits — it is context for the four decisions below, and
                     a titled block gave it the same weight as the things that are
                     actually being chosen. */}
-                <p className="orb-shot-text" title="这一段要念出来的字，分镜跟着它走">
-                  <span className="orb-shot-text-label">台词：</span>
-                  {active.text || '（这一段没有台词）'}
+                <p className="orb-shot-text" title={tx('这一段要念出来的字，分镜跟着它走')}>
+                  <span className="orb-shot-text-label">{tx('台词：')}</span>
+                  {active.text || tx('（这一段没有台词）')}
                 </p>
               </div>
 
@@ -793,13 +800,13 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                 <div className="orb-shot-block">
                   <span
                     className="orb-shot-block-title"
-                    title="这一镜拍什么，只写主体。相机 / 镜头 / 光线 / 风格由下面的镜头语言和 playbook 分层拼上——「最终提示词」就是拼好的结果。"
-                  >画面提示词</span>
+                    title={tx('这一镜拍什么，只写主体。相机 / 镜头 / 光线 / 风格由下面的镜头语言和 playbook 分层拼上——「最终提示词」就是拼好的结果。')}
+                  >{tx('画面提示词')}</span>
                   <textarea
                     className="orb-input orb-textarea"
                     rows={3}
                     value={prompt}
-                    placeholder="英文提示词：只写画面主体"
+                    placeholder={tx('英文提示词：只写画面主体')}
                     spellCheck={false}
                     disabled={busy !== null}
                     onChange={(event) => setDraftPrompt(event.target.value)}
@@ -807,8 +814,8 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                 </div>
 
                 <div className="orb-shot-block orb-shot-block-lang">
-                  <span className="orb-shot-block-title" title="这四层逐镜变化，是让十张图真的不一样的地方">
-                    镜头语言
+                  <span className="orb-shot-block-title" title={tx('这四层逐镜变化，是让十张图真的不一样的地方')}>
+                    {tx('镜头语言')}
                   </span>
                   <div className="orb-lang-grid">
                     {SHOT_LANGUAGE_FIELDS.map((field) => {
@@ -816,7 +823,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                       const inherited = styleDefaults[field.key]
                       return (
                         <label className="orb-lang-cell" key={field.key}>
-                          <span className="orb-lang-name" title={field.hint}>{field.label}</span>
+                          <span className="orb-lang-name" title={tx(field.hint)}>{tx(field.label)}</span>
                           <select
                             className={'orb-select orb-lang-select'
                               + (own === undefined && inherited !== undefined ? ' orb-select-inherited' : '')}
@@ -829,12 +836,12 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                                 style decides — worth saying out loud. */}
                             <option value="">
                               {inherited === undefined
-                                ? '不指定'
-                                : '跟风格（' + (field.options.find((o) => o.id === String(inherited))?.label
+                                ? tx('不指定')
+                                : tx('跟风格（') + (field.options.find((o) => o.id === String(inherited))?.label
                                   ?? String(inherited)) + '）'}
                             </option>
                             {field.options.map((option) => (
-                              <option key={option.id} value={option.id}>{option.label}</option>
+                              <option key={option.id} value={option.id}>{tx(option.label)}</option>
                             ))}
                           </select>
                         </label>
@@ -845,16 +852,16 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
 
                 {builtPrompt === undefined ? null : (
                   <div className="orb-shot-block">
-                    <span className="orb-shot-block-title" title="插件拼好的整条，生成时原样使用">
-                      最终提示词
+                    <span className="orb-shot-block-title" title={tx('插件拼好的整条，生成时原样使用')}>
+                      {tx('最终提示词')}
                     </span>
                     <div className="orb-built">
                       {builtPrompt.layers.map((entry) => (
                         <span
                           key={entry.layer}
                           className={'orb-built-layer' + (entry.fromDefaults ? ' orb-built-inherited' : '')}
-                          title={'第 ' + entry.layer + ' 层 · ' + entry.name
-                            + (entry.fromDefaults ? '（来自风格默认）' : '')}
+                          title={tx('第 ') + entry.layer + tx(' 层 · ') + entry.name
+                            + (entry.fromDefaults ? tx('（来自风格默认）') : '')}
                         >{entry.text}</span>
                       ))}
                     </div>
@@ -867,10 +874,10 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                 above the timeline they act on. */}
             <div className="orb-shot-tools">
               <label className="orb-inline-pick">
-                <span className="orb-hint">段落占比</span>
+                <span className="orb-hint">{tx('段落占比')}</span>
                 {isLastShot ? (
-                  <span className="orb-derived" title="最后一镜自动补齐剩下的时间，改前面几镜即可">
-                    {shareOf(active).toFixed(2)}　自动
+                  <span className="orb-derived" title={tx('最后一镜自动补齐剩下的时间，改前面几镜即可')}>
+                    {shareOf(active).toFixed(2)}　{tx('自动')}
                   </span>
                 ) : (
                   <input
@@ -879,7 +886,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                     inputMode="decimal"
                     defaultValue={shareOf(active).toFixed(2)}
                     disabled={busy !== null}
-                    title="这一镜占本段时间的比例，0 到 1 之间。两镜均分就是 0.5，最后一镜自动补齐。"
+                    title={tx('这一镜占本段时间的比例，0 到 1 之间。两镜均分就是 0.5，最后一镜自动补齐。')}
                     onBlur={(event) => {
                       const value = Number(event.target.value)
                       if (Number.isFinite(value) && Math.abs(value - shareOf(active)) > 0.005) void setShare(value)
@@ -888,28 +895,28 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                 )}
               </label>
               <button type="button" className="orb-btn orb-btn-small" disabled={busy !== null}
-                onClick={() => void move(-1)} title="在本段内前移">←</button>
+                onClick={() => void move(-1)} title={tx('在本段内前移')}>←</button>
               <button
                 type="button"
                 className={'orb-btn orb-btn-small' + (isHero ? ' orb-btn-hero' : '')}
                 disabled={busy !== null}
                 onClick={() => void toggleHero()}
-                title="全片的画面顶点。标了之后前后两镜的镜别要和它不一样，否则顶不起来。"
-              >{isHero ? '★ 高光' : '☆ 高光'}</button>
+                title={tx('全片的画面顶点。标了之后前后两镜的镜别要和它不一样，否则顶不起来。')}
+              >{isHero ? tx('★ 高光') : tx('☆ 高光')}</button>
               <button type="button" className="orb-btn orb-btn-small" disabled={busy !== null}
-                onClick={() => void move(1)} title="在本段内后移">→</button>
+                onClick={() => void move(1)} title={tx('在本段内后移')}>→</button>
               <button type="button" className="orb-btn orb-btn-small" disabled={busy !== null}
-                onClick={() => void addShot()} title="给这一段再加一镜，时长从本段切分">添加</button>
+                onClick={() => void addShot()} title={tx('给这一段再加一镜，时长从本段切分')}>{tx('添加')}</button>
               <button type="button" className="orb-btn orb-btn-small orb-btn-quiet-danger" disabled={busy !== null}
-                onClick={() => void removeShot()}>删除</button>
+                onClick={() => void removeShot()}>{tx('删除')}</button>
               {draftPrompt !== null ? (
                 <button type="button" className="orb-btn orb-btn-small" disabled={busy !== null}
-                  onClick={() => void savePrompt()}>保存提示词</button>
+                  onClick={() => void savePrompt()}>{tx('保存提示词')}</button>
               ) : null}
             </div>
           </>
         ) : (
-          <p className="orb-note">脚本还没有段落，先回上一步。</p>
+          <p className="orb-note">{tx('脚本还没有段落，先回上一步。')}</p>
         )}
 
         {/* Same film body as the timeline: this is the same object seen
@@ -918,7 +925,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
         <div className="orb-film">
           <div className="orb-film-perf" aria-hidden="true" />
           <div className="orb-film-body">
-        <Strip ariaLabel="分镜序列">
+        <Strip ariaLabel={tx('分镜序列')}>
             {state.timeline.map((timing) => (
               <div className="orb-shot-group" key={timing.sectionId} style={{ width: widthOf(timing.duration) }}>
                 <div className="orb-shot-group-label" title={timing.sectionId}>
@@ -942,8 +949,8 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                         className={classes.join(' ')}
                         style={{ flexGrow: shot.weight }}
                         title={wide
-                          ? shot.duration.toFixed(1) + ' 秒，比风格建议的 ' + playbook.pacing.maxSectionSeconds + ' 秒长，考虑再切一镜'
-                          : shot.duration.toFixed(1) + ' 秒'}
+                          ? shot.duration.toFixed(1) + tx(' 秒，比风格建议的 ') + playbook.pacing.maxSectionSeconds + tx(' 秒长，考虑再切一镜')
+                          : shot.duration.toFixed(1) + tx(' 秒')}
                         onClick={() => setActiveKey(shot.key)}
                       >
                         {src === undefined
@@ -964,14 +971,31 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
         {active !== undefined ? (
           <div className="orb-shot-foot">
             <span className="orb-spacer" />
+            {/* The common case after a partial run: some pictures landed, one
+                failed or was added later. Regenerating the lot to fill a hole
+                costs the whole batch again, so the hole gets its own button —
+                next to 全部生成, because that is the button you reach for when
+                you notice the hole. Hidden when there is no hole, and when
+                nothing has been generated at all, since it is 全部生成 then. */}
+            {missing.length === 0 || missing.length === shots.length ? null : (
+              <button
+                type="button"
+                className="orb-btn orb-btn-small"
+                disabled={phase !== null || busy !== null}
+                onClick={() => void generate(missing)}
+                title={tx('只生成还没有图的那几镜，已经有的不动')}
+              >
+                <BusyLabel phase={phase} idle={tx('生成剩余（') + missing.length + '）'} />
+              </button>
+            )}
             <button
               type="button"
               className="orb-btn orb-btn-small orb-btn-accent"
               disabled={phase !== null || busy !== null || shots.length === 0}
               onClick={() => void generate(shots)}
-              title="整批重新生成，已有图会被替换"
+              title={tx('整批重新生成，已有图会被替换')}
             >
-              <BusyLabel phase={phase} idle="全部生成" />
+              <BusyLabel phase={phase} idle={tx('全部生成')} />
             </button>
             <button
               type="button"
@@ -979,7 +1003,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
               disabled={phase !== null || busy !== null}
               onClick={() => void generate([active])}
             >
-              {phase === null ? (active.path === undefined ? '生成这一镜' : '重新生成') : <BusyLabel phase={phase} idle="" />}
+              {phase === null ? (active.path === undefined ? tx('生成这一镜') : tx('重新生成')) : <BusyLabel phase={phase} idle="" />}
             </button>
           </div>
         ) : null}
@@ -988,20 +1012,20 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
       <section className="orb-card">
         <div className="orb-card-head">
           <IconSliders className="orb-section-icon" />
-          <h3 className="orb-card-title">生成参数与参考图</h3>
-          <span className="orb-card-meta"><span>参考图 <b>{references.length}</b> 张</span></span>
+          <h3 className="orb-card-title">{tx('生成参数与参考图')}</h3>
+          <span className="orb-card-meta"><span>{tx('参考图')} <b>{references.length}</b> {tx('张')}</span></span>
         </div>
         <div className="orb-card-body">
           <div className="orb-duo-split">
             <div className="orb-duo-col">
-              <div className="orb-col-head"><b>生成参数</b></div>
+              <div className="orb-col-head"><b>{tx('生成参数')}</b></div>
               <div className="orb-row orb-row-tight">
                 <input
                   type="checkbox"
                   className="orb-check-box"
                   checked={loraOn}
                   disabled={busy !== null}
-                  title={loraOn ? '这行会附在生成请求里' : '勾选后这行才会附在生成请求里'}
+                  title={loraOn ? tx('这行会附在生成请求里') : tx('勾选后这行才会附在生成请求里')}
                   onChange={(event) => {
                     setLoraOn(event.target.checked)
                     void saveLora({ on: event.target.checked })
@@ -1010,7 +1034,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                 <input
                   className="orb-input"
                   value={loraHint}
-                  placeholder="例如：LoRA 强度 0.8　/　综合强度 0.5-0.8-0.4"
+                  placeholder={tx('例如：LoRA 强度 0.8　/　综合强度 0.5-0.8-0.4')}
                   spellCheck={false}
                   disabled={busy !== null}
                   onChange={(event) => setLoraHint(event.target.value)}
@@ -1021,11 +1045,11 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                   }}
                 />
               </div>
-              <p className="orb-hint">填入要加载的 LoRA 和对应的强度，发送给 Agent 自行理解。</p>
+              <p className="orb-hint">{tx('填入要加载的 LoRA 和对应的强度，发送给 Agent 自行理解。')}</p>
             </div>
 
             <div className="orb-duo-col">
-              <div className="orb-col-head"><b>参考图</b></div>
+              <div className="orb-col-head"><b>{tx('参考图')}</b></div>
 
               {/* Slots, like the ComfyUI panel's load area: position matters,
                   because a workflow's loaders take them in order. */}
@@ -1038,7 +1062,7 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                     <button
                       type="button"
                       className="orb-slot-x"
-                      aria-label="移除这一槽"
+                      aria-label={tx('移除这一槽')}
                       disabled={busy !== null}
                       onClick={() => void removeReference(name)}
                     >×</button>
@@ -1048,14 +1072,14 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
                   type="button"
                   className="orb-slot orb-slot-empty"
                   disabled={busy !== null}
-                  title="从 ComfyUI 的素材里指定一张；浏览器里也可以上传新的"
+                  title={tx('从 ComfyUI 的素材里指定一张；浏览器里也可以上传新的')}
                   onClick={() => setPickerOpen(true)}
                 >
                   <span className="orb-slot-index">{references.length + 1}</span>
-                  <span className="orb-slot-add">指定参考图</span>
+                  <span className="orb-slot-add">{tx('指定参考图')}</span>
                 </button>
               </div>
-              <p className="orb-hint">指定 ComfyUI 中的参考图，以用于多图风格参考。</p>
+              <p className="orb-hint">{tx('指定 ComfyUI 中的参考图，以用于多图风格参考。')}</p>
             </div>
           </div>
         </div>
@@ -1067,20 +1091,20 @@ export function ShotsScreen({ state, onReload, onSend, onGoToStage }: ShotsScree
           type="button"
           className="orb-cta-primary"
           disabled={busy !== null || phase !== null || done < shots.length}
-          title={done < shots.length ? '还差 ' + (shots.length - done) + ' 镜没生成' : undefined}
+          title={done < shots.length ? tx('还差 ') + (shots.length - done) + tx(' 镜没生成') : undefined}
           onClick={() => void submit()}
         >
           <IconPlay className="orb-cta-icon" />
           {busy === 'submit'
-            ? '提交中…'
+            ? tx('提交中…')
             : done < shots.length
-              ? '还差 ' + (shots.length - done) + ' 镜'
-              : approved ? '重新提交分镜' : '确认分镜，进入成片'}
+              ? tx('还差 ') + (shots.length - done) + tx(' 镜')
+              : approved ? tx('重新提交分镜') : tx('确认分镜，进入成片')}
         </button>
         <p className="orb-cta-hint">
           {approved
-            ? '这一版已经确认过了。再提交一次会替换分镜，成片要重做。'
-            : '这一页所有分镜确认后的下一步——之后才会开始合成。'}
+            ? tx('这一版已经确认过了。再提交一次会替换分镜，成片要重做。')
+            : tx('这一页所有分镜确认后的下一步——之后才会开始合成。')}
         </p>
       </div>
 

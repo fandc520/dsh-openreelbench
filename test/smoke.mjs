@@ -383,12 +383,18 @@ async function callRoute(routes, path, url, options) {
   return response
 }
 
+/** The default film language, for every request fixture that does not vary it. */
+const { CONTENT_LANGUAGES: FIXTURE_LANGS } = await import('../lib/content-language.js')
+const ZH_CONTENT = FIXTURE_LANGS[0]
+
 async function main() {
   await fs.rm(WS, { recursive: true, force: true })
 
   const config = Config({
     workspaceRoot: WS,
-    video: { width: 640, height: 360, fps: 24, preset: 'ultrafast' },
+    // A third of the landscape baseline: 640x360, the size these renders
+    // used to name outright. The pixels are the platform's now.
+    video: { renderScale: 1 / 3, fps: 24, preset: 'ultrafast' },
   })
   const { playbook } = resolvePlaybook(config.defaultStyle, config.playbooks)
   const machine = new StateMachine({
@@ -835,20 +841,235 @@ async function main() {
     } else bad('view inject', 'conversation.view registered no inject factory')
 
     // The settings form is a hand-written table, not generated from the schema,
-    // so a binding added to config.ts can silently never reach the UI. It did:
-    // voice_design and voice_query shipped invisible. This is the guard.
+    // so the two halves of one contract drift silently in BOTH directions:
+    // a field added to config.ts never reaches the UI (voice_design and
+    // voice_query shipped invisible), and a control left behind after its
+    // field is removed goes on writing a key nothing reads (成片宽/高 outlived
+    // the resolution settings by a whole release). So both are checked.
     const fieldsSource = readFileSync('src/client/fields.ts', 'utf-8')
     const entryConfig = Config({})
-    const missing = Object.keys(entryConfig.bindings).filter(
-      (key) => !fieldsSource.includes("'bindings', '" + key + "', 'workflows'"),
-    )
-    if (missing.length === 0) {
-      ok('every config binding has a settings field (' + Object.keys(entryConfig.bindings).join(', ') + ')')
-    } else {
-      bad('settings coverage', 'these bindings have no field: ' + missing.join(', '))
+    const declared = [...fieldsSource.matchAll(/path:\s*\[([^\]]*)\]/g)]
+      .map((match) => [...match[1].matchAll(/'([^']+)'/g)].map((inner) => inner[1]))
+
+    // Deliberately NOT on the card, each for a stated reason. Anything else
+    // missing is an oversight, which is the whole point of naming these.
+    const offCard = new Map([
+      ['video.codec', '编码器：换错了合成直接失败，属于装机时改一次的东西'],
+      ['subtitleFont', '烧录字体：装不上时 libass 会静默换字体，不是一个能在面板上验证的选择'],
+    ])
+
+    const reach = (path) => path.reduce(
+      (node, key) => (node === undefined || node === null ? undefined : node[key]), entryConfig)
+    const dangling = declared.filter((path) => reach(path) === undefined)
+    if (dangling.length === 0) ok('every settings control points at a field the schema still has')
+    else bad('dangling control', dangling.map((path) => path.join('.')).join(', ') + ' is gone from config.ts')
+
+    // Number controls default to the `numeric` keypad, which has no decimal
+    // separator on it. 生成系数 is the one field here whose whole range is
+    // fractional, so it has to opt in -- and the parser refuses a fraction in
+    // any field that did not.
+    const scaleSpec = fieldsSource.slice(
+      fieldsSource.indexOf("path: ['video', 'renderScale']"),
+      fieldsSource.indexOf('},', fieldsSource.indexOf("path: ['video', 'renderScale']")))
+    const settingsSource = readFileSync('src/client/settings.tsx', 'utf-8')
+    if (/decimal:\s*true/.test(scaleSpec)
+      && /spec\.decimal === true \? 'decimal'/.test(settingsSource)
+      && /spec\.decimal !== true && !Number\.isInteger/.test(settingsSource))
+      ok('生成系数 takes fractions, and the whole-number fields still refuse them')
+    else bad('scale is integer-only', 'renderScale: ' + scaleSpec.replace(/\s+/g, ' ').slice(0, 120))
+
+    const leaves = []
+    const walk = (node, path) => {
+      for (const [key, value] of Object.entries(node)) {
+        const next = [...path, key]
+        if (value !== null && typeof value === 'object' && !Array.isArray(value) && next.length < 2) {
+          walk(value, next)
+        } else leaves.push(next.join('.'))
+      }
     }
+    walk(entryConfig, [])
+    const covered = new Set(declared.map((path) => path.join('.')))
+    const uncovered = leaves.filter((leaf) =>
+      !offCard.has(leaf) && ![...covered].some((path) => path === leaf || path.startsWith(leaf + '.')))
+    if (uncovered.length === 0)
+      ok('every config field has a settings control or a stated reason not to (' + leaves.length + ' fields)')
+    else bad('settings coverage', 'no control and no exemption: ' + uncovered.join(', '))
 
     delete globalThis.window
+  }
+
+  console.log('\n== 中英双语 ==')
+  {
+    const readI18n = (await import('node:fs')).readFileSync
+    const listI18n = (await import('node:fs')).readdirSync
+
+    // THE guard this whole feature rests on. The dictionary is keyed by the
+    // Chinese source string, so editing a label in a screen orphans its
+    // translation silently -- the panel just shows Chinese inside an English
+    // UI, which reads as a missing feature rather than a missing entry. So
+    // every literal the screens hand to tx() is checked against the dictionary.
+    const dict = readI18n('src/i18n-en.ts', 'utf-8')
+    const known = new Set([...dict.matchAll(/^  '((?:[^'\\]|\\.)*)':/gm)].map((m) => m[1]))
+
+    const zhChar = /[一-鿿]/
+    const untranslated = []
+    const unwrapped = []
+    // Constant tables are the exception: they run once at import, while the
+    // language store is still on its default, so they keep their Chinese and
+    // are translated where they are displayed.
+    const TABLES = new Set(['fields.ts', 'api.ts', 'busy.tsx'])
+    for (const file of listI18n('src/client')) {
+      if (!/\.tsx?$/.test(file) || file.startsWith('i18n')) continue
+      let src = readI18n('src/client/' + file, 'utf-8')
+      // Comments are prose, not UI: this codebase explains itself in Chinese.
+      src = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '')
+      for (const m of src.matchAll(/tx\('((?:[^'\\]|\\.)*)'\)/g)) {
+        if (zhChar.test(m[1]) && !known.has(m[1])) untranslated.push(file + ': ' + m[1])
+      }
+      if (TABLES.has(file)) continue
+      for (const m of src.matchAll(/(?<!tx\()'((?:[^'\\\n]|\\.)*)'/g)) {
+        if (zhChar.test(m[1])) unwrapped.push(file + ': ' + m[1])
+      }
+    }
+
+    if (untranslated.length === 0)
+      ok('every translated literal has a dictionary entry (' + known.size + ' entries)')
+    else bad('untranslated', untranslated.length + ' missing, e.g. ' + untranslated.slice(0, 3).join(' | '))
+
+    if (unwrapped.length === 0) ok('no screen literal escapes tx()')
+    else bad('bare literal', unwrapped.length + ' unwrapped, e.g. ' + unwrapped.slice(0, 3).join(' | '))
+
+    // The hole the first version had. It scanned string LITERALS, so a JSX text
+    // node spanning lines -- `<p>\n  以下段落时长为<b>…</b>，最终由…\n</p>` -- was
+    // invisible to it, and 34 of them shipped as Chinese inside an English
+    // panel. This scans the rendered text instead: any Chinese left on a line
+    // after the translated calls are blanked out is a leak, wherever it sits.
+    const leaks = []
+    for (const file of listI18n('src/client')) {
+      if (!/\.tsx?$/.test(file) || file.startsWith('i18n') || TABLES.has(file)) continue
+      const src = readI18n('src/client/' + file, 'utf-8')
+        .replace(/\/\*[\s\S]*?\*\//g, (m) => '\n'.repeat((m.match(/\n/g) ?? []).length))
+        .replace(/^[ \t]*\/\/.*$/gm, '')
+        .replace(/tx\('((?:[^'\\]|\\.)*)'\)/g, 'tx(_)')
+      src.split('\n').forEach((line, i) => {
+        if (zhChar.test(line)) leaks.push(file + ':' + (i + 1))
+      })
+    }
+    if (leaks.length === 0) ok('no Chinese reaches the screen outside tx(), multi-line JSX included')
+    else bad('untranslated JSX', leaks.length + ' line(s), e.g. ' + leaks.slice(0, 4).join(', '))
+
+    // THE OTHER HALF. Half the prose the panel shows is authored by the HOST --
+    // stage labels, style names, and the advice lines the scoring code
+    // assembles out of a number and a phrase. The browser receives a finished
+    // sentence that never existed as a source string, which is why the host
+    // translates those in place and the constant tables are wrapped at the
+    // render site. Both sets are checked against the same dictionary.
+    const hostNeeds = new Set()
+    for (const file of ['slideshow.ts', 'variation.ts']) {
+      const src = readI18n('src/' + file, 'utf-8')
+      for (const m of src.matchAll(/\bt\('((?:[^'\\]|\\.)*)'\)/g)) {
+        if (zhChar.test(m[1])) hostNeeds.add(m[1])
+      }
+    }
+    for (const [file, keys] of [
+      ['pipelines.ts', ['name', 'description', 'best_for', 'label', 'hint']],
+      ['playbooks.ts', ['name', 'best_for', 'mood']],
+    ]) {
+      const src = readI18n('src/' + file, 'utf-8')
+      for (const key of keys) {
+        for (const m of src.matchAll(new RegExp(key + ":\\s*'((?:[^'\\\\]|\\\\.)*)'", 'g'))) {
+          if (zhChar.test(m[1])) hostNeeds.add(m[1])
+        }
+      }
+    }
+    const hostMissing = [...hostNeeds].filter((key) => !known.has(key))
+    if (hostMissing.length === 0)
+      ok('every host string the panel shows has a dictionary entry (' + hostNeeds.size + ')')
+    else bad('host untranslated', hostMissing.length + ' missing, e.g. ' + hostMissing.slice(0, 3).join(' | '))
+
+    // A duplicate key is a silently dropped translation: the later entry wins
+    // and the earlier one is simply gone, with no error anywhere.
+    const seenKeys = new Set()
+    const dupes = []
+    for (const m of dict.matchAll(/^ {2}'((?:[^'\\]|\\.)*)':/gm)) {
+      if (seenKeys.has(m[1])) dupes.push(m[1])
+      else seenKeys.add(m[1])
+    }
+    if (dupes.length === 0) ok('no dictionary key is defined twice')
+    else bad('duplicate key', dupes.slice(0, 3).join(' | '))
+
+    // A translation at MODULE SCOPE is frozen: it runs once, at import, while
+    // the language store is still on its default, and then never again. It
+    // looks like working code and shows the wrong language forever -- the
+    // welcome screen's placeholder shipped exactly that way.
+    //
+    // Checked across EVERY file, not the three that happened to hold constant
+    // tables when this was written. That list is precisely why the placeholder
+    // got through: it lived in a file nobody had thought to name.
+    const atModuleScope = []
+    for (const dir of ['src', 'src/client']) {
+      for (const file of listI18n(dir)) {
+        if (!/\.tsx?$/.test(file) || file.startsWith('i18n')) continue
+        const src = readI18n(dir + '/' + file, 'utf-8')
+          .replace(/\/\*[\s\S]*?\*\//g, (m) => '\n'.repeat((m.match(/\n/g) ?? []).length))
+          .replace(/^[ \t]*\/\/.*$/gm, '')
+        let depth = 0
+        src.split('\n').forEach((line, i) => {
+          const opens = (line.split('{').length - 1) + (line.split('(').length - 1)
+          const closes = (line.split('}').length - 1) + (line.split(')').length - 1)
+          if (depth === 0 && /\b(?:tx|t)\('/.test(line)
+            && !/^\s*(export\s+)?(async\s+)?function\b/.test(line)) {
+            atModuleScope.push(dir + '/' + file + ':' + (i + 1))
+          }
+          depth = Math.max(0, depth + opens - closes)
+        })
+      }
+    }
+    if (atModuleScope.length === 0)
+      ok('no translation runs at module scope, where it would freeze on the default language')
+    else bad('frozen translation', atModuleScope.join(', '))
+
+    // The panel language also decides what gets WRITTEN, which is a different
+    // question from what language the skills are written in.
+    const { resolveContentLanguage, narrationBudget, contentLanguageLine, CONTENT_LANGUAGES } =
+      await import('../lib/content-language.js')
+    const enLang = resolveContentLanguage(undefined, 'en')
+    if (enLang.id === 'en') ok('a project with no language of its own follows the panel')
+    else bad('content language default', JSON.stringify(enLang))
+
+    if (resolveContentLanguage('ja', 'en').id === 'ja')
+      ok("and the project's own choice wins over the panel")
+    else bad('content language override', 'the project override did not win')
+
+    if (resolveContentLanguage('klingon', undefined).id === 'zh')
+      ok('an unknown language falls back rather than throwing')
+    else bad('content language fallback', 'threw, or resolved to something else')
+
+    // The budget is the whole reason the languages are a table. 45s at the
+    // playbook's 4.9 chars/second is 221 Chinese characters; 45s of English is
+    // ~108 words. Handing an English script "221 字" is four times the film.
+    const zhBudget = narrationBudget(CONTENT_LANGUAGES[0], 45, 4.9)
+    const enBudget = narrationBudget(enLang, 45, 4.9)
+    if (zhBudget.amount === 221 && zhBudget.unit.trim() === '字'
+      && enBudget.amount === 108 && enBudget.unit.trim() === 'words')
+      ok('the narration budget is counted in the unit its language uses')
+    else bad('budget unit', JSON.stringify([zhBudget, enBudget]))
+
+    // Silent for Chinese: the skills already assume it, and a line saying so
+    // on every request is noise the model has to read past.
+    if (contentLanguageLine(CONTENT_LANGUAGES[0]) === '' && contentLanguageLine(enLang).includes('English'))
+      ok('the language line appears only when it changes something')
+    else bad('language line', JSON.stringify(contentLanguageLine(CONTENT_LANGUAGES[0])))
+
+    // The director skills are NOT translated. They instruct the model; what
+    // they ask FOR travels as data. Translating them would be a rewrite of
+    // tuned prose, and every stage's behaviour would need re-verifying.
+    const { buildStageSkills: buildLangSkills } = await import('../lib/stage-skills.js')
+    const { Config: LangConfig } = await import('../lib/config.js')
+    const sheets = buildLangSkills(LangConfig({ language: 'en', bindings: {} }))
+    if (sheets.length > 0 && sheets.every((sheet) => zhChar.test(sheet.content)))
+      ok('an English panel still instructs the model in Chinese')
+    else bad('skill translated', 'a stage sheet lost its Chinese when the panel went English')
   }
 
   // Last on purpose: the route block ends with a panel submit to `brief`,
@@ -909,6 +1130,7 @@ async function main() {
         text: buildScriptJob({
           projectId: 'p', title: 't', durationSeconds: 30,
           charsPerSecond: 4.9, style: 'clean-tech', rewrite: false,
+          language: ZH_CONTENT,
         }),
         skills: ['dsh-openreelbench-stage-script', 'dsh-openreelbench-storytelling'],
       },
@@ -953,7 +1175,7 @@ async function main() {
     const host = fakeHost()
     applyRender(host.ctx, RenderConfig({
       workspaceRoot: WS,
-      video: { width: 480, height: 270, fps: 12, preset: 'ultrafast' },
+      video: { renderScale: 0.25, fps: 12, preset: 'ultrafast' },
     }))
     const routes = host.routes
 
@@ -1047,13 +1269,16 @@ async function main() {
       const report = await machine.readArtifact(layout, 'render_report')
       if (report?.outputs?.[0]?.path !== undefined) ok('and the stored report names the file it made')
       else bad('no report', JSON.stringify(report))
-      // 1920x1080 rather than the 480x270 in this host's config, because the
-      // brief declares bilibili and a named platform decides the frame. That is
-      // the tool's rule, and seeing it here is how we know the route runs the
-      // same resolution rather than a second copy of it.
-      if (report?.outputs?.[0]?.resolution === '1920x1080')
+      // The LANDSCAPE baseline scaled by this host's renderScale, because the
+      // brief declares bilibili and a named platform decides the shape. Written
+      // as the same arithmetic the host does rather than as a literal: a
+      // hardcoded pair here would only prove that two constants match.
+      const { resolveVideoProfile: resolveFrame } = await import('../lib/media-profile.js')
+      const expectFrame = resolveFrame('bilibili', 0.25, 12)
+      if (report?.outputs?.[0]?.resolution === expectFrame.width + 'x' + expectFrame.height)
         ok('the platform on the brief decides the frame, on this path too')
-      else bad('frame', JSON.stringify(report?.outputs?.[0]?.resolution))
+      else bad('frame', JSON.stringify(report?.outputs?.[0]?.resolution)
+        + ' expected ' + expectFrame.width + 'x' + expectFrame.height)
       const said = done.result?.warnings?.some((line) => line.includes('target_platform'))
       if (said === true) ok('and the render says which frame it used rather than leaving it silent')
       else bad('frame not reported', JSON.stringify(done.result?.warnings))
@@ -1138,6 +1363,28 @@ async function main() {
     // route could not carry.
     if (screen.includes('cut: cut.id')) ok('and it sends the selected version with it')
     else bad('cut not sent', 'the panel renders the plan whatever is selected')
+    // A workflow picker must DERIVE its effective value from the binding, not
+    // seed a state variable from the project once at mount. The seeded shape is
+    // what kept 添加音乐 permanently dark: a project with no stored workflow
+    // seeded '', a binding added in settings afterwards never reached it, and
+    // the select showed its first option while the state still said empty --
+    // so re-picking that option fired no change and nothing could light it.
+    if (!screen.includes('useState(state.project.music?.workflow')
+      && screen.includes('musicOptions[0]'))
+      ok('the music workflow falls back to the binding instead of a stale seed')
+    else bad('seeded workflow', 'adding a binding in settings leaves 添加音乐 disabled')
+
+    // Batching pads is ONE write. A loop over the per-section save would have
+    // each call rebuild the cut from the copy it started with, so the last to
+    // land would take the others with it.
+    const batchFrom = screen.indexOf("async function applyPadToAll(edge: 'lead' | 'tail')")
+    const batchBody = batchFrom === -1
+      ? ''
+      : screen.slice(batchFrom, screen.indexOf(String.fromCharCode(10) + '  }', batchFrom))
+    if (batchBody.includes('editAllSections(') && !batchBody.includes('editSection('))
+      ok('批量修改 saves the whole cut once rather than once per section')
+    else bad('batch pad', 'the batch button writes per section')
+
     // The tool keeps its place: a fully automatic run has no button to press.
     const toolSource = (await import('node:fs')).readFileSync('src/tools.ts', 'utf-8')
     if (toolSource.includes("name: 'openreel_compose'") && toolSource.includes('composeProject(runtime'))
@@ -1155,7 +1402,8 @@ async function main() {
 
     const expected = ['/openreel/catalog', '/openreel/state', '/openreel/media', '/openreel/library',
       '/openreel/project', '/openreel/project/remove', '/openreel/trash', '/openreel/trash/restore',
-      '/openreel/trash/purge', '/openreel/import', '/openreel/asset/trim', '/openreel/validate', '/openreel/stage',
+      '/openreel/trash/purge', '/openreel/import', '/openreel/asset/trim', '/openreel/asset/restore',
+      '/openreel/validate', '/openreel/stage',
       '/openreel/compose', '/openreel/skill']
     const mounted = expected.filter((path) => routes.has(path))
     if (mounted.length === expected.length) ok(expected.length + ' routes mounted')
@@ -1952,11 +2200,67 @@ async function main() {
         ok('trim shortens the file in place (' + before.toFixed(2) + 's -> ' + after.toFixed(2) + 's)')
       else bad('POST /openreel/asset/trim', trimmed.statusCode + ' ' + trimmed.text().slice(0, 160))
 
+      // The panel's refresh hangs off the reported length: without it the media
+      // URL never changes and the waveform keeps drawing the pre-trim take.
+      if (trimmed.statusCode === 200 && typeof trimmed.json().seconds === 'number')
+        ok('trim reports the new length back to the panel')
+      else bad('trim seconds', trimmed.text().slice(0, 160))
+
       const badRange = await callRoute(routes, '/openreel/asset/trim', '/openreel/asset/trim', {
         method: 'POST', body: { project: 'smoke', path: trimTarget, start: 2, end: 1 },
       })
       if (badRange.statusCode === 400) ok('trim refuses an end before the start')
       else bad('trim range guard', String(badRange.statusCode))
+
+      // Undo has to survive a SECOND trim: the backup is taken once, on the
+      // first cut, so restore means "the take as generated" however many cuts
+      // have piled up since.
+      await callRoute(routes, '/openreel/asset/trim', '/openreel/asset/trim', {
+        method: 'POST', body: { project: 'smoke', path: trimTarget, start: 0.1, end: 0.4 },
+      })
+      const listed = await callRoute(routes, '/openreel/state', '/openreel/state?project=smoke')
+      if (listed.statusCode === 200 && (listed.json().trimmed ?? []).includes(trimTarget))
+        ok('state names the takes that can be restored')
+      else bad('state.trimmed', listed.text().slice(0, 160))
+
+      const restored = await callRoute(routes, '/openreel/asset/restore', '/openreel/asset/restore', {
+        method: 'POST', body: { project: 'smoke', path: trimTarget },
+      })
+      const back = await probeDuration(config.ffprobePath, join(WS, 'smoke', trimTarget))
+      if (restored.statusCode === 200 && back !== undefined && before !== undefined
+        && Math.abs(back - before) < 0.05)
+        ok('restore undoes every trim at once (' + back.toFixed(2) + 's, was ' + before.toFixed(2) + 's)')
+      else bad('POST /openreel/asset/restore', restored.statusCode + ' ' + restored.text().slice(0, 160))
+
+      const neverTrimmed = await callRoute(routes, '/openreel/asset/restore', '/openreel/asset/restore', {
+        method: 'POST', body: { project: 'smoke', path: 'assets/audio/does-not-exist.wav' },
+      })
+      if (neverTrimmed.statusCode === 400) ok('restore refuses a take that was never trimmed')
+      else bad('restore guard', String(neverTrimmed.statusCode))
+
+      // A take the MANIFEST points at: the recorded duration has to follow the
+      // file, or the on-screen times and the slideshow score go on describing
+      // a clip that no longer exists. Restored straight after so the rest of
+      // the run still sees the durations it was set up with.
+      const recorded = () => callRoute(routes, '/openreel/state', '/openreel/state?project=smoke')
+        .then((r) => r.json().artifacts.asset_manifest_audio.assets
+          .find((asset) => asset.path === audioAsset.path).duration_seconds)
+      const wasRecorded = await recorded()
+      await callRoute(routes, '/openreel/asset/trim', '/openreel/asset/trim', {
+        method: 'POST', body: { project: 'smoke', path: audioAsset.path, start: 0, end: 1 },
+      })
+      const nowRecorded = await recorded()
+      if (Math.abs(nowRecorded - 1) < 0.05 && Math.abs(nowRecorded - wasRecorded) > 0.05)
+        ok('a trim corrects the duration the manifest records (' + wasRecorded + 's -> ' + nowRecorded + 's)')
+      else bad('trim manifest duration', wasRecorded + ' -> ' + nowRecorded)
+
+      await callRoute(routes, '/openreel/asset/restore', '/openreel/asset/restore', {
+        method: 'POST', body: { project: 'smoke', path: audioAsset.path },
+      })
+      const backRecorded = await recorded()
+      if (Math.abs(backRecorded - wasRecorded) < 0.05)
+        ok('restore puts the recorded duration back too')
+      else bad('restore manifest duration', wasRecorded + ' -> ' + backRecorded)
     }
 
     const crossOrigin = await callRoute(routes, '/openreel/stage', '/openreel/stage', {
@@ -2245,34 +2549,65 @@ async function main() {
   }
 
 
-  console.log('\n== 平台画幅 ==')
+  console.log('\n== 平台画幅与生成系数 ==')
   {
     // target_platform used to be validated and then ignored: a project declared
-    // for a vertical platform rendered 1920x1080 anyway.
-    const { resolveVideoProfile } = await import('../lib/media-profile.js')
-    const settings = { width: 1920, height: 1080, fps: 30 }
+    // for a vertical platform rendered 1920x1080 anyway. Then it decided the
+    // FILM's frame but not the PICTURES' -- the shot request never carried a
+    // size, so a 9:16 project got 16:9 stills and compose cropped the sides.
+    const { resolveVideoProfile, listFrameProfiles, FRAME_GROUPS, evenPixels, clampScale } =
+      await import('../lib/media-profile.js')
 
-    const vertical = resolveVideoProfile(settings, 'douyin')
+    const vertical = resolveVideoProfile('douyin', 1, 30)
     if (vertical.width === 1080 && vertical.height === 1920 && vertical.source === 'platform')
       ok('douyin renders vertical, not the landscape default')
     else bad('douyin frame', JSON.stringify(vertical))
 
-    const generic = resolveVideoProfile(settings, 'generic')
-    if (generic.width === 1920 && generic.source === 'settings')
-      ok('generic hands the frame back to settings')
+    // Settings no longer hold a width and a height, so "unspecified" has
+    // nothing to defer to: its frame is the landscape baseline, and it says so.
+    const generic = resolveVideoProfile('generic', 1, 30)
+    if (generic.width === 1920 && generic.height === 1080 && generic.source === 'default')
+      ok('generic is the landscape baseline rather than a deferral')
     else bad('generic frame', JSON.stringify(generic))
 
     // A brief written before the field existed must still render.
-    const missing = resolveVideoProfile(settings, undefined)
-    const unknown = resolveVideoProfile(settings, 'myspace')
-    if (missing.source === 'settings' && unknown.source === 'settings')
+    const missing = resolveVideoProfile(undefined, 1, 30)
+    const unknown = resolveVideoProfile('myspace', 1, 30)
+    if (missing.source === 'default' && unknown.source === 'default'
+      && missing.width === 1920 && unknown.width === 1920)
       ok('an absent or unknown platform falls back instead of throwing')
-    else bad('platform fallback', JSON.stringify([missing.source, unknown.source]))
+    else bad('platform fallback', JSON.stringify([missing, unknown]))
 
     // fps is a quality setting, not a platform fact.
-    const fast = resolveVideoProfile({ width: 1920, height: 1080, fps: 60 }, 'douyin')
-    if (fast.fps === 60) ok('the platform sets the frame, not the frame rate')
-    else bad('fps override', String(fast.fps))
+    if (resolveVideoProfile('douyin', 1, 60).fps === 60)
+      ok('the platform sets the frame, not the frame rate')
+    else bad('fps override', String(resolveVideoProfile('douyin', 1, 60).fps))
+
+    // THE point of the scale: the user's own worked example.
+    const half = resolveVideoProfile('youtube', 0.5, 30)
+    if (half.width === 960 && half.height === 540 && half.baseWidth === 1920 && half.scale === 0.5)
+      ok('a 0.5 scale halves the baseline (1920x1080 -> 960x540)')
+    else bad('scale 0.5', JSON.stringify(half))
+
+    const third = resolveVideoProfile('douyin', 0.3, 30)
+    if (third.width === evenPixels(1080 * 0.3) && third.height === evenPixels(1920 * 0.3))
+      ok('an awkward scale still lands on the baseline ratio (' + third.width + 'x' + third.height + ')')
+    else bad('scale 0.3', JSON.stringify(third))
+
+    // Odd pixels are not a slightly different picture, they are a failed
+    // h264 render. Every scale has to come back even.
+    const odd = [0.1, 0.17, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.5, 2]
+      .flatMap((factor) => FRAME_GROUPS.map((group) => resolveVideoProfile(group.platforms[0], factor, 30)))
+      .filter((frame) => frame.width % 2 !== 0 || frame.height % 2 !== 0)
+    if (odd.length === 0) ok('every scale lands on even pixels, whatever the baseline')
+    else bad('odd pixels', JSON.stringify(odd.slice(0, 3)))
+
+    // A settings value from a future version must not be the reason a film
+    // cannot be cut.
+    if (clampScale(0) === 0.1 && clampScale(99) === 2 && clampScale(undefined) === 1
+      && clampScale(Number.NaN) === 1)
+      ok('an out-of-range scale is clamped rather than refused')
+    else bad('scale clamp', [clampScale(0), clampScale(99), clampScale(undefined)].join(','))
 
     // THREE lists name the same platforms: the schema's vocabulary, the
     // renderer's frames, and the picker's labels. Nothing links them at
@@ -2280,28 +2615,37 @@ async function main() {
     // offering a value the schema rejects, or promising a shape the renderer
     // will not produce. So they are compared here.
     const { PLATFORMS } = await import('../lib/schema.js')
-    const { listPlatformProfiles } = await import('../lib/media-profile.js')
-
-    const framed = new Set(listPlatformProfiles().map((entry) => entry.platform))
-    const unframed = PLATFORMS.filter((id) => id !== 'generic' && !framed.has(id))
+    const framed = new Set(listFrameProfiles().flatMap((entry) => entry.platforms))
+    const unframed = PLATFORMS.filter((id) => !framed.has(id))
     const invented = [...framed].filter((id) => !PLATFORMS.includes(id))
     if (unframed.length === 0 && invented.length === 0)
       ok('every schema platform has a frame, and no frame is invented')
     else bad('platform coverage', 'unframed ' + JSON.stringify(unframed) + ', invented ' + JSON.stringify(invented))
 
-    // The picker lives in the client bundle; read its list back out of the
+    // The picker lives in the client bundle; read its groups back out of the
     // built file rather than trusting that someone updated both.
     const bundle = (await import('node:fs')).readFileSync('client/client.js', 'utf-8')
-    const offered = [...bundle.matchAll(/id:\s*"(youtube|bilibili|douyin|xiaohongshu|wechat|generic)"/g)]
-      .map((match) => match[1])
+    const offered = [...bundle.matchAll(/platforms:\s*\[([^\]]*)\]/g)]
+      .flatMap((match) => [...match[1].matchAll(/"([a-z]+)"/g)].map((inner) => inner[1]))
+      .filter((id) => PLATFORMS.includes(id))
     const offeredSet = new Set(offered)
     if (PLATFORMS.every((id) => offeredSet.has(id)) && offeredSet.size === PLATFORMS.length)
       ok('the picker offers exactly the platforms the schema accepts')
     else bad('picker list', 'picker has ' + JSON.stringify([...offeredSet]) + ', schema has ' + JSON.stringify(PLATFORMS))
 
-    // And the hint text must not promise a frame the renderer will not cut.
-    const lying = listPlatformProfiles().filter((entry) => {
-      const resolved = resolveVideoProfile(settings, entry.platform)
+    // Every platform in one group must resolve to the same pixels -- that
+    // equality is the entire justification for merging them into one option.
+    const split = FRAME_GROUPS.filter((group) => {
+      const frames = group.platforms.map((id) => resolveVideoProfile(id, 1, 30))
+      return frames.some((frame) =>
+        frame.width !== frames[0].width || frame.height !== frames[0].height)
+    })
+    if (split.length === 0) ok('platforms merged into one option really do render identically')
+    else bad('merged group differs', JSON.stringify(split.map((group) => group.id)))
+
+    // And the advertised frame must be the frame that gets rendered.
+    const lying = listFrameProfiles(0.5).filter((entry) => {
+      const resolved = resolveVideoProfile(entry.platforms[0], 0.5, 30)
       return resolved.width !== entry.width || resolved.height !== entry.height
     })
     if (lying.length === 0) ok('the advertised frame is the frame that gets rendered')
@@ -2861,6 +3205,8 @@ async function main() {
     const { buildShotJob } = await import('../lib/shot-job.js')
     const base = {
       workflow: 'Alpha-Image',
+      width: 1080,
+      height: 1920,
       negativePrompt: 'text, watermark',
       references: [],
     }
@@ -2924,6 +3270,28 @@ async function main() {
     // prefix + subject + suffix is the failure the五层 rewrite undid.
     if (!/风格前缀|风格后缀：/.test(full)) ok('the message never hands over a prefix/suffix template')
     else bad('template returned', full)
+
+    // THE bug this carries: the request used to name no size at all. The stage
+    // skill said "按成片画幅" and gave a table keyed on the platform, so the
+    // workflow's own default won and a 9:16 project got 16:9 stills.
+    if (full.includes('1080x1920')) ok('the request names the frame every picture must come back at')
+    else bad('no size in the shot request', full.slice(0, 300))
+
+    // Before the prompts, not after: a constraint that applies to all of them
+    // is read after every decision if it trails the list.
+    if (full.indexOf('1080x1920') < full.indexOf('正面提示词'))
+      ok('and it says so before the prompts rather than after them')
+    else bad('size buried', 'the size trails the prompt list')
+
+    // A landscape project must not get the portrait numbers: the pair is
+    // passed in, never guessed from the shots.
+    const landscape = buildShotJob({
+      ...base, width: 960, height: 540,
+      shots: [{ sectionId: 's1', index: 0, seconds: 5, text: '', fallbackPrompt: 'a road' }],
+    })
+    if (landscape.includes('960x540') && !landscape.includes('1080x1920'))
+      ok('the frame in the request is the one the caller passed, not a default')
+    else bad('frame ignored', landscape.slice(0, 300))
 
     // Narration rides along labelled as atmosphere, or the model draws the words.
     if (full.includes('参考台词氛围：')) ok('narration is labelled as atmosphere, not subject')
@@ -3401,7 +3769,7 @@ async function main() {
 
     // And it has to appear as a track on the timeline, which is what the user
     // asked for: one block the length of the film, because that is what it is.
-    if (screen.includes('orb-music-block') && screen.includes("orb-lane-label-plain\">配乐"))
+    if (screen.includes('orb-music-block') && /orb-lane-label-plain">\{?tx\('?配乐/.test(screen))
       ok('the bed shows as its own lane over the shared time axis')
     else bad('no lane', 'the timeline has no music track')
 
@@ -3631,6 +3999,21 @@ async function main() {
     if (backwards !== undefined && backwards.includes('greater than start'))
       ok('an end before the start is refused rather than producing an empty file')
     else bad('backwards trim', backwards ?? 'accepted')
+
+    // ---- restore ---------------------------------------------------------
+
+    const restored = await call({ action: 'restore_audio', project: 'smoke', path: clip })
+    const backSize = (await fs.stat(join(layout.dir, clip))).size
+    if (restored.restored === true && backSize === before)
+      ok('the agent can undo a trim (' + now + ' -> ' + backSize + ' bytes)')
+    else bad('restore_audio', now + ' -> ' + backSize + ', expected ' + before)
+
+    let never
+    await call({ action: 'restore_audio', project: 'smoke', path: 'assets/audio/s3.wav' })
+      .catch((error) => { never = String(error.message ?? error) })
+    if (never !== undefined && never.includes('nothing to restore'))
+      ok('restoring a take that was never trimmed says so rather than doing nothing')
+    else bad('restore guard', never ?? 'accepted')
   }
 
   console.log('\n== 目标平台：agent 也能改 ==')
@@ -3647,15 +4030,22 @@ async function main() {
     const set = await callProject({ action: 'set_platform', project: 'smoke', target_platform: 'douyin' })
     // The frame is REPORTED, not left implied -- the whole reason the field
     // exists is that a declaration nothing acts on reads like a decision.
-    if (set.profile.width === 1080 && set.profile.height === 1920 && set.profile.source === 'platform')
+    // Portrait is the assertion; the exact pixels follow this host's scale, so
+    // the BASELINE is what pins the shape and the ratio is what pins the rest.
+    if (set.profile.baseWidth === 1080 && set.profile.baseHeight === 1920
+      && set.profile.source === 'platform' && set.profile.height > set.profile.width)
       ok('setting 抖音 reports the portrait frame it implies')
     else bad('set_platform frame', JSON.stringify(set.profile))
     if (set.project.target_platform === 'douyin') ok('the platform is stored on the project')
     else bad('platform not stored', JSON.stringify(set.project.target_platform))
 
+    // 'generic' no longer defers to a settings resolution -- there is none any
+    // more. It is the landscape baseline, and the report says so.
     const generic = await callProject({ action: 'set_platform', project: 'smoke', target_platform: 'generic' })
-    if (generic.profile.source === 'settings') ok("'generic' hands the frame back to the settings")
-    else bad('generic frame', JSON.stringify(generic.profile))
+    if (generic.profile.source === 'default' && generic.profile.baseWidth === 1920
+      && generic.profile.width > generic.profile.height)
+      ok("'generic' reports the landscape baseline rather than a deferral")
+    else bad('generic tool frame', JSON.stringify(generic.profile))
 
     let rejected
     await callProject({ action: 'set_platform', project: 'smoke', target_platform: 'myspace' })
@@ -3691,6 +4081,7 @@ async function main() {
       ['删除剪辑版本', 'openreel_edit', 'action', 'delete_cut'],
       ['列出剪辑版本', 'openreel_edit', 'action', 'cuts'],
       ['裁剪音频', 'openreel_edit', 'action', 'trim_audio'],
+      ['撤销裁剪', 'openreel_edit', 'action', 'restore_audio'],
       ['目标平台', 'openreel_project', 'action', 'set_platform'],
       ['导入素材', 'openreel_project', 'action', 'import'],
       ['音色', 'openreel_project', 'action', 'set_voice'],
@@ -3796,11 +4187,11 @@ async function main() {
 
     const job = buildScriptJob({
       projectId: 'demo-film', title: '演示片', durationSeconds: 45,
-      charsPerSecond: 4.9, style: 'clean-tech', rewrite: false,
+      charsPerSecond: 4.9, style: 'clean-tech', rewrite: false, language: ZH_CONTENT,
     })
     const again = buildScriptJob({
       projectId: 'demo-film', title: '演示片', durationSeconds: 45,
-      charsPerSecond: 4.9, style: 'clean-tech', rewrite: true,
+      charsPerSecond: 4.9, style: 'clean-tech', rewrite: true, language: ZH_CONTENT,
     })
     const sheet = buildStageSkills(ScriptConfig({ bindings: {} }))
       .find((s) => s.name === stageSkillName('script')).content
@@ -3975,6 +4366,7 @@ async function main() {
       .find((s) => s.name === stageSkillName('assets-shots')).content
     const job = buildShotJob({
       projectId: 'demo-film', workflow: 'Alpha-Image', negativePrompt: 'text, watermark',
+      width: 1920, height: 1080,
       references: ['char.png'], extraParams: 'style_lora_v3',
       shots: [
         { sectionId: 's1', index: 0, seconds: 3.2, text: '第一句', fallbackPrompt: 'a lone figure' },
@@ -4230,6 +4622,7 @@ async function main() {
 
     const shots = buildShotJob({
       workflow: 'Alpha-Image',
+      width: 1920, height: 1080,
       negativePrompt: 'text, watermark',
       references: [],
       shots: [{ sectionId: 's1', index: 0, seconds: 3, text: '台词', fallbackPrompt: 'a cat' }],

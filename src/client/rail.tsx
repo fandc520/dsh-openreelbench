@@ -17,6 +17,7 @@ import { Fragment, type ComponentType } from 'react'
 
 import { IconClapper, IconImage, IconMic, IconPen, IconPlay, type IconProps } from './icons.tsx'
 import type { PipelineStage, StageView } from './api.ts'
+import { tx } from './i18n.ts'
 
 export interface RailStep {
   stage: PipelineStage
@@ -74,16 +75,16 @@ export function buildRail(
  * a person; 已审核 is the only thing that lets it continue.
  */
 function statusText(step: RailStep): { label: string; tone: 'idle' | 'active' | 'wait' | 'ok' | 'bad' } {
-  if (step.status === 'failed') return { label: '失败', tone: 'bad' }
-  if (step.status === 'awaiting_human') return { label: '待确认', tone: 'wait' }
-  if (step.status === 'in_progress') return { label: '进行中', tone: 'active' }
+  if (step.status === 'failed') return { label: tx('失败'), tone: 'bad' }
+  if (step.status === 'awaiting_human') return { label: tx('待确认'), tone: 'wait' }
+  if (step.status === 'in_progress') return { label: tx('进行中'), tone: 'active' }
   if (step.status === 'completed') {
-    if (!step.stage.gated) return { label: '已完成', tone: 'ok' }
+    if (!step.stage.gated) return { label: tx('已完成'), tone: 'ok' }
     return step.view?.human_approved === true
-      ? { label: '已审核', tone: 'ok' }
-      : { label: '待确认', tone: 'wait' }
+      ? { label: tx('已审核'), tone: 'ok' }
+      : { label: tx('待确认'), tone: 'wait' }
   }
-  return { label: '未开始', tone: 'idle' }
+  return { label: tx('未开始'), tone: 'idle' }
 }
 
 export interface RailProps {
@@ -93,7 +94,7 @@ export interface RailProps {
 
 export function Rail({ steps, onSelect }: RailProps): JSX.Element {
   return (
-    <nav className="orb-rail" aria-label="管线步骤">
+    <nav className="orb-rail" aria-label={tx('管线步骤')}>
       {steps.map((step, index) => {
         const classes = ['orb-step']
         if (step.current) classes.push('orb-step-current')
@@ -109,7 +110,7 @@ export function Rail({ steps, onSelect }: RailProps): JSX.Element {
               type="button"
               className={classes.join(' ')}
               disabled={locked}
-              title={locked ? '前一步没完成，这一步进不去' : step.stage.hint}
+              title={locked ? tx('前一步没完成，这一步进不去') : tx(step.stage.hint)}
               onClick={() => onSelect(step.stage.id)}
             >
               <span className="orb-step-index">
@@ -120,7 +121,7 @@ export function Rail({ steps, onSelect }: RailProps): JSX.Element {
                     : index + 1}
               </span>
               <span className="orb-step-body">
-                <span className="orb-step-label">{step.stage.label}</span>
+                <span className="orb-step-label">{tx(step.stage.label)}</span>
                 <span className={'orb-step-status orb-tone-' + status.tone}>{status.label}</span>
               </span>
             </button>

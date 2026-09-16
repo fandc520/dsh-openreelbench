@@ -22,6 +22,7 @@ import type {} from '@deepseek-ai/dsh-settings'
 
 import { Config } from './config.js'
 import { probeDuration } from './compose.js'
+import { isLanguage, setLanguage as setHostLanguage } from './i18n.js'
 import { resolveWorkspaceRoot } from './project.js'
 import { buildPipelineSkills } from './pipeline-skill.js'
 import { buildStageSkills } from './stage-skills.js'
@@ -58,6 +59,17 @@ export function apply(ctx: Context, config: Config): void {
    */
   const resolved: Config = { ...config }
   let source: () => Config = () => resolved
+
+  /*
+   * The host's own language, for the prose IT builds.
+   *
+   * The advice lines are assembled at scoring time out of a number and a
+   * phrase, so the browser receives a finished sentence that never existed as a
+   * source string and cannot be looked up. Those are translated here instead;
+   * everything the panel renders from a constant table is translated there.
+   * The director skills are untouched either way — see `src/i18n.ts`.
+   */
+  if (isLanguage(resolved.language)) setHostLanguage(resolved.language)
 
   const machine = new StateMachine({
     // Both read on every call rather than being captured, so a settings change
@@ -149,6 +161,7 @@ export function apply(ctx: Context, config: Config): void {
       },
       onChange: () => {
         Object.assign(resolved, source())
+        if (isLanguage(resolved.language)) setHostLanguage(resolved.language)
         mountSkills()
       },
     })

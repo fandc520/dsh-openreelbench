@@ -14,6 +14,7 @@
  *     artifacts/<name>.json        the artifact each stage produced
  *     assets/images/               txt2img output
  *     assets/audio/                TTS output
+ *     originals/<asset path>       pre-trim copies, so a trim can be undone
  *     work/                        render scratch, safe to delete
  *     output/                      final renders and sidecar subtitles
  */
@@ -51,6 +52,15 @@ export interface ProjectMarker {
    * project rendered in the wrong voice is a whole project regenerated.
    */
   voice: string
+  /**
+   * What language this film is written and narrated in.
+   *
+   * On the project, not in settings: the setting is a DEFAULT for new work,
+   * and one installation makes films in more than one language. Absent means
+   * "follow the panel's language", which is what a project made before this
+   * field existed did anyway.
+   */
+  language?: string
   /**
    * A voice-design draft the agent fills in for the panel.
    *
@@ -149,6 +159,15 @@ export interface ProjectLayout {
   audioDir: string
   workDir: string
   outputDir: string
+  /**
+   * Pre-trim copies of audio takes, so a destructive trim can be undone.
+   *
+   * Deliberately OUTSIDE `assets/`: the library route walks that tree, and a
+   * shadow copy of every trimmed take showing up next to the real one would
+   * read as a duplicate asset. Deliberately not `work/` either — compose wipes
+   * that directory on every render, which would silently eat the undo history.
+   */
+  originalsDir: string
 }
 
 /**
@@ -211,6 +230,7 @@ export function projectLayout(root: string, id: string): ProjectLayout {
     imagesDir: join(dir, 'assets', 'images'),
     audioDir: join(dir, 'assets', 'audio'),
     workDir: join(dir, 'work'),
+    originalsDir: join(dir, 'originals'),
     outputDir: join(dir, 'output'),
   }
 }

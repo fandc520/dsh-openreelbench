@@ -138,7 +138,7 @@ export async function composeProject(
   // projects whose platform only ever went through the model.
   const brief = await machine.readArtifact<Brief>(layout, 'brief')
   const platform = marker.target_platform ?? brief?.target_platform
-  const profile = resolveVideoProfile(config.video, platform)
+  const profile = resolveVideoProfile(platform, config.video.renderScale, config.video.fps)
 
   const result = await renderProject({
     layout,

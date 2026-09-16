@@ -6,7 +6,7 @@
  * input — tool arguments and a JSON body are different shapes — and hand this
  * module an already-typed request.
  */
-import { extname, isAbsolute } from 'node:path'
+import { dirname, extname, isAbsolute, join, relative as relativePathBetween } from 'node:path'
 import { promises as fs } from 'node:fs'
 import { spawn } from 'node:child_process'
 
@@ -197,26 +197,79 @@ function runFfmpeg(ffmpegPath: string, args: string[], timeoutMs = 120_000): Pro
 }
 
 /**
+ * Where a take's pre-trim copy lives: the same relative path, under
+ * `originals/`.
+ *
+ * Mirroring the path rather than flattening to a file name keeps two takes
+ * called `01-intro.wav` in different directories apart, and makes the backup
+ * readable as "this file, before anyone cut it" without an index to consult.
+ */
+function originalPathOf(layout: ProjectLayout, absolute: string): string {
+  return join(layout.originalsDir, toProjectRelative(layout, absolute))
+}
+
+/** Does this take still have a pre-trim copy to go back to? */
+export async function hasOriginalAudio(layout: ProjectLayout, relativePath: string): Promise<boolean> {
+  return pathExists(originalPathOf(layout, resolveInProject(layout, relativePath)))
+}
+
+/** Every take with a pre-trim copy, as project-relative asset paths. */
+export async function listTrimmedAudio(layout: ProjectLayout): Promise<string[]> {
+  const found: string[] = []
+  const walk = async (dir: string, depth: number): Promise<void> => {
+    if (depth > 4) return
+    let entries
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const child = join(dir, entry.name)
+      if (entry.isDirectory()) await walk(child, depth + 1)
+      else if (entry.isFile()) found.push(toPosix(relativePathBetween(layout.originalsDir, child)))
+    }
+  }
+  await walk(layout.originalsDir, 0)
+  return found.sort()
+}
+
+/**
  * Trim an asset's head and tail in place.
  *
  * Written to a sibling temp file and renamed over the original, so a failure
  * part-way leaves the original intact rather than a truncated file the manifest
  * still points at. Audio is re-encoded to PCM rather than stream-copied:
  * a copy cuts on packet boundaries, which is audible on a clip this short.
+ *
+ * The FIRST trim of a take copies it to `originals/` before cutting, and later
+ * trims leave that copy alone. That is what makes undo mean "back to the take
+ * as generated" rather than "back one cut": a trim is not a step in a history,
+ * it is a rewrite, and stacking three of them leaves no coordinate system in
+ * which "one step back" is a thing anyone could point at on the waveform.
  */
 export async function trimAudioAsset(options: {
   ffmpegPath: string
+  ffprobePath?: string
   layout: ProjectLayout
   relativePath: string
   start: number
   end?: number | undefined
-}): Promise<{ path: string; bytes: number }> {
-  const { ffmpegPath, layout, relativePath, start, end } = options
+}): Promise<{ path: string; bytes: number; seconds?: number; undoable: boolean }> {
+  const { ffmpegPath, ffprobePath, layout, relativePath, start, end } = options
   const absolute = resolveInProject(layout, relativePath)
   if (!(await pathExists(absolute))) throw new AssetError('no such asset: ' + relativePath)
   if (!Number.isFinite(start) || start < 0) throw new AssetError('start must be a non-negative number of seconds')
   if (end !== undefined && (!Number.isFinite(end) || end <= start)) {
     throw new AssetError('end must be greater than start')
+  }
+
+  const backup = originalPathOf(layout, absolute)
+  if (!(await pathExists(backup))) {
+    await ensureDir(dirname(backup))
+    // copyFile, not rename: the asset has to stay where it is for ffmpeg to
+    // read it, and for the manifest to keep pointing at something.
+    await fs.copyFile(absolute, backup)
   }
 
   const temp = absolute + '.trim.wav'
@@ -232,5 +285,75 @@ export async function trimAudioAsset(options: {
     throw error
   }
   const stat = await fs.stat(absolute)
-  return { path: relativePath, bytes: stat.size }
+  const seconds = await measure(ffprobePath, absolute)
+  return {
+    path: relativePath,
+    bytes: stat.size,
+    ...(seconds === undefined ? {} : { seconds }),
+    undoable: true,
+  }
+}
+
+/**
+ * Put a trimmed take back the way it was generated.
+ *
+ * The backup is COPIED back rather than moved, so the undo is itself
+ * repeatable: trim, undo, trim again, undo again. A move would make the second
+ * undo fail with "nothing to restore" on a take the user can plainly see has
+ * been cut.
+ */
+export async function restoreAudioAsset(options: {
+  ffprobePath?: string
+  layout: ProjectLayout
+  relativePath: string
+}): Promise<{ path: string; bytes: number; seconds?: number; restored: boolean }> {
+  const { ffprobePath, layout, relativePath } = options
+  const absolute = resolveInProject(layout, relativePath)
+  const backup = originalPathOf(layout, absolute)
+  if (!(await pathExists(backup))) {
+    throw new AssetError('this take has not been trimmed, so there is nothing to restore: ' + relativePath)
+  }
+  await ensureDir(dirname(absolute))
+  await fs.copyFile(backup, absolute)
+  const stat = await fs.stat(absolute)
+  const seconds = await measure(ffprobePath, absolute)
+  return {
+    path: relativePath,
+    bytes: stat.size,
+    ...(seconds === undefined ? {} : { seconds }),
+    restored: true,
+  }
+}
+
+/**
+ * How long the file on disk is, in seconds.
+ *
+ * Best-effort on purpose: a missing ffprobe must not turn a trim that already
+ * succeeded into an error. The caller treats `undefined` as "the recorded
+ * duration stands", which is exactly what it was before this existed.
+ */
+async function measure(ffprobePath: string | undefined, absolute: string): Promise<number | undefined> {
+  if (ffprobePath === undefined || ffprobePath === '') return undefined
+  return new Promise((resolvePromise) => {
+    let child
+    try {
+      child = spawn(ffprobePath, [
+        '-v', 'error', '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1', absolute,
+      ], { windowsHide: true })
+    } catch {
+      resolvePromise(undefined)
+      return
+    }
+    let out = ''
+    child.stdout?.setEncoding('utf-8')
+    child.stdout?.on('data', (chunk: string) => { out += chunk })
+    const timer = setTimeout(() => { child.kill('SIGKILL'); resolvePromise(undefined) }, 15_000)
+    child.on('error', () => { clearTimeout(timer); resolvePromise(undefined) })
+    child.on('close', () => {
+      clearTimeout(timer)
+      const value = Number(out.trim())
+      resolvePromise(Number.isFinite(value) && value > 0 ? Number(value.toFixed(3)) : undefined)
+    })
+  })
 }

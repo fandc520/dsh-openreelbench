@@ -10,6 +10,8 @@
  * that sets it, not a new piece of UI.
  */
 
+import { tx } from './i18n.ts'
+
 export const AGENT_PHASES = {
   sending: '发送中',
   thinking: 'Agent 思考中',
@@ -23,8 +25,16 @@ export const AGENT_PHASES = {
 
 export type AgentPhase = keyof typeof AGENT_PHASES
 
+/**
+ * Translated HERE, not in the table above.
+ *
+ * `AGENT_PHASES` is a module-level constant: a `tx()` inside it would run once,
+ * at import, while the language store is still on its default — and then never
+ * again. Every constant table in this bundle keeps its Chinese and is
+ * translated at the point of display, for that reason.
+ */
 export function phaseLabel(phase: AgentPhase): string {
-  return AGENT_PHASES[phase]
+  return tx(AGENT_PHASES[phase])
 }
 
 /** A small ring that keeps turning while a phase is active. */

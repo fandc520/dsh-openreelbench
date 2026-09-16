@@ -17,6 +17,8 @@
  * already exposes for its own panel.
  */
 
+import { tx } from './i18n.ts'
+
 export interface ComfyMedia {
   url: string
   kind: 'image' | 'video' | 'audio' | 'other'
@@ -61,10 +63,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
       body: JSON.stringify(body),
     })
   } catch {
-    throw new ComfyError('连不上 dsh-comfyui。它没装或没启用时，这一页的生成功能都不可用。')
+    throw new ComfyError(tx('连不上 dsh-comfyui。它没装或没启用时，这一页的生成功能都不可用。'))
   }
   const payload = await response.json().catch(() => undefined) as { error?: string } | undefined
-  if (!response.ok) throw new ComfyError(payload?.error ?? ('dsh-comfyui 返回 HTTP ' + response.status))
+  if (!response.ok) throw new ComfyError(payload?.error ?? (tx('dsh-comfyui 返回 HTTP ') + response.status))
   return payload as T
 }
 
@@ -93,7 +95,7 @@ export const comfy = {
   /** The saved workflow library, so a name in config can be resolved to an id. */
   workflows: async (): Promise<WorkflowSummary[]> => {
     const response = await fetch('/comfyui/workflows')
-    if (!response.ok) throw new ComfyError('读不到工作流库（HTTP ' + response.status + '）')
+    if (!response.ok) throw new ComfyError(tx('读不到工作流库（HTTP ') + response.status + '）')
     const payload = await response.json() as { workflows?: WorkflowSummary[] }
     return payload.workflows ?? []
   },
@@ -127,7 +129,7 @@ export const comfy = {
     const body = await response.json().catch(() => undefined) as
       { ok?: boolean; name?: string; error?: string } | undefined
     if (!response.ok || body?.name === undefined) {
-      throw new ComfyError(body?.error ?? ('上传失败：HTTP ' + response.status))
+      throw new ComfyError(body?.error ?? (tx('上传失败：HTTP ') + response.status))
     }
     return body.name
   },
@@ -140,13 +142,13 @@ export const comfy = {
 
   run: async (id: string, parameters: Record<string, unknown>): Promise<string> => {
     const result = await post<{ promptId?: string }>('/comfyui/workflows/run', { id, parameters })
-    if (typeof result.promptId !== 'string') throw new ComfyError('ComfyUI 没有返回 promptId')
+    if (typeof result.promptId !== 'string') throw new ComfyError(tx('ComfyUI 没有返回 promptId'))
     return result.promptId
   },
 
   job: async (promptId: string): Promise<JobResult> => {
     const response = await fetch('/comfyui/jobs/media?promptId=' + encodeURIComponent(promptId))
-    if (!response.ok) throw new ComfyError('查不到任务状态（HTTP ' + response.status + '）')
+    if (!response.ok) throw new ComfyError(tx('查不到任务状态（HTTP ') + response.status + '）')
     const payload = await response.json() as { status?: JobStatus; media?: ComfyMedia[]; error?: string }
     return {
       status: payload.status ?? 'unknown',
@@ -165,15 +167,15 @@ export const comfy = {
  */
 export async function resolveWorkflowId(name: string): Promise<string> {
   const trimmed = name.trim()
-  if (trimmed === '') throw new ComfyError('还没有绑定工作流，去设置页填一个。')
+  if (trimmed === '') throw new ComfyError(tx('还没有绑定工作流，去设置页填一个。'))
   const all = await comfy.workflows()
   const byName = all.find((workflow) => workflow.name === trimmed)
   if (byName !== undefined) return byName.id
   const byId = all.find((workflow) => workflow.id === trimmed)
   if (byId !== undefined) return byId.id
   throw new ComfyError(
-    '工作流库里没有「' + trimmed + '」。可能是改了名或删了——'
-    + '去 ComfyUI 面板确认一下，再改设置页里的绑定。',
+    tx('工作流库里没有「') + trimmed + tx('」。可能是改了名或删了——')
+    + tx('去 ComfyUI 面板确认一下，再改设置页里的绑定。'),
   )
 }
 
@@ -195,15 +197,15 @@ export async function runAndWait(options: {
   const timeout = options.timeoutMs ?? 300_000
   const started = Date.now()
   while (Date.now() - started < timeout) {
-    if (options.signal?.aborted === true) throw new ComfyError('已取消')
+    if (options.signal?.aborted === true) throw new ComfyError(tx('已取消'))
     await new Promise((resolve) => setTimeout(resolve, 1500))
     const job = await comfy.job(promptId)
     if (job.status === 'completed') {
-      if (job.media.length === 0) throw new ComfyError('工作流跑完了但没有产出媒体，检查它有没有输出节点。')
+      if (job.media.length === 0) throw new ComfyError(tx('工作流跑完了但没有产出媒体，检查它有没有输出节点。'))
       return job.media
     }
-    if (job.status === 'failed') throw new ComfyError(job.error ?? 'ComfyUI 报错了')
+    if (job.status === 'failed') throw new ComfyError(job.error ?? tx('ComfyUI 报错了'))
     options.onProgress?.(Math.round((Date.now() - started) / 1000))
   }
-  throw new ComfyError('等了 ' + Math.round(timeout / 1000) + ' 秒还没结果，去 ComfyUI 面板看看队列。')
+  throw new ComfyError(tx('等了 ') + Math.round(timeout / 1000) + tx(' 秒还没结果，去 ComfyUI 面板看看队列。'))
 }

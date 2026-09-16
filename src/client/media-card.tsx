@@ -15,6 +15,8 @@
  */
 import { createElement as h, useEffect, useState } from 'react'
 
+import { tx, useT } from './i18n.ts'
+
 interface MediaItem {
   path: string
   name: string
@@ -89,10 +91,10 @@ function TextPreview({ item }: { item: MediaItem }): ReturnType<typeof h> {
   }, [item.url, item.bytes])
 
   const content = item.bytes > TEXT_LIMIT
-    ? '文件太大，卡片里不展开（' + Math.round(item.bytes / 1024) + ' KB）。用右下角的 ↓ 下载。'
+    ? tx('文件太大，卡片里不展开（') + Math.round(item.bytes / 1024) + tx(' KB）。用右下角的 ↓ 下载。')
     : failed
-      ? '读不出来。'
-      : body ?? '读取中…'
+      ? tx('读不出来。')
+      : body ?? tx('读取中…')
 
   return h('pre', { className: 'orb-card-text' }, content)
 }
@@ -101,7 +103,7 @@ function Frame({ item, onZoom }: { item: MediaItem; onZoom: () => void }): Retur
   const [failed, setFailed] = useState(false)
 
   const body = failed
-    ? h('div', { className: 'orb-card-missing' }, '打不开：' + item.name)
+    ? h('div', { className: 'orb-card-missing' }, tx('打不开：') + item.name)
     : item.kind === 'video'
       ? h('video', {
           className: 'orb-card-video',
@@ -136,7 +138,7 @@ function Frame({ item, onZoom }: { item: MediaItem; onZoom: () => void }): Retur
                 href: item.url + '&download=1',
                 target: '_blank',
                 rel: 'noreferrer',
-              }, '下载 ' + item.name)
+              }, tx('下载 ') + item.name)
 
   return h('figure', { className: 'orb-card-frame orb-card-frame--' + item.kind },
     body,
@@ -149,18 +151,24 @@ function Frame({ item, onZoom }: { item: MediaItem; onZoom: () => void }): Retur
         className: 'orb-card-get',
         href: item.url + '&download=1',
         download: item.name,
-        title: '下载',
+        title: tx('下载'),
       }, '↓'),
     ),
   )
 }
 
 export function MediaCard({ block }: MediaCardProps): ReturnType<typeof h> | null {
+  // Subscribe this tree to the language.
+  //
+  // `tx()` reads the store but does not subscribe, so one hook at each root is
+  // what makes a change in Settings repaint everything below it. Three roots,
+  // because the shell mounts the tool views itself with no provider above them.
+  useT()
   const [zoom, setZoom] = useState<MediaItem | null>(null)
 
   if (block.isError === true) {
     return h('div', { className: 'orb-card orb-card--error' },
-      '媒体回显失败：' + (block.error?.code ?? block.error?.name ?? '未知原因'))
+      tx('媒体回显失败：') + (block.error?.code ?? block.error?.name ?? tx('未知原因')))
   }
   // Still running, or a settled call whose host did not attach a payload:
   // returning null hands the turn back to the generic tool row rather than

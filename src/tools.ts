@@ -270,7 +270,8 @@ function projectDefinition(runtime: PluginRuntime): ToolDefinition {
         // The resulting frame is reported rather than left implied: the whole
         // reason this field exists is that a declaration nothing acts on reads
         // like a decision that was made.
-        const profile = resolveVideoProfile(runtime.getConfig().video, platform)
+        const video = runtime.getConfig().video
+        const profile = resolveVideoProfile(platform, video.renderScale, video.fps)
         return { action, project: marker, profile }
       }
 

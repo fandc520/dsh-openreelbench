@@ -17,7 +17,7 @@
  */
 import { type ToolDefinition, type PluginRuntime, requireString, optionalRecord, text } from './tools.js'
 import { CutError, deleteCut, listCuts, parseCut, readCut, writeCut } from './cuts.js'
-import { AssetError, trimAudioAsset } from './assets.js'
+import { AssetError, restoreAudioAsset, trimAudioAsset } from './assets.js'
 import { StateViolationError } from './state.js'
 
 const NL = String.fromCharCode(10)
@@ -32,13 +32,15 @@ export function editDefinition(runtime: PluginRuntime): ToolDefinition {
       + 'order layered over the approved script, so several versions live side by side and the '
       + 'plan version is always still there. TRIM IS DESTRUCTIVE: it rewrites the audio file in '
       + 'place. Trim for a take with silence or a breath at the ends; use a cut section\'s '
-      + 'trimStart/trimEnd when the change belongs to one version rather than to the material.',
+      + 'trimStart/trimEnd when the change belongs to one version rather than to the material. '
+      + 'The first trim of a clip keeps a copy of it, so "restore_audio" always goes back to the '
+      + 'take as generated — there is no per-cut undo, because a trim rewrites the file.',
     parameters: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
-          enum: ['cuts', 'save_cut', 'delete_cut', 'trim_audio'],
+          enum: ['cuts', 'save_cut', 'delete_cut', 'trim_audio', 'restore_audio'],
           description: 'What to do.',
         },
         project: { type: 'string', description: 'Project id. Required for every action.' },
@@ -104,7 +106,8 @@ export function editDefinition(runtime: PluginRuntime): ToolDefinition {
         id: { type: 'string', description: 'delete_cut: which version to remove.' },
         path: {
           type: 'string',
-          description: 'trim_audio: project-relative path of the clip, e.g. "assets/audio/01-s1.wav".',
+          description: 'trim_audio / restore_audio: project-relative path of the clip, '
+            + 'e.g. "assets/audio/01-s1.wav".',
         },
         start: { type: 'number', description: 'trim_audio: new start, seconds from the clip head. Default 0.' },
         end: { type: 'number', description: 'trim_audio: new end, in seconds. Omit to keep the tail.' },
@@ -164,13 +167,39 @@ export function editDefinition(runtime: PluginRuntime): ToolDefinition {
         const relative = requireString(args, 'path')
         const end = typeof args.end === 'number' ? args.end : undefined
         try {
+          const config = runtime.getConfig()
           const result = await trimAudioAsset({
-            ffmpegPath: runtime.getConfig().ffmpegPath,
+            ffmpegPath: config.ffmpegPath,
+            ffprobePath: config.ffprobePath,
             layout,
             relativePath: relative,
             start: typeof args.start === 'number' ? args.start : 0,
             ...(end === undefined ? {} : { end }),
           })
+          if (result.seconds !== undefined) {
+            await machine.reviseAssetDuration(projectId, result.path, result.seconds)
+          }
+          return { action, project: projectId, ...result }
+        } catch (error) {
+          if (error instanceof AssetError) throw new StateViolationError('BAD_REQUEST', error.message)
+          throw error
+        }
+      }
+
+      // The panel has an undo button, so this path needs one too — CONVENTIONS
+      // §8: an unattended run has no panel, and a trim it cannot take back is a
+      // trap rather than a cheap thing to try.
+      if (action === 'restore_audio') {
+        const relative = requireString(args, 'path')
+        try {
+          const result = await restoreAudioAsset({
+            ffprobePath: runtime.getConfig().ffprobePath,
+            layout,
+            relativePath: relative,
+          })
+          if (result.seconds !== undefined) {
+            await machine.reviseAssetDuration(projectId, result.path, result.seconds)
+          }
           return { action, project: projectId, ...result }
         } catch (error) {
           if (error instanceof AssetError) throw new StateViolationError('BAD_REQUEST', error.message)
@@ -211,13 +240,20 @@ function renderEditResult(value: Record<string, unknown>): string {
     return 'Deleted cut ' + value.deleted + '  "' + value.name + '". The plan version is untouched.'
   }
 
-  if (action === 'trim_audio') {
-    // The manifest's recorded duration is now stale. Deliberately not corrected:
-    // the timeline re-probes every clip at render time, so that number is a
-    // record of what was measured, never an input. Saying so beats leaving the
-    // model to notice a mismatch and try to "fix" it.
-    return 'Trimmed ' + value.path + ' — now ' + Math.round((value.bytes as number) / 1024) + ' KB.'
-      + NL + 'The timeline re-measures every clip at render time, so nothing else needs updating.'
+  if (action === 'trim_audio' || action === 'restore_audio') {
+    // The manifest's recorded duration is corrected in the same call, so the
+    // model has nothing left to "fix" here. Render never relied on it — the
+    // timeline re-probes every clip — but the panel's on-screen times and the
+    // slideshow score are read straight off it, and a stale number there is a
+    // panel that looks like it ignored the edit.
+    const seconds = typeof value.seconds === 'number' ? value.seconds : undefined
+    const size = Math.round((value.bytes as number) / 1024) + ' KB'
+    const length = seconds === undefined ? '' : ', ' + seconds.toFixed(2) + 's'
+    return (action === 'trim_audio'
+      ? 'Trimmed ' + value.path + ' — now ' + size + length + '.'
+        + NL + 'A copy of the untrimmed take is kept, so "restore_audio" on this path undoes it.'
+      : 'Restored ' + value.path + ' to the take as generated — ' + size + length + '.')
+      + NL + 'The recorded duration was updated to match; nothing else needs changing.'
   }
 
   return JSON.stringify(value, null, 2)

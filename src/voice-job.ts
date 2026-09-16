@@ -31,6 +31,12 @@ export interface VoiceJobInput {
    * them under. Empty for an ordinary library voice.
    */
   voiceReferences: readonly string[]
+  /**
+   * What language to read in, as the model should name it. Empty for Chinese
+   * — the skills already assume it, and a line saying so on every request is
+   * noise to read past.
+   */
+  languageName?: string | undefined
   sections: readonly VoiceJobSection[]
 }
 
@@ -50,6 +56,15 @@ export function buildVoiceJob(input: VoiceJobInput): string {
     workflowLine(input.workflow),
     '音色参数 `voice_name`：`' + input.voice + '`',
   ]
+
+  // Before the lines, not after: it governs every one of them. Stated as a
+  // REFERENCE rather than a parameter name, because which slot carries it (or
+  // whether the workflow has one at all) is the workflow's business — the
+  // model reads that off `comfyui_workflow action: list`.
+  if (input.languageName !== undefined && input.languageName.trim() !== '') {
+    lines.push('语种：**' + input.languageName.trim() + '**（台词本身已经是这个语言；'
+      + '工作流若有语种/音色参数，按它选，没有就忽略这一行）')
+  }
 
   // Names only. Which loader node and which slot is something the model reads
   // off the workflow's own parameter list; restating it here would be a

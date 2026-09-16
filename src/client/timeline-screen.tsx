@@ -31,6 +31,8 @@ import { Preview } from './preview.ts'
 import { MUSIC_SKILL, buildMusicJob } from '../music-job.js'
 import { DUCK_DB, MIX_BOUNDS, gainToVolume, resolveMusicSettings } from '../audio-mix.js'
 
+import { tx } from './i18n.ts'
+
 export interface TimelineScreenProps {
   state: PluginState
   onReload: () => Promise<void>
@@ -55,11 +57,11 @@ const NEWLINE = String.fromCharCode(10)
  */
 /** What each slideshow dimension is called on screen. */
 const RISK_LABELS: Record<string, string> = {
-  repetition: '画面重复',
-  decorative_visuals: '镜头用心',
-  static_hold: '单张停留',
-  picture_rate: '画面密度',
-  unsupported_style_claim: '风格兑现',
+  repetition: tx('画面重复'),
+  decorative_visuals: tx('镜头用心'),
+  static_hold: tx('单张停留'),
+  picture_rate: tx('画面密度'),
+  unsupported_style_claim: tx('风格兑现'),
 }
 
 const DEFAULT_PPS = 30
@@ -184,18 +186,30 @@ export function TimelineScreen({
    *
    * Per export rather than per install: the same project goes to a platform
    * that plays a sidecar .srt and to one that does not, and the answer differs
-   * between those two exports of the identical cut. The setting is the default
-   * this starts from, not the decision.
+   * between those two exports of the identical cut.
+   *
+   * There is no setting behind it. There used to be one, and this state never
+   * read it — the control always started at 'off' — so the settings page was
+   * offering a default that nothing on the panel path could act on.
    */
   const [burnSubtitles, setBurnSubtitles] = useState<'off' | 'outline' | 'box'>('off')
   /**
-   * The scoring workflow and the brief for it.
+   * Which workflow scores the film, and the brief for it.
    *
-   * Held as a draft and saved on blur rather than on every keystroke: the
-   * workflow name is remembered per project, and a write per character would be
-   * a marker write per character.
+   * `musicPick` is an OVERRIDE, not the value: null means "whatever the
+   * project stored, or failing that the binding's default". Holding the value
+   * itself in state is what made 添加音乐 permanently dark — it was seeded
+   * from `state.project.music` at mount, so a project that had never scored
+   * anything seeded it to '', and a binding added in settings afterwards never
+   * reached it. The select then showed its first option (a value with no
+   * matching option falls back to the first) while the state still said '',
+   * and picking that same option fires no change event, so there was no
+   * gesture anywhere that could light the button.
+   *
+   * Same shape as `ttsPick` on the audio screen and `imagePick` on the shots
+   * screen: derive the effective value, keep only the override in state.
    */
-  const [musicWorkflow, setMusicWorkflow] = useState(state.project.music?.workflow ?? '')
+  const [musicPick, setMusicPick] = useState<string | null>(null)
   const [musicNote, setMusicNote] = useState('')
   /* The music binding's candidates, plus whatever this project hand-typed
      before the binding existed — a stored name must stay visible and selectable,
@@ -205,6 +219,9 @@ export function TimelineScreen({
   const musicOptions = storedMusicWorkflow !== '' && !musicChoices.includes(storedMusicWorkflow)
     ? [...musicChoices, storedMusicWorkflow]
     : musicChoices
+  const musicWorkflow = musicPick !== null && musicOptions.includes(musicPick)
+    ? musicPick
+    : (storedMusicWorkflow !== '' ? storedMusicWorkflow : (musicOptions[0] ?? ''))
   /**
    * The mix fields as typed, before they are saved.
    *
@@ -232,6 +249,15 @@ export function TimelineScreen({
   /** The pad being dragged right now, so the lane can follow the pointer. */
   const [cueDraft, setCueDraft] = useState<string | null>(null)
   const cueBox = useRef<HTMLTextAreaElement | null>(null)
+  /**
+   * The two pad boxes, so 批量修改 can read what is typed in them.
+   *
+   * Refs because those inputs are uncontrolled — `defaultValue` plus a `key`,
+   * committed on blur — and the batch button needs the value AS TYPED, before
+   * any commit has turned it into a single-section edit.
+   */
+  const leadBox = useRef<HTMLInputElement | null>(null)
+  const tailBox = useRef<HTMLInputElement | null>(null)
   /** In-flight creation of the first cut, shared by every edit in a burst. */
   const creating = useRef<Promise<Cut> | null>(null)
   const [dragPad, setDragPad] = useState<
@@ -747,7 +773,7 @@ export function TimelineScreen({
     if (phase !== null || busy !== null) return
     setResult(null)
     setPhase('generating')
-    setRender({ label: '准备中', fraction: 0, elapsed: 0 })
+    setRender({ label: tx('准备中'), fraction: 0, elapsed: 0 })
     try {
       await api.startCompose({
         project: state.project.id,
@@ -771,7 +797,7 @@ export function TimelineScreen({
       if (status === undefined) continue
       if (status.state === 'running') {
         setRender({
-          label: status.progress ?? '合成中',
+          label: status.progress ?? tx('合成中'),
           fraction: status.fraction ?? 0,
           elapsed: status.elapsed_seconds ?? 0,
         })
@@ -781,7 +807,7 @@ export function TimelineScreen({
       setPhase(null)
       setRender(null)
       if (status.state === 'failed') {
-        say('error', status.error ?? '合成失败')
+        say('error', status.error ?? tx('合成失败'))
         return
       }
       await onReload()
@@ -789,13 +815,13 @@ export function TimelineScreen({
       handover.current = null
       setMode('film')
       const warnings = status.result?.warnings ?? []
-      say('ok', '成片好了，看一遍。改哪儿都行——点「编辑」回来接着调。'
+      say('ok', tx('成片好了，看一遍。改哪儿都行——点「编辑」回来接着调。')
         + (warnings.length === 0 ? '' : NEWLINE + warnings.join(NEWLINE)))
       return
     }
     setPhase(null)
     setRender(null)
-    say('error', '等了二十四分钟还没结束。合成还在后台跑，刷新页面能看到进度。')
+    say('error', tx('等了二十四分钟还没结束。合成还在后台跑，刷新页面能看到进度。'))
   }
 
   /* ------------------------------------------------------------- 配乐 */
@@ -819,8 +845,12 @@ export function TimelineScreen({
     fadeIn: String(musicMix.fadeInSeconds),
     fadeOut: String(musicMix.fadeOutSeconds),
   }
+  // "Unsaved" has to mean SOMEONE CHANGED SOMETHING. Comparing the effective
+  // workflow against the stored one instead would light the marker on every
+  // project that has a binding but has never scored anything — nothing was
+  // edited there, and `addMusic` persists the name on its way out anyway.
   const musicDirty = musicForm !== null
-    || musicWorkflow.trim() !== (state.project.music?.workflow ?? '')
+    || (musicPick !== null && musicPick.trim() !== storedMusicWorkflow)
 
   function editMusic(patch: Partial<typeof musicFields>): void {
     setMusicForm({ ...musicFields, ...patch })
@@ -857,7 +887,7 @@ export function TimelineScreen({
       // the host stored, so an out-of-range entry corrects itself in place
       // instead of sitting there looking accepted.
       setMusicForm(null)
-      say('ok', '配乐设置已保存。合成和这里的试听都会按这个来。')
+      say('ok', tx('配乐设置已保存。合成和这里的试听都会按这个来。'))
     } finally {
       setBusy(null)
     }
@@ -875,11 +905,11 @@ export function TimelineScreen({
   async function addMusic(): Promise<void> {
     if (phase !== null || busy !== null) return
     if (musicWorkflow.trim() === '') {
-      say('error', '先填一个配乐工作流的名称。')
+      say('error', tx('先填一个配乐工作流的名称。'))
       return
     }
     if (total <= 0) {
-      say('error', '时间轴还是空的，先把配音和分镜做完——曲子要多长是按全片时长算的。')
+      say('error', tx('时间轴还是空的，先把配音和分镜做完——曲子要多长是按全片时长算的。'))
       return
     }
     // The request opens with a skill gesture, and the guidance it depends on
@@ -890,9 +920,9 @@ export function TimelineScreen({
     // way that stays visible.
     const ready = await api.skill(MUSIC_SKILL).catch(() => undefined)
     if (ready !== undefined && ready.registry && !ready.loadable) {
-      say('error', '配乐技能 ' + MUSIC_SKILL + ' 在这个会话里加载不了'
-        + (ready.known ? '（已注册但不允许用户调用）' : '（没注册——插件更新后需要重启 DSH）')
-        + '。不先读技能就选曲等于瞎挑，所以这里不发。')
+      say('error', tx('配乐技能 ') + MUSIC_SKILL + tx(' 在这个会话里加载不了')
+        + (ready.known ? tx('（已注册但不允许用户调用）') : tx('（没注册——插件更新后需要重启 DSH）'))
+        + tx('。不先读技能就选曲等于瞎挑，所以这里不发。'))
       return
     }
 
@@ -919,12 +949,12 @@ export function TimelineScreen({
         if (next !== undefined && (next.project.music?.path ?? '') !== before) {
           await onReload()
           setPhase(null)
-          say('ok', '配乐搬回来了，听一遍。合成时会自动压在解说下面。')
+          say('ok', tx('配乐搬回来了，听一遍。合成时会自动压在解说下面。'))
           return
         }
       }
       setPhase(null)
-      say('error', '等了十分钟没等到配乐。去对话里看看 Agent 卡在哪。')
+      say('error', tx('等了十分钟没等到配乐。去对话里看看 Agent 卡在哪。'))
     } catch (error) {
       setPhase(null)
       say('error', (error as Error).message)
@@ -941,7 +971,7 @@ export function TimelineScreen({
     setBusy('music')
     try {
       await saveMusic({ path: '' })
-      say('ok', '配乐已从成片里去掉，文件还在项目里。')
+      say('ok', tx('配乐已从成片里去掉，文件还在项目里。'))
     } catch (error) {
       say('error', (error as Error).message)
     } finally {
@@ -951,7 +981,7 @@ export function TimelineScreen({
 
   /** Start a new version from what is on screen now. */
   async function newCut(): Promise<void> {
-    const name = window.prompt('这一版叫什么？', '剪辑 ' + (state.cuts.length + 1))
+    const name = window.prompt(tx('这一版叫什么？'), tx('剪辑 ') + (state.cuts.length + 1))
     if (name === null || name.trim() === '') return
     const id = 'cut-' + Date.now().toString(36)
     setBusy('cut')
@@ -960,7 +990,7 @@ export function TimelineScreen({
       const { cut: saved } = await api.saveCut(state.project.id, { id, name: name.trim(), sections })
       await onReload()
       onSelectCut(saved.id)
-      say('ok', '「' + saved.name + '」已建好。改动会存进这一版，不影响其他版本。')
+      say('ok', '「' + saved.name + tx('」已建好。改动会存进这一版，不影响其他版本。'))
     } catch (error) {
       say('error', (error as Error).message)
     } finally {
@@ -969,7 +999,7 @@ export function TimelineScreen({
   }
 
   async function renameCut(entry: Cut): Promise<void> {
-    const name = window.prompt('这一版叫什么？', entry.name)
+    const name = window.prompt(tx('这一版叫什么？'), entry.name)
     if (name === null || name.trim() === '' || name.trim() === entry.name) return
     setBusy('cut')
     try {
@@ -977,7 +1007,7 @@ export function TimelineScreen({
       // sending only the name would blank the edit it is naming.
       await api.saveCut(state.project.id, { id: entry.id, name: name.trim(), sections: entry.sections })
       await onReload()
-      say('ok', '改名为「' + name.trim() + '」。')
+      say('ok', tx('改名为「') + name.trim() + '」。')
     } catch (error) {
       say('error', (error as Error).message)
     } finally {
@@ -986,13 +1016,13 @@ export function TimelineScreen({
   }
 
   async function removeCut(entry: Cut): Promise<void> {
-    if (!window.confirm('删掉「' + entry.name + '」？这一版的编排会丢失。')) return
+    if (!window.confirm(tx('删掉「') + entry.name + tx('」？这一版的编排会丢失。'))) return
     setBusy('cut')
     try {
       await api.deleteCut(state.project.id, entry.id)
       await onReload()
       if (cutId === entry.id) onSelectCut('')
-      say('ok', '「' + entry.name + '」已删除。')
+      say('ok', '「' + entry.name + tx('」已删除。'))
     } catch (error) {
       say('error', (error as Error).message)
     } finally {
@@ -1038,13 +1068,13 @@ export function TimelineScreen({
     const list = shotsOfSection(sectionId)
     const last = list.length - 1
     if (last <= 0 || index === last) return
-    if (!(share > 0 && share < 1)) { say('error', '占比要在 0 和 1 之间。'); return }
+    if (!(share > 0 && share < 1)) { say('error', tx('占比要在 0 和 1 之间。')); return }
     const sum = list.reduce((total, entry) => total + (entry.weight ?? 1), 0) || 1
     const shares = list.map((entry, position) =>
       position === index ? share : (entry.weight ?? 1) / sum)
     const others = shares.reduce((total, value, position) => position === last ? total : total + value, 0)
     const remainder = 1 - others
-    if (remainder < 0.02) { say('error', '前面几镜已经占满，最后一镜没有时间可分。'); return }
+    if (remainder < 0.02) { say('error', tx('前面几镜已经占满，最后一镜没有时间可分。')); return }
     await editSection(sectionId, {
       shots: list.map((entry, position) => ({
         assetId: entry.assetId,
@@ -1105,7 +1135,7 @@ export function TimelineScreen({
     const cleaned = cues
       .map((cue) => ({ ...cue, text: cue.text.trim() }))
       .filter((cue) => cue.text !== '')
-    if (cleaned.length === 0) { say('error', '一段至少要留一条字幕。'); return }
+    if (cleaned.length === 0) { say('error', tx('一段至少要留一条字幕。')); return }
     await editSection(sectionId, { cues: cleaned })
     say('ok', note)
   }
@@ -1143,7 +1173,7 @@ export function TimelineScreen({
       const next = Math.min(room, Math.max(0, current - deltaSeconds))
       if (Math.abs(next - current) < 0.01) return
       await editSection(sectionId, { [field]: Number(next.toFixed(2)) })
-      say('ok', edge === 'left' ? '字幕晚一点出现' : '字幕早一点收起')
+      say('ok', edge === 'left' ? tx('字幕晚一点出现') : tx('字幕早一点收起'))
       return
     }
     const MIN = 0.2
@@ -1157,7 +1187,7 @@ export function TimelineScreen({
     await saveCues(
       sectionId,
       list.map((cue, position) => ({ ...cue, weight: Number((durations[position] ?? 1).toFixed(3)) })),
-      '调整了这条字幕的时长',
+      tx('调整了这条字幕的时长'),
     )
   }
 
@@ -1167,7 +1197,7 @@ export function TimelineScreen({
     const list = cueTextsOf(activeCue.sectionId)
     const existing = list[activeCue.index]
     if (existing !== undefined) list[activeCue.index] = { ...existing, text }
-    await saveCues(activeCue.sectionId, list, '字幕已保存')
+    await saveCues(activeCue.sectionId, list, tx('字幕已保存'))
   }
 
   /**
@@ -1183,12 +1213,12 @@ export function TimelineScreen({
     const whole = cueDraft ?? texts[activeCue.index]?.text ?? ''
     const head = whole.slice(0, at).trim()
     const tail = whole.slice(at).trim()
-    if (head === '' || tail === '') { say('error', '光标放在要断开的位置，两边都要有字。'); return }
+    if (head === '' || tail === '') { say('error', tx('光标放在要断开的位置，两边都要有字。')); return }
     // Split halves inherit no weight: the automatic proportional split is a
     // better guess for two fresh lines than half of a number set for one.
     texts.splice(activeCue.index, 1, { text: head }, { text: tail })
     setCueDraft(null)
-    await saveCues(activeCue.sectionId, texts, '拆成了两条')
+    await saveCues(activeCue.sectionId, texts, tx('拆成了两条'))
   }
 
   /**
@@ -1203,7 +1233,7 @@ export function TimelineScreen({
     const texts = cueTextsOf(activeCue.sectionId)
     const other = activeCue.index + direction
     if (other < 0 || other >= texts.length) {
-      say('error', direction < 0 ? '这是本段第一条，前面没有可合并的。' : '这是本段最后一条，后面没有可合并的。')
+      say('error', direction < 0 ? tx('这是本段第一条，前面没有可合并的。') : tx('这是本段最后一条，后面没有可合并的。'))
       return
     }
     const first = Math.min(activeCue.index, other)
@@ -1211,7 +1241,7 @@ export function TimelineScreen({
     const merged = (texts[first]?.weight ?? 0) + (texts[first + 1]?.weight ?? 0)
     texts.splice(first, 2, merged > 0 ? { text: joined, weight: merged } : { text: joined })
     setCueDraft(null)
-    await saveCues(activeCue.sectionId, texts, '合并成了一条')
+    await saveCues(activeCue.sectionId, texts, tx('合并成了一条'))
   }
 
   /**
@@ -1227,11 +1257,11 @@ export function TimelineScreen({
     if (creating.current === null) {
       creating.current = api.saveCut(state.project.id, {
         id: 'cut-' + Date.now().toString(36),
-        name: '剪辑 ' + (state.cuts.length + 1),
+        name: tx('剪辑 ') + (state.cuts.length + 1),
         sections: state.timeline.map((timing) => ({ id: timing.sectionId })),
       }).then(({ cut: created }) => {
         onSelectCut(created.id)
-        say('ok', '改动开了一个新版本「' + created.name + '」，计划版本没有被动过。')
+        say('ok', tx('改动开了一个新版本「') + created.name + tx('」，计划版本没有被动过。'))
         return created
       })
     }
@@ -1264,6 +1294,56 @@ export function TimelineScreen({
     }
   }
 
+  /**
+   * Apply one patch to EVERY section, in a single write.
+   *
+   * Not a loop over `editSection`. That function rebuilds the whole cut from
+   * the copy it read when it started, so N overlapping calls each save a
+   * document that knows about one change — and the last one to land wins,
+   * taking the other N-1 with it. One save also leaves one entry in the
+   * version's history instead of one per section.
+   */
+  async function editAllSections(patch: Partial<CutSection>): Promise<boolean> {
+    showEdit()
+    setBusy('all-sections')
+    setResult(null)
+    try {
+      const target = await ensureCut()
+      const sections = state.timeline.map((timing) => ({
+        ...(target.sections.find((entry) => entry.id === timing.sectionId) ?? { id: timing.sectionId }),
+        ...patch,
+      }))
+      await api.saveCut(state.project.id, { id: target.id, name: target.name, sections })
+      await onReload()
+      return true
+    } catch (error) {
+      say('error', (error as Error).message)
+      return false
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** Push whatever is typed in one pad box onto every section at once. */
+  async function applyPadToAll(edge: 'lead' | 'tail'): Promise<void> {
+    const label = edge === 'lead' ? tx('前留白') : tx('后留白')
+    const raw = (edge === 'lead' ? leadBox.current : tailBox.current)?.value.trim() ?? ''
+    if (raw === '') {
+      say('error', tx('先在上面的') + label + tx('框里填一个秒数，再点批量修改。'))
+      return
+    }
+    const value = Number(raw)
+    if (!Number.isFinite(value) || value < 0) {
+      say('error', label + tx('要是一个不小于 0 的秒数。'))
+      return
+    }
+    // The failure message is already on screen if this went wrong; announcing
+    // success on top of it would be the panel lying about what it did.
+    if (await editAllSections({ [edge]: value })) {
+      say('ok', state.timeline.length + tx(' 段的') + label + tx('都改成了 ') + value.toFixed(2) + tx(' 秒。'))
+    }
+  }
+
   useEffect(() => {
     // A different version is a different target; the memo belonged to the last.
     // The reload itself is the workbench's, keyed on the same id.
@@ -1290,10 +1370,10 @@ export function TimelineScreen({
   return (
     <div className="orb-screen orb-screen-wide">
       <header className="orb-screen-head">
-        <h2 className="orb-screen-title">合成</h2>
+        <h2 className="orb-screen-title">{tx('合成')}</h2>
         <span className="orb-spacer" />
         <span className={'orb-pill ' + (recorded ? 'orb-pill-ok' : '')}>
-          {recorded ? '已记录' : filmUrl === undefined ? '未合成' : '未记录'}
+          {recorded ? tx('已记录') : filmUrl === undefined ? tx('未合成') : tx('未记录')}
         </span>
       </header>
 
@@ -1304,10 +1384,10 @@ export function TimelineScreen({
       <section className="orb-card">
         <div className="orb-card-head">
           <IconPlay className="orb-section-icon" />
-          <h3 className="orb-card-title">合成</h3>
+          <h3 className="orb-card-title">{tx('合成')}</h3>
           <span className="orb-card-meta">
-            <span><b>{state.timeline.length}</b> 段 · <b>{shotBlocks.length}</b> 镜 · 全片 <b>{total.toFixed(1)}</b> 秒
-              {cut === undefined ? '' : ' · 剪辑「' + cut.name + '」'}</span>
+            <span><b>{state.timeline.length}</b> {tx('段 ·')} <b>{shotBlocks.length}</b> {tx('镜 · 全片')} <b>{total.toFixed(1)}</b>{tx(' 秒')}
+              {cut === undefined ? '' : tx(' · 剪辑「') + cut.name + '」'}</span>
           </span>
         </div>
         <div className="orb-card-body">
@@ -1321,7 +1401,7 @@ export function TimelineScreen({
                 <span className="orb-render-label">{render.label}</span>
                 <span className="orb-spacer" />
                 <span className="orb-hint orb-render-clock">
-                  {Math.round(render.fraction * 100)}%　已用 {formatClock(render.elapsed)}
+                  {Math.round(render.fraction * 100)}%　{tx('已用')} {formatClock(render.elapsed)}
                 </span>
               </div>
               <div
@@ -1330,7 +1410,7 @@ export function TimelineScreen({
                 aria-valuenow={Math.round(render.fraction * 100)}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label="合成进度"
+                aria-label={tx('合成进度')}
               >
                 <div className="orb-render-fill" style={{ width: (render.fraction * 100).toFixed(1) + '%' }} />
               </div>
@@ -1342,21 +1422,21 @@ export function TimelineScreen({
               "checked and fine" looked exactly like "never checked". */}
           {risk === null ? null : (
             <AdvicePanel
-              title="成片检查"
+              title={tx('成片检查')}
               action={!risk.blocking ? undefined : (
-                <label className="orb-inline-pick" title="看过分数仍然要出片">
+                <label className="orb-inline-pick" title={tx('看过分数仍然要出片')}>
                   <input
                     type="checkbox"
                     checked={forceRender}
                     onChange={(event) => setForceRender(event.target.checked)}
                   />
-                  <span className="orb-hint">我看过了，照出</span>
+                  <span className="orb-hint">{tx('我看过了，照出')}</span>
                 </label>
               )}
               rows={Object.entries(risk.dimensions).map(([name, entry]) => ({
                 label: RISK_LABELS[name] ?? name,
                 clean: entry.score < 2,
-                summary: entry.score < 2 ? '通过' : (entry.short ?? entry.reason),
+                summary: entry.score < 2 ? tx('通过') : (entry.short ?? entry.reason),
                 hint: entry.short ?? entry.reason,
                 ...(entry.score >= 4 ? { severity: 'fail' as const } : entry.score >= 2 ? { severity: 'revise' as const } : {}),
                 details: [{ key: name, text: entry.reason }],
@@ -1371,17 +1451,17 @@ export function TimelineScreen({
                 type="button"
                 className={'orb-cut' + (cut === undefined ? ' orb-cut-active' : '')}
                 onClick={() => onSelectCut('')}
-              >计划版本</button>
+              >{tx('计划版本')}</button>
               {state.cuts.map((entry) => (
                 <span className={'orb-cut-wrap' + (entry.id === cutId ? ' orb-cut-wrap-active' : '')} key={entry.id}>
                   <button
                     type="button"
                     className={'orb-cut' + (entry.id === cutId ? ' orb-cut-active' : '')}
-                    title={(entry.note ?? '') + '　更新于 ' + entry.updated_at.slice(0, 16).replace('T', ' ')}
+                    title={(entry.note ?? '') + tx('　更新于 ') + entry.updated_at.slice(0, 16).replace('T', ' ')}
                     onClick={() => onSelectCut(entry.id)}
                   >
                     {entry.name}
-                    {entry.output === undefined ? <span className="orb-cut-dot" title="还没出片">·</span> : null}
+                    {entry.output === undefined ? <span className="orb-cut-dot" title={tx('还没出片')}>·</span> : null}
                   </button>
                   {/* Float under the chip, not beside it: the row stays one
                       chip wide, and the commands read as belonging to it. */}
@@ -1389,15 +1469,15 @@ export function TimelineScreen({
                     <button
                       type="button"
                       className="orb-cut-x"
-                      aria-label="重命名这一版"
-                      title="重命名"
+                      aria-label={tx('重命名这一版')}
+                      title={tx('重命名')}
                       disabled={busy !== null}
                       onClick={() => void renameCut(entry)}
                     >✎</button>
                     <button
                       type="button"
                       className="orb-cut-x"
-                      aria-label="删除这一版"
+                      aria-label={tx('删除这一版')}
                       disabled={busy !== null}
                       onClick={() => void removeCut(entry)}
                     >×</button>
@@ -1405,7 +1485,7 @@ export function TimelineScreen({
                 </span>
               ))}
               <button type="button" className="orb-cut orb-cut-new" disabled={busy !== null}
-                onClick={() => void newCut()}>＋ 新版本</button>
+                onClick={() => void newCut()}>{tx('＋ 新版本')}</button>
             </div>
           </div>
 
@@ -1418,33 +1498,33 @@ export function TimelineScreen({
                   you can leave, so it reads as a switch rather than as a button
                   that does something. An empty timeline has no modes to switch. */}
               {state.timeline.length === 0 ? null : (
-                <div className="orb-mode orb-mode-overlay" role="group" aria-label="预览模式">
+                <div className="orb-mode orb-mode-overlay" role="group" aria-label={tx('预览模式')}>
                   <button
                     type="button"
                     className={'orb-mode-btn' + (mode === 'edit' ? ' orb-mode-on' : '')}
                     onClick={showEdit}
-                    title="回到编辑：改这一版，或另存一版"
-                  >原稿编辑</button>
+                    title={tx('回到编辑：改这一版，或另存一版')}
+                  >{tx('原稿编辑')}</button>
                   <button
                     type="button"
                     className={'orb-mode-btn' + (mode === 'film' ? ' orb-mode-on' : '')}
                     disabled={filmUrl === undefined}
                     onClick={showFilm}
-                    title={filmUrl === undefined ? '还没有合成成片' : '播放已合成的成片'}
-                  >成片预览</button>
+                    title={filmUrl === undefined ? tx('还没有合成成片') : tx('播放已合成的成片')}
+                  >{tx('成片预览')}</button>
                 </div>
               )}
             {state.timeline.length === 0 ? (
               /* An empty timeline is not a broken preview — it is an earlier
                  stage asking to be done. Point at the doors, in order. */
               <div className="orb-stage-guide">
-                <p className="orb-stage-guide-title">时间线还是空的</p>
-                <p className="orb-stage-guide-hint">先去配音生成解说，再去分镜出画面，回来这里排时间轴。</p>
+                <p className="orb-stage-guide-title">{tx('时间线还是空的')}</p>
+                <p className="orb-stage-guide-hint">{tx('先去配音生成解说，再去分镜出画面，回来这里排时间轴。')}</p>
                 <div className="orb-stage-guide-actions">
                   <button type="button" className="orb-btn orb-btn-accent"
-                    onClick={() => onGoToStage('assets_audio')}>去配音</button>
+                    onClick={() => onGoToStage('assets_audio')}>{tx('去配音')}</button>
                   <button type="button" className="orb-btn orb-btn-accent"
-                    onClick={() => onGoToStage('assets_shots')}>去分镜</button>
+                    onClick={() => onGoToStage('assets_shots')}>{tx('去分镜')}</button>
                 </div>
               </div>
             ) : !showingFilm ? (
@@ -1454,11 +1534,11 @@ export function TimelineScreen({
               <div className="orb-preview">
                 {activeShotPath === undefined ? (
                   <div className="orb-stage-guide">
-                    <p className="orb-stage-guide-title">这一镜还没有画面</p>
-                    <p className="orb-stage-guide-hint">分镜还缺这一张，生成后预览会自动接上。</p>
+                    <p className="orb-stage-guide-title">{tx('这一镜还没有画面')}</p>
+                    <p className="orb-stage-guide-hint">{tx('分镜还缺这一张，生成后预览会自动接上。')}</p>
                     <div className="orb-stage-guide-actions">
                       <button type="button" className="orb-btn orb-btn-accent"
-                        onClick={() => onGoToStage('assets_shots')}>去分镜生成</button>
+                        onClick={() => onGoToStage('assets_shots')}>{tx('去分镜生成')}</button>
                     </div>
                   </div>
                 ) : (
@@ -1468,12 +1548,12 @@ export function TimelineScreen({
                   ? null
                   : <div className="orb-preview-sub">{activeCue.text}</div>}
                 {filmUrl === undefined ? null : (
-                  <div className="orb-stage-badge">编辑中 · 成片还是上一次合成的</div>
+                  <div className="orb-stage-badge">{tx('编辑中 · 成片还是上一次合成的')}</div>
                 )}
                 <button
                   type="button"
                   className={'orb-preview-play' + (previewing ? ' orb-preview-play-on' : '')}
-                  aria-label={previewing ? '暂停' : '预览播放'}
+                  aria-label={previewing ? tx('暂停') : tx('预览播放')}
                   onClick={togglePreview}
                 >{previewing ? '❚❚' : '▶'}</button>
                 {/* Over the picture rather than beside the strip: it reads as part
@@ -1508,10 +1588,10 @@ export function TimelineScreen({
 
             {activeShot !== undefined && activeTiming !== undefined ? (
               <aside className="orb-shot-info">
-                <div className="orb-col-head"><b>镜头信息</b></div>
+                <div className="orb-col-head"><b>{tx('镜头信息')}</b></div>
                 <div className="orb-facts-box">
                   <div className="orb-facts-title">
-                    {activeTiming.label} · 第 {(activeShot.shotIndex ?? 0) + 1} 镜
+                    {activeTiming.label}{tx(' · 第 ')}{(activeShot.shotIndex ?? 0) + 1}{tx(' 镜')}
                     <span className="orb-hint">
                       　{formatClock(activeShot.start)} – {formatClock(activeShot.start + activeShot.duration)}
                     </span>
@@ -1521,29 +1601,29 @@ export function TimelineScreen({
                         tiles: name above, value below, side by side — the facts
                         panel is narrow, and stacking them made it a ladder. */}
                     <div className="orb-facts-stats">
-                      <div className="orb-facts-stat"><dt>本镜</dt><dd>{activeShot.duration.toFixed(2)}s</dd></div>
-                      <div className="orb-facts-stat"><dt>分段</dt><dd>{activeTiming.duration.toFixed(2)}s</dd></div>
-                      <div className="orb-facts-stat"><dt>配音</dt><dd>{activeTiming.speechSeconds.toFixed(2)}s</dd></div>
+                      <div className="orb-facts-stat"><dt>{tx('本镜')}</dt><dd>{activeShot.duration.toFixed(2)}s</dd></div>
+                      <div className="orb-facts-stat"><dt>{tx('分段')}</dt><dd>{activeTiming.duration.toFixed(2)}s</dd></div>
+                      <div className="orb-facts-stat"><dt>{tx('配音')}</dt><dd>{activeTiming.speechSeconds.toFixed(2)}s</dd></div>
                     </div>
                     <div className="orb-fact-wide">
-                      <dt>台词</dt>
-                      <dd>{activeTiming.text === '' ? '（无）' : activeTiming.text}</dd>
+                      <dt>{tx('台词')}</dt>
+                      <dd>{activeTiming.text === '' ? tx('（无）') : activeTiming.text}</dd>
                     </div>
                     <div className="orb-fact-wide">
-                      <dt>音频</dt>
-                      <dd className="orb-mono">{fileNameOf(activeTiming.narrationPath) ?? '（未生成）'}</dd>
+                      <dt>{tx('音频')}</dt>
+                      <dd className="orb-mono">{fileNameOf(activeTiming.narrationPath) ?? tx('（未生成）')}</dd>
                     </div>
                     <div className="orb-fact-wide">
-                      <dt>画面</dt>
-                      <dd className="orb-mono">{fileNameOf(activeShotPathRaw) ?? '（未生成）'}</dd>
+                      <dt>{tx('画面')}</dt>
+                      <dd className="orb-mono">{fileNameOf(activeShotPathRaw) ?? tx('（未生成）')}</dd>
                     </div>
                   </dl>
                 </div>
               </aside>
             ) : (
               <aside className="orb-shot-info">
-                <div className="orb-col-head"><b>镜头信息</b></div>
-                <p className="orb-note">时间线还没有片段。</p>
+                <div className="orb-col-head"><b>{tx('镜头信息')}</b></div>
+                <p className="orb-note">{tx('时间线还没有片段。')}</p>
               </aside>
             )}
           </div>
@@ -1553,17 +1633,17 @@ export function TimelineScreen({
           <div className="orb-compose-actions">
             <span aria-hidden="true" />
             <div className="orb-compose-subtools">
-              <label className="orb-inline-pick" title="烧录会重新编码整段视频，并依赖本机中文字体；关掉则字幕只作为旁挂 .srt 导出">
-                <span className="orb-hint">字幕</span>
+              <label className="orb-inline-pick" title={tx('烧录会重新编码整段视频，并依赖本机中文字体；关掉则字幕只作为旁挂 .srt 导出')}>
+                <span className="orb-hint">{tx('字幕')}</span>
                 <select
                   className="orb-select orb-select-small"
                   value={burnSubtitles}
                   disabled={phase !== null || busy !== null}
                   onChange={(event) => setBurnSubtitles(event.target.value as 'off' | 'outline' | 'box')}
                 >
-                  <option value="off">不烧录（旁挂 .srt）</option>
-                  <option value="outline">烧录 · 描边</option>
-                  <option value="box">烧录 · 底色块</option>
+                  <option value="off">{tx('不烧录（旁挂 .srt）')}</option>
+                  <option value="outline">{tx('烧录 · 描边')}</option>
+                  <option value="box">{tx('烧录 · 底色块')}</option>
                 </select>
               </label>
               {subtitlePath === undefined ? null : (
@@ -1572,8 +1652,8 @@ export function TimelineScreen({
                   href={'/openreel/media?project=' + encodeURIComponent(state.project.id)
                     + '&path=' + encodeURIComponent(subtitlePath) + '&download=1'}
                   download
-                  title="导出这一版的字幕"
-                >下载字幕</a>
+                  title={tx('导出这一版的字幕')}
+                >{tx('下载字幕')}</a>
               )}
             </div>
             <div className="orb-compose-run">
@@ -1584,7 +1664,7 @@ export function TimelineScreen({
                 onClick={() => void compose()}
               >
                 <IconClapper className="orb-btn-icon" />
-                <BusyLabel phase={phase} idle={filmUrl === undefined ? '合成' : '重新合成'} />
+                <BusyLabel phase={phase} idle={filmUrl === undefined ? tx('合成') : tx('重新合成')} />
               </button>
             </div>
           </div>
@@ -1598,23 +1678,23 @@ export function TimelineScreen({
       <div className="orb-film" ref={film}>
         <div className="orb-film-perf" aria-hidden="true" />
         <div className="orb-film-body">
-          <Strip ariaLabel="时间线" arrows={false}>
+          <Strip ariaLabel={tx('时间线')} arrows={false}>
           <div className="orb-track" style={{ width: (LANE_LABEL + total * pps) + 'px' }}>
             <Ruler total={total} pps={pps} onScrub={seek} />
-            <Lane label="分镜" blocks={shotBlocks} total={total} pps={pps} at={at} onSeek={seek}
+            <Lane label={tx('分镜')} blocks={shotBlocks} total={total} pps={pps} at={at} onSeek={seek}
               onOpen={() => onGoToStage('assets_shots')}
               onReorder={(sectionId, from, to) => moveShot(sectionId, from, to - from)}
               onDragShot={setDragShot}
               dragShot={dragShot}
               onLanded={setLanded}
               landedKey={landed} />
-            <Lane label="配音" blocks={voiceBlocks} total={total} pps={pps} at={at} onSeek={seek}
+            <Lane label={tx('配音')} blocks={voiceBlocks} total={total} pps={pps} at={at} onSeek={seek}
               onOpen={() => onGoToStage('assets_audio')}
               padsOf={padsOf}
               onPad={(sectionId, edge, seconds, trim) => queuePad(sectionId, edge, seconds, trim)} />
             {cues.length > 0 ? (
               <div className="orb-lane">
-                <span className="orb-lane-label orb-lane-label-plain">字幕</span>
+                <span className="orb-lane-label orb-lane-label-plain">{tx('字幕')}</span>
                 <div className="orb-lane-blocks orb-lane-cues" ref={cueTrack} style={{ width: px(total) }}>
                   {cues.map((cue) => {
                     const live = at >= cue.start && at < cue.end
@@ -1627,18 +1707,18 @@ export function TimelineScreen({
                           left: px(liveCue(cue).start),
                           width: px(Math.max(0.05, liveCue(cue).end - liveCue(cue).start)),
                         }}
-                        title={cue.text + '　拖两端可调这条的长短，时间从相邻一条来'}
+                        title={cue.text + tx('　拖两端可调这条的长短，时间从相邻一条来')}
                         onClick={() => seek(cue.start)}
                       >
                         <span
                           className="orb-pad-handle orb-pad-handle-left"
-                          title={cue.index === 0 ? '拖动改这一段字幕的前留白' : '和前一条互让时间'}
+                          title={cue.index === 0 ? tx('拖动改这一段字幕的前留白') : tx('和前一条互让时间')}
                           onPointerDown={(event) => startCueEdge(event, cue, 'left')}
                         />
                         <span className="orb-cue-text">{cue.text}</span>
                         <span
                           className="orb-pad-handle orb-pad-handle-right"
-                          title={cue.index === cue.total - 1 ? '拖动改这一段字幕的后留白' : '和后一条互让时间'}
+                          title={cue.index === cue.total - 1 ? tx('拖动改这一段字幕的后留白') : tx('和后一条互让时间')}
                           onPointerDown={(event) => startCueEdge(event, cue, 'right')}
                         />
                       </button>
@@ -1649,14 +1729,14 @@ export function TimelineScreen({
             ) : null}
             {musicPath === undefined || musicPath === '' ? null : (
               <div className="orb-lane">
-                <span className="orb-lane-label orb-lane-label-plain">配乐</span>
+                <span className="orb-lane-label orb-lane-label-plain">{tx('配乐')}</span>
                 <div className="orb-lane-blocks" style={{ width: px(total) }}>
                   {/* One block spanning the whole film, because that is what it
                       is: the bed is looped and cut to exactly this length. */}
                   <button
                     type="button"
                     className="orb-music-block"
-                    title={fileNameOf(musicPath) + '　整片铺满，合成时压在解说下面'}
+                    title={fileNameOf(musicPath) + tx('　整片铺满，合成时压在解说下面')}
                     onClick={() => seek(0)}
                   >
                     <span className="orb-music-name">♪　{fileNameOf(musicPath)}</span>
@@ -1679,35 +1759,50 @@ export function TimelineScreen({
         <section className="orb-card">
           <div className="orb-card-head">
             <IconSliders className="orb-section-icon" />
-            <h3 className="orb-card-title">片段编辑</h3>
+            <h3 className="orb-card-title">{tx('片段编辑')}</h3>
             {cut === undefined
-              ? <span className="orb-hint">改动会自动开一个新版本</span>
+              ? <span className="orb-hint">{tx('改动会自动开一个新版本')}</span>
               : null}
           </div>
           <div className="orb-card-body">
             <div className="orb-duo-split">
               <div className="orb-duo-col">
-                <div className="orb-col-head"><b>本段节奏</b></div>
+                <div className="orb-col-head"><b>{tx('本段节奏')}</b></div>
                 <div className="orb-row orb-row-tight">
-              <label className="orb-inline-pick">
-                <span className="orb-hint">← 留白</span>
-                <input
-                  key={activeShot.sectionId + ':lead:' + (activeCutSection?.lead ?? '')}
-                  className="orb-input orb-input-seconds"
-                  inputMode="decimal"
-                  onKeyDown={commitOnEnter}
-                  defaultValue={(activeCutSection?.lead ?? '').toString()}
-                  placeholder={activeTiming.lead.toFixed(2)}
-                  disabled={busy !== null}
-                  onBlur={(event) => {
-                    if (event.target.value.trim() === '') return
-                    const value = Number(event.target.value)
-                    if (Number.isFinite(value) && value >= 0) void editSection(activeShot.sectionId, { lead: value })
-                  }}
-                />
-              </label>
-              <label className="orb-inline-pick">
-                <span className="orb-hint">占比</span>
+              <div className="orb-pad-stack">
+                <label className="orb-inline-pick">
+                  <span className="orb-hint">{tx('← 留白')}</span>
+                  <input
+                    ref={leadBox}
+                    key={activeShot.sectionId + ':lead:' + (activeCutSection?.lead ?? '')}
+                    className="orb-input orb-input-seconds"
+                    inputMode="decimal"
+                    onKeyDown={commitOnEnter}
+                    defaultValue={(activeCutSection?.lead ?? '').toString()}
+                    placeholder={activeTiming.lead.toFixed(2)}
+                    disabled={busy !== null}
+                    onBlur={(event) => {
+                      if (event.target.value.trim() === '') return
+                      const value = Number(event.target.value)
+                      if (Number.isFinite(value) && value >= 0) void editSection(activeShot.sectionId, { lead: value })
+                    }}
+                  />
+                </label>
+                {/* preventDefault on mousedown keeps the box focused, so its
+                    onBlur never runs — otherwise every click here wrote the
+                    active section first and the batch second, two saves and
+                    two history entries for one gesture. */}
+                <button
+                  type="button"
+                  className="orb-btn orb-btn-small orb-pad-all"
+                  disabled={busy !== null || state.timeline.length === 0}
+                  title={tx('把上面填的秒数套到全部 ') + state.timeline.length + tx(' 段的前留白上')}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => void applyPadToAll('lead')}
+                >{busy === 'all-sections' ? tx('修改中…') : tx('批量修改')}</button>
+              </div>
+              <label className="orb-inline-pick orb-pad-stack-peer">
+                <span className="orb-hint">{tx('占比')}</span>
                 <input
                   key={activeShot.key + ':share'}
                   className="orb-input orb-input-seconds"
@@ -1717,10 +1812,10 @@ export function TimelineScreen({
                   disabled={busy !== null || activeTiming.shots.length <= 1
                     || (activeShot.shotIndex ?? 0) === activeTiming.shots.length - 1}
                   title={activeTiming.shots.length <= 1
-                    ? '这一段只有一镜'
+                    ? tx('这一段只有一镜')
                     : (activeShot.shotIndex ?? 0) === activeTiming.shots.length - 1
-                      ? '最后一镜自动补齐剩下的时间'
-                      : '这一镜占本段的比例'}
+                      ? tx('最后一镜自动补齐剩下的时间')
+                      : tx('这一镜占本段的比例')}
                   onBlur={(event) => {
                     const value = Number(event.target.value)
                     if (Number.isFinite(value)) {
@@ -1729,33 +1824,44 @@ export function TimelineScreen({
                   }}
                 />
               </label>
-              <label className="orb-inline-pick">
-                <span className="orb-hint">留白 →</span>
-                <input
-                  key={activeShot.sectionId + ':tail:' + (activeCutSection?.tail ?? '')}
-                  className="orb-input orb-input-seconds"
-                  inputMode="decimal"
-                  onKeyDown={commitOnEnter}
-                  defaultValue={(activeCutSection?.tail ?? '').toString()}
-                  placeholder={Math.max(0, activeTiming.duration - activeTiming.lead - activeTiming.speechSeconds).toFixed(2)}
-                  disabled={busy !== null}
-                  onBlur={(event) => {
-                    if (event.target.value.trim() === '') return
-                    const value = Number(event.target.value)
-                    if (Number.isFinite(value) && value >= 0) void editSection(activeShot.sectionId, { tail: value })
-                  }}
-                />
-              </label>
+              <div className="orb-pad-stack">
+                <label className="orb-inline-pick">
+                  <span className="orb-hint">{tx('留白 →')}</span>
+                  <input
+                    ref={tailBox}
+                    key={activeShot.sectionId + ':tail:' + (activeCutSection?.tail ?? '')}
+                    className="orb-input orb-input-seconds"
+                    inputMode="decimal"
+                    onKeyDown={commitOnEnter}
+                    defaultValue={(activeCutSection?.tail ?? '').toString()}
+                    placeholder={Math.max(0, activeTiming.duration - activeTiming.lead - activeTiming.speechSeconds).toFixed(2)}
+                    disabled={busy !== null}
+                    onBlur={(event) => {
+                      if (event.target.value.trim() === '') return
+                      const value = Number(event.target.value)
+                      if (Number.isFinite(value) && value >= 0) void editSection(activeShot.sectionId, { tail: value })
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="orb-btn orb-btn-small orb-pad-all"
+                  disabled={busy !== null || state.timeline.length === 0}
+                  title={tx('把上面填的秒数套到全部 ') + state.timeline.length + tx(' 段的后留白上')}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => void applyPadToAll('tail')}
+                >{busy === 'all-sections' ? tx('修改中…') : tx('批量修改')}</button>
+              </div>
             </div>
 
             <div className="orb-divider" />
 
             <div className="orb-col-head">
-              <b>字幕编辑</b>
+              <b>{tx('字幕编辑')}</b>
               <span className="orb-hint">
                 {activeCue === undefined
-                  ? '播放头不在任何一条字幕上'
-                  : '第 ' + (activeCue.index + 1) + ' / ' + activeCue.total + ' 条　'
+                  ? tx('播放头不在任何一条字幕上')
+                  : tx('第 ') + (activeCue.index + 1) + ' / ' + activeCue.total + tx(' 条　')
                     + formatClock(activeCue.start) + ' – ' + formatClock(activeCue.end)}
               </span>
             </div>
@@ -1764,48 +1870,48 @@ export function TimelineScreen({
               className="orb-input orb-textarea"
               rows={2}
               value={cueDraft ?? activeCue?.text ?? ''}
-              placeholder={activeCue === undefined ? '把播放头移到某条字幕上' : ''}
+              placeholder={activeCue === undefined ? tx('把播放头移到某条字幕上') : ''}
               disabled={activeCue === undefined || busy !== null}
               onChange={(event) => setCueDraft(event.target.value)}
             />
             <div className="orb-cue-actions">
               <button type="button" className="orb-btn orb-btn-small"
                 disabled={activeCue === undefined || busy !== null || activeCue.index === 0}
-                title="和本段前一条合并" onClick={() => void mergeCue(-1)}>← 合并</button>
+                title={tx('和本段前一条合并')} onClick={() => void mergeCue(-1)}>{tx('← 合并')}</button>
               <button type="button" className="orb-btn orb-btn-small"
                 disabled={activeCue === undefined || busy !== null}
-                title="向左延长，时间从前一条来；本段第一条则改字幕前留白"
+                title={tx('向左延长，时间从前一条来；本段第一条则改字幕前留白')}
                 onClick={() => activeCue !== undefined
-                  && void nudgeCueEdge(activeCue.sectionId, activeCue.index, 'left', CUE_STEP)}>← 延长</button>
+                  && void nudgeCueEdge(activeCue.sectionId, activeCue.index, 'left', CUE_STEP)}>{tx('← 延长')}</button>
               <button type="button" className="orb-btn orb-btn-small"
                 disabled={activeCue === undefined || busy !== null}
-                title="在光标处断成两条"
-                onClick={() => void splitCue(cueBox.current?.selectionStart ?? 0)}>拆分</button>
+                title={tx('在光标处断成两条')}
+                onClick={() => void splitCue(cueBox.current?.selectionStart ?? 0)}>{tx('拆分')}</button>
               <button type="button" className="orb-btn orb-btn-small"
                 disabled={activeCue === undefined || busy !== null}
-                title="向右延长，时间从后一条来；本段最后一条则改字幕后留白"
+                title={tx('向右延长，时间从后一条来；本段最后一条则改字幕后留白')}
                 onClick={() => activeCue !== undefined
-                  && void nudgeCueEdge(activeCue.sectionId, activeCue.index, 'right', CUE_STEP)}>延长 →</button>
+                  && void nudgeCueEdge(activeCue.sectionId, activeCue.index, 'right', CUE_STEP)}>{tx('延长 →')}</button>
               <button type="button" className="orb-btn orb-btn-small"
                 disabled={activeCue === undefined || busy !== null
                   || activeCue.index >= activeCue.total - 1}
-                title="和本段后一条合并" onClick={() => void mergeCue(1)}>合并 →</button>
+                title={tx('和本段后一条合并')} onClick={() => void mergeCue(1)}>{tx('合并 →')}</button>
               <span className="orb-spacer" />
               <button type="button" className="orb-btn orb-btn-small"
                 disabled={cueDraft === null || busy !== null}
                 onClick={() => { const text = cueDraft; setCueDraft(null); if (text !== null) void editCue(text) }}>
-                保存
+                {tx('保存')}
               </button>
             </div>
               </div>
 
               <div className="orb-duo-col">
                 <div className="orb-col-head">
-                  <b>配乐</b>
+                  <b>{tx('配乐')}</b>
                   <span className="orb-hint">
                     {musicPath === undefined || musicPath === ''
-                      ? '整片一条音乐床，合成时自动压在解说下面'
-                      : '已铺满全片 · ' + fileNameOf(musicPath)}
+                      ? tx('整片一条音乐床，合成时自动压在解说下面')
+                      : tx('已铺满全片 · ') + fileNameOf(musicPath)}
                   </span>
                   <span className="orb-spacer" />
                   {musicPath === undefined || musicPath === '' ? null : (
@@ -1813,9 +1919,9 @@ export function TimelineScreen({
                       type="button"
                       className="orb-btn orb-btn-small"
                       disabled={busy !== null || phase !== null}
-                      title="从成片里去掉配乐。文件留在项目里，随时可以换回来"
+                      title={tx('从成片里去掉配乐。文件留在项目里，随时可以换回来')}
                       onClick={() => void removeMusic()}
-                    >去掉</button>
+                    >{tx('去掉')}</button>
                   )}
                 </div>
 
@@ -1823,20 +1929,20 @@ export function TimelineScreen({
                   <label
                     className="orb-inline-pick"
                     title={musicChoices.length === 0
-                      ? '设置 → OpenReel 创意台 → ComfyUI 工作流绑定 → 配乐（文生音乐）里可添加候选'
-                      : '从绑定的工作流里选一条，交给 Agent 选曲生成'}
+                      ? tx('设置 → OpenReel 创意台 → ComfyUI 工作流绑定 → 配乐（文生音乐）里可添加候选')
+                      : tx('从绑定的工作流里选一条，交给 Agent 选曲生成')}
                   >
-                    <span className="orb-hint">工作流</span>
+                    <span className="orb-hint">{tx('工作流')}</span>
                     <select
                       className="orb-select orb-select-small"
                       value={musicWorkflow}
                       disabled={phase !== null}
-                      onChange={(event) => setMusicWorkflow(event.target.value)}
+                      onChange={(event) => setMusicPick(event.target.value)}
                     >
-                      {musicOptions.length === 0 ? <option value="">（未绑定 · 去设置页添加）</option> : null}
+                      {musicOptions.length === 0 ? <option value="">{tx('（未绑定 · 去设置页添加）')}</option> : null}
                       {musicOptions.map((name, index) => (
                         <option key={name} value={name}>
-                          {index === 0 && name === musicChoices[0] ? name + '（默认）' : name}
+                          {index === 0 && name === musicChoices[0] ? name + tx('（默认）') : name}
                         </option>
                       ))}
                     </select>
@@ -1844,7 +1950,7 @@ export function TimelineScreen({
                   <input
                     className="orb-input"
                     value={musicNote}
-                    placeholder="想要什么样的音乐（可留空，Agent 会按风格和语速自己定）"
+                    placeholder={tx('想要什么样的音乐（可留空，Agent 会按风格和语速自己定）')}
                     disabled={phase !== null}
                     onChange={(event) => setMusicNote(event.target.value)}
                   />
@@ -1852,12 +1958,12 @@ export function TimelineScreen({
                     type="button"
                     className="orb-btn orb-btn-accent"
                     disabled={phase !== null || busy !== null || musicWorkflow.trim() === ''}
-                    title="交给 Agent：先读配乐技能选曲，再用这条工作流生成，然后搬进项目"
+                    title={tx('交给 Agent：先读配乐技能选曲，再用这条工作流生成，然后搬进项目')}
                     onClick={() => void addMusic()}
                   >
                     <BusyLabel
                       phase={phase}
-                      idle={musicPath === undefined || musicPath === '' ? '添加音乐' : '换一首'}
+                      idle={musicPath === undefined || musicPath === '' ? tx('添加音乐') : tx('换一首')}
                     />
                   </button>
                 </div>
@@ -1867,10 +1973,10 @@ export function TimelineScreen({
                     question listening does not ask, and stays fixed. */}
                 <div className="orb-music-form">
                   <label className="orb-inline-pick" title={
-                    '音乐床相对解说的音量。规范值 ' + MIX_BOUNDS.gainDb.default
-                    + ' dB（W3C：音乐要比人声低 20dB）。解说一响还会再自动压低 ' + (-DUCK_DB) + ' dB'
+                    tx('音乐床相对解说的音量。规范值 ') + MIX_BOUNDS.gainDb.default
+                    + tx(' dB（W3C：音乐要比人声低 20dB）。解说一响还会再自动压低 ') + (-DUCK_DB) + ' dB'
                   }>
-                    <span className="orb-hint">音量</span>
+                    <span className="orb-hint">{tx('音量')}</span>
                     <input
                       className="orb-input orb-input-tiny"
                       type="number"
@@ -1883,8 +1989,8 @@ export function TimelineScreen({
                     />
                     <span className="orb-hint">dB</span>
                   </label>
-                  <label className="orb-inline-pick" title="开头music淡入的秒数">
-                    <span className="orb-hint">淡入</span>
+                  <label className="orb-inline-pick" title={tx('开头music淡入的秒数')}>
+                    <span className="orb-hint">{tx('淡入')}</span>
                     <input
                       className="orb-input orb-input-tiny"
                       type="number"
@@ -1897,8 +2003,8 @@ export function TimelineScreen({
                     />
                     <span className="orb-hint">s</span>
                   </label>
-                  <label className="orb-inline-pick" title="结尾淡出的秒数">
-                    <span className="orb-hint">淡出</span>
+                  <label className="orb-inline-pick" title={tx('结尾淡出的秒数')}>
+                    <span className="orb-hint">{tx('淡出')}</span>
                     <input
                       className="orb-input orb-input-tiny"
                       type="number"
@@ -1917,14 +2023,14 @@ export function TimelineScreen({
                     number fields wrap, and a spacer inside that row cannot be
                     trusted to push anything anywhere. */}
                 <div className="orb-music-save">
-                  {musicDirty ? <span className="orb-hint orb-music-dirty">未保存</span> : null}
+                  {musicDirty ? <span className="orb-hint orb-music-dirty">{tx('未保存')}</span> : null}
                   <button
                     type="button"
                     className={'orb-btn orb-btn-small' + (musicDirty ? ' orb-btn-dirty' : '')}
                     disabled={phase !== null || busy !== null || !musicDirty}
-                    title="保存工作流名称和这三项设置。合成与试听都按保存后的值走"
+                    title={tx('保存工作流名称和这三项设置。合成与试听都按保存后的值走')}
                     onClick={() => void commitMusic()}
-                  >{busy === 'music' ? '保存中…' : '保存'}</button>
+                  >{busy === 'music' ? tx('保存中…') : tx('保存')}</button>
                 </div>
               </div>
             </div>
@@ -1940,14 +2046,17 @@ export function TimelineScreen({
             className="orb-cta-primary"
             href={filmUrl + '&download=1'}
             download
-            title="导出这一版的成片"
+            title={tx('导出这一版的成片')}
           >
             <IconPlay className="orb-cta-icon" />
-            导出成片
+            {tx('导出成片')}
           </a>
           <p className="orb-cta-hint">
-            导出的是{cut === undefined ? '计划版本' : '「' + cut.name + '」'}的成片
-            {filmDuration === undefined ? '' : ' · ' + filmDuration.toFixed(1) + ' 秒'}
+            {/* The version name stands alone rather than being wrapped in a
+                possessive: 「…」的成片 has no word order to translate into, and
+                "Exporting …" already says what the name is doing there. */}
+            {tx('导出的是 ')}{cut === undefined ? tx('计划版本') : cut.name}
+            {filmDuration === undefined ? '' : ' · ' + filmDuration.toFixed(1) + tx(' 秒')}
             {filmStat?.resolution === undefined ? '' : ' · ' + filmStat.resolution}
             {filmStat?.file_size_bytes === undefined ? '' : ' · ' + formatBytes(filmStat.file_size_bytes)}
           </p>
@@ -2022,7 +2131,7 @@ function Ruler({ total, pps, onScrub }: {
         style={{ width: pxAt(total, pps) }}
         ref={track}
         role="slider"
-        aria-label="播放位置"
+        aria-label={tx('播放位置')}
         aria-valuemin={0}
         aria-valuemax={total}
         onPointerDown={onPointerDown}
@@ -2235,7 +2344,7 @@ function Lane({
 
   return (
     <div className="orb-lane">
-      <button type="button" className="orb-lane-label" onClick={onOpen} title="回到这一步去改内容">
+      <button type="button" className="orb-lane-label" onClick={onOpen} title={tx('回到这一步去改内容')}>
         {label}
       </button>
       <div className="orb-lane-blocks" ref={track}>
@@ -2326,7 +2435,7 @@ function Lane({
                 window.addEventListener('pointerup', up)
               }}
               title={block.label + '　' + formatClock(block.start) + ' + ' + block.duration.toFixed(2) + 's'
-                + (canDrag(block) ? '　拖动可在本段内换位' : '')}
+                + (canDrag(block) ? tx('　拖动可在本段内换位') : '')}
               onClick={() => onSeek(block.start)}
             >
               {block.waveform === undefined ? null : (
@@ -2355,12 +2464,12 @@ function Lane({
                 <>
                   <span
                     className="orb-pad-handle orb-pad-handle-left"
-                    title="拖动改前留白"
+                    title={tx('拖动改前留白')}
                     onPointerDown={(event) => startPad(event, block, 'lead')}
                   />
                   <span
                     className="orb-pad-handle orb-pad-handle-right"
-                    title="拖动改后留白"
+                    title={tx('拖动改后留白')}
                     onPointerDown={(event) => startPad(event, block, 'tail')}
                   />
                 </>

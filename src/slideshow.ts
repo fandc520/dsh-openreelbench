@@ -40,6 +40,8 @@
  *     `picture_rate`: how many pictures a minute of film gets, which is what
  *     actually separates a film from a deck.
  */
+import { t } from './i18n.js'
+
 import type { SceneShot } from './schema.js'
 import type { Playbook } from './playbooks.js'
 import type { Verdict } from './variation.js'
@@ -93,7 +95,7 @@ export interface SectionTimingLite {
 /* -------------------------------------------------------------- dimensions */
 
 function scoreRepetition(shots: readonly SceneShot[], subjects: ReadonlyMap<string, string>): Dimension {
-  if (shots.length < 3) return { score: 0, reason: '镜数太少，谈不上重复' }
+  if (shots.length < 3) return { score: 0, reason: t('镜数太少，谈不上重复') }
 
   const subjectOf = (shot: SceneShot): string =>
     normalise(shot.prompt ?? subjects.get(shot.section_id) ?? '')
@@ -116,16 +118,16 @@ function scoreRepetition(shots: readonly SceneShot[], subjects: ReadonlyMap<stri
   const reasons: string[] = []
   if (withSubject === 0) {
     score += 2.5
-    reasons.push('没有一镜写了画面主体')
+    reasons.push(t('没有一镜写了画面主体'))
   } else if (uniqueRatio < 0.6) {
     score += 2.5
-    reasons.push('只有 ' + percent(uniqueSubjects.size, withSubject) + ' 的画面描述是不重样的')
+    reasons.push(t('只有 ') + percent(uniqueSubjects.size, withSubject) + t(' 的画面描述是不重样的'))
   }
   if (sizeRatio > 0.6) {
     score += 2.5
-    reasons.push(percent(topSize, shots.length) + ' 的镜头是同一个镜别')
+    reasons.push(percent(topSize, shots.length) + t(' 的镜头是同一个镜别'))
   }
-  return { score: Math.min(5, score), reason: reasons.join('；') || '画面和镜别都有变化' }
+  return { score: Math.min(5, score), reason: reasons.join('；') || t('画面和镜别都有变化') }
 }
 
 function scoreDecorative(shots: readonly SceneShot[]): Dimension {
@@ -142,16 +144,16 @@ function scoreDecorative(shots: readonly SceneShot[]): Dimension {
   const ratio = unconsidered.length / shots.length
   const score = Math.min(5, ratio * 5)
   const reason = ratio > 0.5
-    ? unconsidered.length + '/' + shots.length + ' 镜没有任何自己的决定（无主体、无镜头语言、无质感词），只是「这一段需要张图」'
+    ? unconsidered.length + '/' + shots.length + t(' 镜没有任何自己的决定（无主体、无镜头语言、无质感词），只是「这一段需要张图」')
     : ratio > 0.2
-      ? unconsidered.length + '/' + shots.length + ' 镜没写任何具体内容'
-      : '大部分镜头都是想过的'
+      ? unconsidered.length + '/' + shots.length + t(' 镜没写任何具体内容')
+      : t('大部分镜头都是想过的')
   return { score: Number(score.toFixed(1)), reason }
 }
 
 function scoreStaticHold(timings: readonly SectionTimingLite[], playbook: Playbook): Dimension {
   const holds = timings.flatMap((timing) => timing.shots.map((shot) => shot.duration))
-  if (holds.length === 0) return { score: 0, reason: '还没有时间轴' }
+  if (holds.length === 0) return { score: 0, reason: t('还没有时间轴') }
 
   // A still stops holding attention somewhere past the style's own ceiling;
   // Ken Burns buys some of that back, which is exactly why a playbook that
@@ -164,11 +166,11 @@ function scoreStaticHold(timings: readonly SectionTimingLite[], playbook: Playbo
   const ratio = overlong.length / holds.length
   const score = Math.min(5, ratio * 5 + (worst > limit * 1.5 ? 1 : 0))
   const reason = overlong.length === 0
-    ? '每一张的停留都在 ' + limit.toFixed(0) + ' 秒以内'
-    : overlong.length + '/' + holds.length + ' 张停留超过 ' + limit.toFixed(0) + ' 秒'
-      + '（最长 ' + worst.toFixed(1) + ' 秒）'
-      + (playbook.kenBurns ? '' : '，而这个风格关掉了 Ken Burns，画面是完全不动的')
-  const short = overlong.length === 0 ? '停留合适' : '单张停留太久，拆段或加镜'
+    ? t('每一张的停留都在 ') + limit.toFixed(0) + t(' 秒以内')
+    : overlong.length + '/' + holds.length + t(' 张停留超过 ') + limit.toFixed(0) + t(' 秒')
+      + t('（最长 ') + worst.toFixed(1) + t(' 秒）')
+      + (playbook.kenBurns ? '' : t('，而这个风格关掉了 Ken Burns，画面是完全不动的'))
+  const short = overlong.length === 0 ? t('停留合适') : t('单张停留太久，拆段或加镜')
   return { score: Number(score.toFixed(1)), reason, short }
 }
 
@@ -183,11 +185,11 @@ function scoreStaticHold(timings: readonly SectionTimingLite[], playbook: Playbo
  * check was marking a style down for succeeding at being itself.
  */
 const CUTS_PER_MINUTE: Record<string, { low: number; label: string }> = {
-  contemplative: { low: 3, label: '沉静' },
-  conversational: { low: 5, label: '常速' },
-  technical: { low: 5, label: '讲解' },
-  cinematic: { low: 8, label: '电影感' },
-  energetic: { low: 12, label: '快节奏' },
+  contemplative: { low: 3, label: t('沉静') },
+  conversational: { low: 5, label: t('常速') },
+  technical: { low: 5, label: t('讲解') },
+  cinematic: { low: 8, label: t('电影感') },
+  energetic: { low: 12, label: t('快节奏') },
 }
 
 function scorePictureRate(
@@ -196,7 +198,7 @@ function scorePictureRate(
   playbook: Playbook,
 ): Dimension {
   const total = timings.reduce((sum, timing) => sum + timing.duration, 0)
-  if (total <= 0) return { score: 0, reason: '还没有时间轴' }
+  if (total <= 0) return { score: 0, reason: t('还没有时间轴') }
   const perMinute = (shots.length / total) * 60
 
   const profile = playbook.narration.pacing_profile
@@ -211,14 +213,14 @@ function scorePictureRate(
       ? 5
       : ((floor - perMinute) / (floor * 0.5)) * 5
 
-  const reason = '每分钟 ' + perMinute.toFixed(1) + ' 张画面'
-    + '（' + target.label + '风格该有 ' + floor + ' 张以上）'
-    + (perMinute >= floor ? '，节奏合适' : perMinute <= floor * 0.5 ? '，太少了，看起来就是在念幻灯片' : '，偏慢')
+  const reason = t('每分钟 ') + perMinute.toFixed(1) + t(' 张画面')
+    + '（' + target.label + t('风格该有 ') + floor + t(' 张以上）')
+    + (perMinute >= floor ? t('，节奏合适') : perMinute <= floor * 0.5 ? t('，太少了，看起来就是在念幻灯片') : t('，偏慢'))
   const short = perMinute >= floor
-    ? '节奏合适'
+    ? t('节奏合适')
     : perMinute <= floor * 0.5
-      ? '太慢，把长段拆成多镜'
-      : '偏慢，可以再切几镜'
+      ? t('太慢，把长段拆成多镜')
+      : t('偏慢，可以再切几镜')
   return { score: Number(score.toFixed(1)), reason, short }
 }
 
@@ -228,23 +230,23 @@ function scoreStyleClaim(shots: readonly SceneShot[], playbook: Playbook): Dimen
   // to be backed by structure, or it is a label.
   const claim = (playbook.visual.style_hint ?? playbook.visual.image_prompt_prefix).toLowerCase()
   const claimsCinema = claim.includes('cinematic') || claim.includes('photographic')
-  if (!claimsCinema) return { score: 0, reason: '这个风格没有声称电影感' }
+  if (!claimsCinema) return { score: 0, reason: t('这个风格没有声称电影感') }
 
   const issues: string[] = []
   if (!shots.some((shot) => shot.hero_moment === true)) {
-    issues.push('自称电影感却没有一个高光镜')
+    issues.push(t('自称电影感却没有一个高光镜'))
   }
   const withLighting = shots.filter((shot) => shot.shot_language?.lighting_key !== undefined).length
   if (withLighting < shots.length * 0.3) {
-    issues.push('自称电影感却只有 ' + withLighting + '/' + shots.length + ' 镜定了光线')
+    issues.push(t('自称电影感却只有 ') + withLighting + '/' + shots.length + t(' 镜定了光线'))
   }
   const sizes = new Set(shots.map((shot) => shot.shot_language?.shot_size).filter((size) => size !== undefined))
   if (sizes.size < 2) {
-    issues.push('自称电影感却只有 ' + sizes.size + ' 种镜别')
+    issues.push(t('自称电影感却只有 ') + sizes.size + t(' 种镜别'))
   }
   return {
     score: Math.min(5, Number((issues.length * 1.8).toFixed(1))),
-    reason: issues.join('；') || '电影感有结构撑着',
+    reason: issues.join('；') || t('电影感有结构撑着'),
   }
 }
 
@@ -267,7 +269,7 @@ export function scoreSlideshowRisk(
     return {
       average: 5,
       verdict: 'fail',
-      dimensions: { repetition: { score: 5, reason: '没有分镜' } },
+      dimensions: { repetition: { score: 5, reason: t('没有分镜') } },
       blocking: true,
     }
   }

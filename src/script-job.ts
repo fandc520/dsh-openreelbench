@@ -33,11 +33,21 @@ export interface ScriptJobInput {
   durationSeconds: number
   /** `narration.chars_per_second` of the project's style. */
   charsPerSecond: number
+  /**
+   * The film's language, resolved by the caller.
+   *
+   * Carried rather than derived here so the panel and the tests build the same
+   * request: `resolveContentLanguage` needs both the project and the panel
+   * setting, and this module is pure by design.
+   */
+  language: ContentLanguage
   /** Style playbook id, so the model can resolve the rest of the contract. */
   style: string
   /** A rewrite changes the segmentation, not the wording. */
   rewrite: boolean
 }
+
+import { type ContentLanguage, contentLanguageLine, narrationBudget } from './content-language.js'
 
 const NEWLINE = String.fromCharCode(10)
 /** Exported so the handoff test can follow the gesture out of the screen. */
@@ -48,7 +58,12 @@ export function buildScriptJob(input: ScriptJobInput): string {
   // The sheet gives the rule (chars per second); the panel knows both numbers,
   // so it can give the answer. A budget stated as a number is checkable at a
   // glance; stated as a multiplication it gets skipped.
-  const budget = Math.round(input.durationSeconds * input.charsPerSecond)
+  //
+  // In the UNIT the film's language is counted in. The playbook's figure is
+  // Chinese characters per second; handing an English script "约 105 字" is not
+  // a slightly wrong number, it is four times the film.
+  const budget = narrationBudget(input.language, input.durationSeconds, input.charsPerSecond)
+  const languageLine = contentLanguageLine(input.language)
 
   return [
     '/' + SCRIPT_STAGE_SKILL,
@@ -59,7 +74,9 @@ export function buildScriptJob(input: ScriptJobInput): string {
         + '**分段结构要重新设计，不要只换措辞**——换个钩子类型，或者换一条因果链。'
       : '简报过闸了。按它给项目 `' + input.projectId + '`（' + input.title + '）写脚本。',
     '',
+    ...(languageLine === '' ? [] : [languageLine, '']),
     '目标 ' + input.durationSeconds + 's · 风格 `' + input.style + '`'
-      + ' · 按 ' + input.charsPerSecond + ' 字/秒算**全片约 ' + budget + ' 字**',
+      + ' · 按 ' + budget.perSecond + (input.language.unit === 'char' ? ' 字/秒' : ' 词/秒')
+      + '算**全片约 ' + budget.amount + budget.unit + '**',
   ].join(NEWLINE)
 }

@@ -13,6 +13,7 @@
  * cost a click.
  */
 import { createElement as h, useState } from 'react'
+import { tx } from './i18n.ts'
 
 /** One checked question and its answer. */
 export interface AdviceRow {
@@ -69,8 +70,8 @@ export function AdvicePanel({ title, rows, onJump, action }: AdvicePanelProps): 
         h('span', { className: 'orb-plan-advice-caret' }, open ? '▾' : '▸'),
         h('span', { className: 'orb-plan-advice-title' }, title),
         clean
-          ? h('span', { className: 'orb-plan-advice-ok' }, '全部通过')
-          : h('span', { className: 'orb-plan-advice-warn' }, problems.length + ' 处建议'),
+          ? h('span', { className: 'orb-plan-advice-ok' }, tx('全部通过'))
+          : h('span', { className: 'orb-plan-advice-warn' }, problems.length + tx(' 处建议')),
       ),
       action ?? null,
     ),
@@ -78,16 +79,16 @@ export function AdvicePanel({ title, rows, onJump, action }: AdvicePanelProps): 
     !open ? null : h('div', { className: 'orb-plan-advice-body' },
       ...rows.flatMap((row) => [
         h('div', { className: 'orb-plan-advice-row', key: row.label },
-          h('span', { className: 'orb-plan-advice-label' }, row.label),
+          h('span', { className: 'orb-plan-advice-label' }, tx(row.label)),
           row.clean
             ? h('span', { className: 'orb-plan-advice-ok' },
-                row.summary,
-                row.hint === undefined ? null : h('span', { className: 'orb-hint' }, '　' + row.hint),
+                tx(row.summary),
+                row.hint === undefined ? null : h('span', { className: 'orb-hint' }, '　' + tx(row.hint)),
               )
             : h('span', {
                 className: 'orb-plan-advice-warn'
                   + (row.severity === undefined ? '' : ' orb-plan-advice-' + row.severity),
-              }, row.summary),
+              }, tx(row.summary)),
         ),
         ...(row.clean || row.details === undefined || row.details.length === 0
           ? []
@@ -105,7 +106,7 @@ export function AdvicePanel({ title, rows, onJump, action }: AdvicePanelProps): 
                         key: id,
                         className: 'orb-variation-jump',
                         onClick: () => onJump(id),
-                        title: '跳到这一镜',
+                        title: tx('跳到这一镜'),
                       }, id)),
                     ),
               )),

@@ -371,10 +371,12 @@ const CSS = `
   font-size: 12px;
   line-height: 1.7;
 }
-/* Fixed width so the two answers line up and can be compared at a glance. */
+/* A floor, not a fixed width, so the two answers line up in Chinese and an
+   English label — which is several times longer — still gets its own box
+   instead of running into the verdict beside it. */
 .orb-plan-advice-label {
   flex: none;
-  width: 60px;
+  min-width: 60px;
   color: var(--dsw-alias-label-secondary);
 }
 .orb-plan-advice-ok { color: var(--dsw-alias-state-success-primary); }
@@ -1163,6 +1165,12 @@ body.orb-dragging { user-select: none; cursor: grabbing; }
   color: var(--dsw-alias-label-tertiary); white-space: nowrap;
 }
 .orb-row-tight { align-items: center; gap: 8px; }
+/* A pad field with its 批量修改 under it. The row is centre-aligned, so the
+   two stacks and the lone 占比 field line up on the INPUT rather than on the
+   top edge — the button hangs below without shifting the numbers out of line. */
+.orb-pad-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.orb-pad-stack-peer { align-self: flex-start; }
+.orb-pad-all { align-self: stretch; text-align: center; padding: 3px 8px; font-size: 11px; }
 .orb-check-box { flex: none; width: 15px; height: 15px; margin: 0; cursor: pointer; }
 .orb-field-narrow { flex: 0 0 110px; }
 .orb-self-end { align-self: flex-end; }
@@ -1327,6 +1335,8 @@ body.orb-dragging { user-select: none; cursor: grabbing; }
 /* The page's one commitment. Accent gradient, centered, loud on purpose —
    every field above funnels into this one button. */
 .orb-cta { display: flex; flex-direction: column; align-items: center; gap: 9px; padding-top: 2px; }
+/* Centred under the submit block, and quiet: it is a convenience, not a step. */
+.orb-to-top { display: flex; justify-content: center; padding-top: 4px; }
 .orb-cta-primary {
   display: inline-flex; align-items: center; gap: 9px; cursor: pointer; font: inherit;
   font-size: 15px; font-weight: 650; letter-spacing: .02em; color: #fff;

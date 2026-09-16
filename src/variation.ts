@@ -32,6 +32,8 @@
  * ask for the same thing get two of the same picture. OM, spreading work over
  * many providers, never had that as the FIRST thing to look for.
  */
+import { t } from './i18n.js'
+
 import type { SceneShot } from './schema.js'
 
 /**
@@ -108,7 +110,7 @@ export function checkSceneVariation(
     return {
       score: 5,
       verdict: 'fail',
-      violations: [{ code: 'empty', message: '还没有分镜计划，没有东西可以检查。', shotIds: [] }],
+      violations: [{ code: 'empty', message: t('还没有分镜计划，没有东西可以检查。'), shotIds: [] }],
       suggestions: [],
       shotCount: 0,
     }
@@ -134,14 +136,14 @@ export function checkSceneVariation(
       violations.push({
         code: 'shot-size-monotony',
         message: topSize === 'unspecified'
-          ? total + ' 镜里有 ' + topCount + ' 镜没写镜别（' + percent(topCount, total) + '）。'
-            + '镜别是让画面不一样的第一层，全空等于全都交给模型自己猜。'
-          : '镜别「' + topSize + '」占了 ' + topCount + '/' + total + ' 镜（' + percent(topCount, total) + '）。',
+          ? total + t(' 镜里有 ') + topCount + t(' 镜没写镜别（') + percent(topCount, total) + '）。'
+            + t('镜别是让画面不一样的第一层，全空等于全都交给模型自己猜。')
+          : t('镜别「') + topSize + t('」占了 ') + topCount + '/' + total + t(' 镜（') + percent(topCount, total) + '）。',
         shotIds: ordered
           .filter((shot) => (shot.shot_language?.shot_size ?? 'unspecified') === topSize)
           .map((shot) => shot.id),
       })
-      suggestions.push('远景定场和特写交替着来，画面才有节奏。')
+      suggestions.push(t('远景定场和特写交替着来，画面才有节奏。'))
     }
   }
 
@@ -165,7 +167,7 @@ export function checkSceneVariation(
   if (longestRun >= 3) {
     violations.push({
       code: 'consecutive-same-size',
-      message: '连着 ' + longestRun + ' 镜是同一个镜别，剪起来会觉得停在原地。',
+      message: t('连着 ') + longestRun + t(' 镜是同一个镜别，剪起来会觉得停在原地。'),
       shotIds: ordered.slice(runEnd - longestRun + 1, runEnd + 1).map((shot) => shot.id),
     })
   }
@@ -177,7 +179,7 @@ export function checkSceneVariation(
   if (enoughToJudge && lightings.size <= 1) {
     violations.push({
       code: 'lighting-monotony',
-      message: total + ' 镜只有 ' + lightings.size + ' 种光线。光线是情绪转折最省力的手段。',
+      message: total + t(' 镜只有 ') + lightings.size + t(' 种光线。光线是情绪转折最省力的手段。'),
       shotIds: [],
     })
   }
@@ -187,10 +189,10 @@ export function checkSceneVariation(
   if (enoughToJudge && heroes.length === 0) {
     violations.push({
       code: 'no-hero',
-      message: '没有任何一镜标为高光。一支片子总该有一个画面是它的顶点。',
+      message: t('没有任何一镜标为高光。一支片子总该有一个画面是它的顶点。'),
       shotIds: [],
     })
-    suggestions.push('把最有冲击力的那一镜勾上「高光」。')
+    suggestions.push(t('把最有冲击力的那一镜勾上「高光」。'))
   }
   for (const hero of heroes) {
     const at = ordered.indexOf(hero)
@@ -202,7 +204,7 @@ export function checkSceneVariation(
       if (neighbour.shot_language?.shot_size === heroSize) {
         violations.push({
           code: 'hero-not-distinct',
-          message: '高光镜 `' + hero.id + '` 和相邻镜是同一个镜别，顶点就顶不起来。',
+          message: t('高光镜 `') + hero.id + t('` 和相邻镜是同一个镜别，顶点就顶不起来。'),
           shotIds: [hero.id, neighbour.id],
         })
         break
@@ -219,13 +221,13 @@ export function checkSceneVariation(
   if (generic.length >= total * 0.3) {
     violations.push({
       code: 'generic-language',
-      message: generic.length + '/' + total + ' 镜用了空词（modern、stunning 这类）。'
-        + '这种词对扩散模型等于没说，画面只会退回默认样子。',
+      message: generic.length + '/' + total + t(' 镜用了空词（modern、stunning 这类）。')
+        + t('这种词对扩散模型等于没说，画面只会退回默认样子。'),
       shotIds: generic.map((shot) => shot.id),
     })
     suggestions.push(
-      '把「a beautiful cityscape」换成「rain-slicked Tokyo intersection at night, '
-      + 'neon reflections in puddles」这种能看见的东西。',
+      t('把「a beautiful cityscape」换成「rain-slicked Tokyo intersection at night, ')
+      + t('neon reflections in puddles」这种能看见的东西。'),
     )
   }
 
@@ -234,8 +236,8 @@ export function checkSceneVariation(
   if (enoughToJudge && textured.length < total * 0.3) {
     violations.push({
       code: 'no-texture',
-      message: total + ' 镜里只有 ' + textured.length + ' 镜写了质感词。'
-        + '材质是同一个构图能出两种画面的地方。',
+      message: total + t(' 镜里只有 ') + textured.length + t(' 镜写了质感词。')
+        + t('材质是同一个构图能出两种画面的地方。'),
       shotIds: [],
     })
   }
@@ -255,8 +257,8 @@ export function checkSceneVariation(
     violations.push({
       code: 'duplicate-subject',
       message: duplicated
-        .map((group) => group.length + ' 镜写了同一个画面（' + group.map((shot) => shot.id).join('、') + '）')
-        .join('；') + '。同一条工作流出同一句提示词，就是同一张图。',
+        .map((group) => group.length + t(' 镜写了同一个画面（') + group.map((shot) => shot.id).join('、') + '）')
+        .join('；') + t('。同一条工作流出同一句提示词，就是同一张图。'),
       shotIds: duplicated.flat().map((shot) => shot.id),
     })
   }
@@ -266,7 +268,7 @@ export function checkSceneVariation(
   if (empty.length > 0) {
     violations.push({
       code: 'empty-subject',
-      message: empty.length + ' 镜既没写画面，所在段也没有。生成时只剩风格和镜头语言，画什么全靠模型猜。',
+      message: empty.length + t(' 镜既没写画面，所在段也没有。生成时只剩风格和镜头语言，画什么全靠模型猜。'),
       shotIds: empty.map((shot) => shot.id),
     })
   }

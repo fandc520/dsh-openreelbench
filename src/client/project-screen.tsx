@@ -27,10 +27,12 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 
-import { PLATFORM_FRAMES, type Brief, type PluginState, api } from './api.ts'
+import { FRAME_GROUPS, type Brief, type PluginState, api, frameGroupOf } from './api.ts'
 import { type AgentPhase, BusyLabel } from './busy.tsx'
 import { IconCheck, IconDoc, IconMic, IconPalette, IconPlay, IconSliders, IconSpark } from './icons.tsx'
 import { buildBriefApprovedNote, buildBriefJob } from '../brief-job.js'
+
+import { tx } from './i18n.ts'
 
 export interface ProjectScreenProps {
   state: PluginState
@@ -99,13 +101,13 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
   const keyPoints = draft.keyPoints.split('\n').map((line) => line.trim()).filter((line) => line !== '')
 
   const problems: string[] = []
-  if (draft.title.trim() === '') problems.push('标题不能为空')
-  if (draft.hook.trim() === '') problems.push('缺开场钩子')
-  if (keyPoints.length < 3) problems.push('要点至少三条（现在 ' + keyPoints.length + ' 条）')
-  if (keyPoints.length > 5) problems.push('要点最多五条（现在 ' + keyPoints.length + ' 条）')
+  if (draft.title.trim() === '') problems.push(tx('标题不能为空'))
+  if (draft.hook.trim() === '') problems.push(tx('缺开场钩子'))
+  if (keyPoints.length < 3) problems.push(tx('要点至少三条（现在 ') + keyPoints.length + tx(' 条）'))
+  if (keyPoints.length > 5) problems.push(tx('要点最多五条（现在 ') + keyPoints.length + tx(' 条）'))
   const durationValue = Number(draft.duration)
   if (!Number.isFinite(durationValue) || durationValue < 5 || durationValue > 1800) {
-    problems.push('时长要在 5–1800 秒之间')
+    problems.push(tx('时长要在 5–1800 秒之间'))
   }
 
   // The preview follows the DROPDOWN, not the saved project. Reading
@@ -118,8 +120,29 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
   const styleChanged = draft.style !== state.project.style
   // Same rule as the style preview: follow the DROPDOWN, not the saved value,
   // so the hint describes the choice being considered.
-  const platformFrame = PLATFORM_FRAMES.find((option) => option.id === draft.platform)
+  /**
+   * The picker chooses a SHAPE; the project stores a platform.
+   *
+   * Selecting by group and storing `platforms[0]` means a project that already
+   * says `wechat` keeps saying it — the group it belongs to is already
+   * selected, so no change event fires and nothing rewrites the brief behind
+   * the user's back. Only an actual change of shape writes a new value.
+   */
+  const platformGroup = frameGroupOf(draft.platform)
   const platformChanged = draft.platform !== (state.project.target_platform ?? 'generic')
+  /* The real pixels, straight off the host — baseline times the render scale.
+     Worked out here from the group only if an older host sent no frame. */
+  const scale = state.frame?.scale ?? 1
+  const frameWidth = state.frame?.width ?? platformGroup.baseWidth
+  const frameHeight = state.frame?.height ?? platformGroup.baseHeight
+  // The served frame follows the SAVED platform, so while a change is still a
+  // draft the pixels have to come from the group being previewed instead.
+  const previewWidth = platformChanged
+    ? Math.max(2, Math.round(platformGroup.baseWidth * scale / 2) * 2)
+    : frameWidth
+  const previewHeight = platformChanged
+    ? Math.max(2, Math.round(platformGroup.baseHeight * scale / 2) * 2)
+    : frameHeight
 
   function set<K extends keyof Draft>(key: K, value: Draft[K]): void {
     setSaveNote(null)
@@ -141,7 +164,7 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
         target_platform: draft.platform,
       })
       await onReload()
-      setSaveNote({ kind: 'ok', text: '已保存。' })
+      setSaveNote({ kind: 'ok', text: tx('已保存。') })
     } catch (error) {
       setSaveNote({ kind: 'error', text: (error as Error).message })
     } finally {
@@ -188,12 +211,12 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
         if (next !== undefined && JSON.stringify(next.artifacts.brief ?? null) !== before) {
           await onReload()
           setPhase(null)
-          setBriefNote({ kind: 'ok', text: kind === 'draft' ? 'Agent 起草好了，看看要不要改。' : '换了一版，看看这个方向。' })
+          setBriefNote({ kind: 'ok', text: kind === 'draft' ? tx('Agent 起草好了，看看要不要改。') : tx('换了一版，看看这个方向。') })
           return
         }
       }
       setPhase(null)
-      setBriefNote({ kind: 'error', text: '等了两分钟没等到新简报，去对话里看看 Agent 的进度。' })
+      setBriefNote({ kind: 'error', text: tx('等了两分钟没等到新简报，去对话里看看 Agent 的进度。') })
     } catch (error) {
       setPhase(null)
       setBriefNote({ kind: 'error', text: (error as Error).message })
@@ -231,11 +254,11 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
         status: 'completed',
         artifacts: { brief },
         human_approved: true,
-        note: '在OpenReel 创意台确认',
+        note: tx('在OpenReel 创意台确认'),
       })
       await onReload()
       await onSend(buildBriefApprovedNote(state.project.id, brief.title ?? draft.title.trim()))
-      setSubmitNote({ kind: 'ok', text: '简报已通过，已通知 Agent 继续写脚本。' })
+      setSubmitNote({ kind: 'ok', text: tx('简报已通过，已通知 Agent 继续写脚本。') })
     } catch (error) {
       setSubmitNote({ kind: 'error', text: (error as Error).message })
     } finally {
@@ -246,27 +269,27 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
   return (
     <div className="orb-screen">
       <header className="orb-screen-head">
-        <h2 className="orb-screen-title">项目详情</h2>
+        <h2 className="orb-screen-title">{tx('项目详情')}</h2>
         <span className="orb-spacer" />
         <span className={'orb-pill ' + (approved ? 'orb-pill-ok' : parked ? 'orb-pill-wait' : '')}>
-          {approved ? '已通过' : parked ? '等你确认' : stage?.status === 'pending' ? '未开始' : (stage?.status ?? '未开始')}
+          {approved ? tx('已通过') : parked ? tx('等你确认') : stage?.status === 'pending' ? tx('未开始') : (stage?.status ?? tx('未开始'))}
         </span>
       </header>
 
       <section className="orb-card">
         <div className="orb-card-head">
           <IconSliders className="orb-section-icon" />
-          <h3 className="orb-card-title">项目设置</h3>
-          {dirty ? <span className="orb-card-mark">未保存</span> : null}
+          <h3 className="orb-card-title">{tx('项目设置')}</h3>
+          {dirty ? <span className="orb-card-mark">{tx('未保存')}</span> : null}
         </div>
         <div className="orb-card-body">
           <div className="orb-setgrid">
             <label className="orb-field">
-              <span className="orb-label">标题</span>
+              <span className="orb-label">{tx('标题')}</span>
               <input className="orb-input" value={draft.title} onChange={(e) => set('title', e.target.value)} />
             </label>
             <label className="orb-field">
-              <span className="orb-label">时长（秒）</span>
+              <span className="orb-label">{tx('时长（秒）')}</span>
               <input
                 className="orb-input"
                 inputMode="numeric"
@@ -275,56 +298,63 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
               />
             </label>
             <label className="orb-field">
-              <span className="orb-label">投放平台</span>
+              <span className="orb-label">{tx('投放平台')}</span>
               <select
                 className="orb-select"
-                value={draft.platform}
-                onChange={(e) => set('platform', e.target.value)}
+                value={platformGroup.id}
+                onChange={(e) => {
+                  const picked = FRAME_GROUPS.find((group) => group.id === e.target.value)
+                  if (picked !== undefined) set('platform', picked.platforms[0]!)
+                }}
               >
-                {PLATFORM_FRAMES.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label} — {option.frame}
+                {FRAME_GROUPS.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {tx(group.names)} — {tx(group.label)} {group.baseWidth}×{group.baseHeight}
                   </option>
                 ))}
               </select>
               <span className="orb-hint">
                 {/* Said before rendering, not after: the frame is the one setting
-                    whose consequence is invisible until the film comes out wrong. */}
-                成片按这个出画幅，
-                {platformFrame?.id === 'generic'
-                  ? '现在用设置里的默认值。'
-                  : <b>{platformFrame?.frame}</b>}
-                {platformChanged ? <b className="orb-note-warn">　（预览中，保存后生效）</b> : null}
+                    whose consequence is invisible until the film comes out wrong.
+                    Both numbers, because the scale is in settings and nothing on
+                    this page would otherwise explain why 16:9 is not 1920. */}
+                {tx('分镜图和成片都按 ')}<b>{previewWidth}×{previewHeight}</b>{tx(' 出')}
+                {scale === 1
+                  ? ''
+                  : tx('（基线 ') + platformGroup.baseWidth + '×' + platformGroup.baseHeight
+                    + tx(' × 设置里的生成系数 ') + scale + '）'}
+                。
+                {platformChanged ? <b className="orb-note-warn">　{tx('（预览中，保存后生效）')}</b> : null}
               </span>
             </label>
           </div>
 
           <div className="orb-style-row">
             <label className="orb-field">
-              <span className="orb-label">风格</span>
+              <span className="orb-label">{tx('风格')}</span>
               <select className="orb-select" value={draft.style} onChange={(e) => set('style', e.target.value)}>
                 {state.style.options.map((option) => (
                   <option key={option.id} value={option.id}>
-                    {option.name}（{option.id}）— {option.mood}
+                    {tx(option.name)}（{option.id}）— {tx(option.mood)}
                   </option>
                 ))}
               </select>
               <span className="orb-hint">
-                {playbook.best_for} · 语速约 {playbook.narration.chars_per_second} 字/秒 ·
-                单段 {playbook.pacing.minSectionSeconds}–{playbook.pacing.maxSectionSeconds} 秒
-                {styleChanged ? <b className="orb-note-warn">　（预览中，保存后生效）</b> : null}
+                {tx(playbook.best_for)}{tx(' · 语速约 ')}{playbook.narration.chars_per_second}{tx(' 字/秒 · 单段 ')}
+                {playbook.pacing.minSectionSeconds}–{playbook.pacing.maxSectionSeconds}{tx(' 秒')}
+                {styleChanged ? <b className="orb-note-warn">　{tx('（预览中，保存后生效）')}</b> : null}
               </span>
             </label>
 
             <div className="orb-style-card">
             <div className="orb-style-line">
-              <b><IconPalette className="orb-style-glyph" />画面基调</b>{playbook.mood}
+              <b><IconPalette className="orb-style-glyph" />{tx('画面基调')}</b>{playbook.mood}
             </div>
             <div className="orb-style-line">
-              <b><IconMic className="orb-style-glyph" />旁白语气</b>{playbook.narration.voice_style}
+              <b><IconMic className="orb-style-glyph" />{tx('旁白语气')}</b>{playbook.narration.voice_style}
             </div>
             <div className="orb-style-line">
-              <b><IconSpark className="orb-style-glyph" />一致性锚点</b>
+              <b><IconSpark className="orb-style-glyph" />{tx('一致性锚点')}</b>
               <ul className="orb-anchors">
                 {playbook.visual.consistency_anchors.map((anchor) => <li key={anchor}>{anchor}</li>)}
               </ul>
@@ -339,7 +369,7 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
           <span className="orb-spacer" />
           <button type="button" className="orb-btn" disabled={busy !== 'idle'} onClick={() => void saveSettings()}>
             <IconCheck className="orb-btn-icon" />
-            {busy === 'saving' ? '保存中…' : '保存设置'}
+            {busy === 'saving' ? tx('保存中…') : tx('保存设置')}
           </button>
         </div>
       </section>
@@ -347,43 +377,43 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
       <section className="orb-card">
         <div className="orb-card-head">
           <IconDoc className="orb-section-icon" />
-          <h3 className="orb-card-title">创意简报</h3>
+          <h3 className="orb-card-title">{tx('创意简报')}</h3>
         </div>
         <div className="orb-card-body">
           {!hasBrief && phase === null ? (
             <p className="orb-note">
-              还没有简报。可以自己写，也可以让 Agent 先起一版——它知道项目标题、时长和风格。
+              {tx('还没有简报。可以自己写，也可以让 Agent 先起一版——它知道项目标题、时长和风格。')}
             </p>
           ) : null}
 
           <label className="orb-field">
-            <span className="orb-label">开场钩子</span>
+            <span className="orb-label">{tx('开场钩子')}</span>
             <input
               className="orb-input"
               value={draft.hook}
-              placeholder="开场三秒抓人的那一句，不是标题的复述"
+              placeholder={tx('开场三秒抓人的那一句，不是标题的复述')}
               onChange={(e) => set('hook', e.target.value)}
             />
           </label>
 
           <label className="orb-field">
-            <span className="orb-label">关键要点</span>
+            <span className="orb-label">{tx('关键要点')}</span>
             <textarea
               className="orb-input orb-textarea"
               rows={5}
               value={draft.keyPoints}
-              placeholder={'一行一条，三到五条。\n每条是一个能独立成段的信息点，不是关键词。'}
+              placeholder={tx('一行一条，三到五条。\n每条是一个能独立成段的信息点，不是关键词。')}
               onChange={(e) => set('keyPoints', e.target.value)}
             />
           </label>
 
           <div className="orb-row">
             <label className="orb-field">
-              <span className="orb-label">受众（可选）</span>
+              <span className="orb-label">{tx('受众（可选）')}</span>
               <input className="orb-input" value={draft.audience} onChange={(e) => set('audience', e.target.value)} />
             </label>
             <label className="orb-field">
-              <span className="orb-label">调性（可选）</span>
+              <span className="orb-label">{tx('调性（可选）')}</span>
               <input className="orb-input" value={draft.tone} onChange={(e) => set('tone', e.target.value)} />
             </label>
           </div>
@@ -400,18 +430,18 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
         </div>
         <div className="orb-card-foot">
           <span className="orb-hint">
-            {keyPoints.length} 条 · {durationValue > 0 ? '按当前风格约 ' + budget + ' 字' : ''}
+            {keyPoints.length}{tx(' 条 · ')}{durationValue > 0 ? tx('按当前风格约 ') + budget + tx(' 字') : ''}
           </span>
           <span className="orb-spacer" />
           <button
             type="button"
             className="orb-btn orb-btn-small orb-btn-accent"
             disabled={phase !== null || busy !== 'idle'}
-            title="让 Agent 换一个方向重写，你可以多要几版再挑"
+            title={tx('让 Agent 换一个方向重写，你可以多要几版再挑')}
             onClick={() => void askForBrief(hasBrief ? 'regenerate' : 'draft')}
           >
             <IconSpark className="orb-btn-icon" />
-            <BusyLabel phase={phase} idle={hasBrief ? '重新生成' : '让 Agent 起草'} />
+            <BusyLabel phase={phase} idle={hasBrief ? tx('重新生成') : tx('让 Agent 起草')} />
           </button>
         </div>
       </section>
@@ -425,12 +455,12 @@ export function ProjectScreen({ state, onReload, onSend }: ProjectScreenProps): 
           onClick={() => void submit()}
         >
           <IconPlay className="orb-cta-icon" />
-          {busy === 'submitting' ? '提交中…' : approved ? '重新提交简报' : '确认简报，进入脚本'}
+          {busy === 'submitting' ? tx('提交中…') : approved ? tx('重新提交简报') : tx('确认简报，进入脚本')}
         </button>
         <p className="orb-cta-hint">
           {approved
-            ? '这一版已经确认过了。再提交会替换简报，后面所有阶段都要重做。'
-            : '这一页所有信息确认后的下一步——之后 Agent 才会开始写脚本。'}
+            ? tx('这一版已经确认过了。再提交会替换简报，后面所有阶段都要重做。')
+            : tx('这一页所有信息确认后的下一步——之后 Agent 才会开始写脚本。')}
         </p>
         {submitNote !== null ? (
           <p className={'orb-note ' + (submitNote.kind === 'ok' ? 'orb-note-ok' : 'orb-note-error')}>{submitNote.text}</p>

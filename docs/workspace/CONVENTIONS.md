@@ -922,13 +922,13 @@ const paramsOf  = (tool) => Object.keys(allTools.get(tool)?.parameters?.properti
 **交给 Agent**：写脚本 · 批量配音 · 设计镜头语言 · 生成分镜 · 音色方案 · 选配乐
 （后四项带 `/skill` 手势）
 
-**直接执行**：合成 · 过闸 · 保存/删除剪辑版本 · 裁剪音频 · 项目设置 · 素材导入 · 目标平台
+**直接执行**：合成 · 过闸 · 保存/删除剪辑版本 · 裁剪音频 · 撤销裁剪 · 项目设置 · 素材导入 · 目标平台
 
 **已有共享函数**：`composeProject`（合成）· `machine.write`（过闸/产物）·
 `importAssets`（导入）· `parseCut`（剪辑版本，面板路由与 `openreel_edit` 共用）·
-`trimAudioAsset`（裁剪）
+`trimAudioAsset`（裁剪）· `restoreAudioAsset`（撤销裁剪）
 
-**Agent 侧入口**：`openreel_edit`（`cuts` / `save_cut` / `delete_cut` / `trim_audio`）·
+**Agent 侧入口**：`openreel_edit`（`cuts` / `save_cut` / `delete_cut` / `trim_audio` / `restore_audio`）·
 `openreel_project` 的 `set_platform`
 
 ### 9.4 什么**不需要**给 Agent 通路

@@ -22,7 +22,7 @@ import { ProjectCard } from './project-card.tsx'
 import { TrashSection } from './trash.tsx'
 import type { TrashEntry } from './api.ts'
 
-const PLACEHOLDER = '说一句你想做的片子，例如：做一条讲月球起源的解说片，30 秒，画风冷静一点'
+import { tx } from './i18n.ts'
 
 /**
  * Poster backdrop geometry, in the art's 720×240 viewBox space.
@@ -129,7 +129,7 @@ export function Welcome({
         }
       }
       setPhase(null)
-      setError('等了两分钟没等到新项目。可能 Agent 还在忙，或者它没有建项目——去对话里看看。')
+      setError(tx('等了两分钟没等到新项目。可能 Agent 还在忙，或者它没有建项目——去对话里看看。'))
     } catch (failure) {
       setPhase(null)
       setError((failure as Error).message)
@@ -205,9 +205,9 @@ export function Welcome({
           <div className="orb-poster-strip" aria-hidden="true" />
           <div className="orb-poster-body">
             <span className="orb-hero-sub">OpenReelbench · powered by ComfyUI</span>
-            <h1 className="orb-hero-title">开源视频创意台</h1>
+            <h1 className="orb-hero-title">{tx('开源视频创意台')}</h1>
             <p className="orb-hero-tagline">
-              基于 ComfyUI 与 DSH 开源生态的内容创作平台 —— 专业创作管线 · 原生 AI 人机协同
+              {tx('基于 ComfyUI 与 DSH 开源生态的内容创作平台 —— 专业创作管线 · 原生 AI 人机协同')}
             </p>
           </div>
         </div>
@@ -218,7 +218,7 @@ export function Welcome({
           ref={inputRef}
           className="orb-composer-input"
           value={text}
-          placeholder={PLACEHOLDER}
+          placeholder={tx('说一句你想做的片子，例如：做一条讲月球起源的解说片，30 秒，画风冷静一点')}
           rows={3}
           disabled={busy}
           spellCheck={false}
@@ -231,7 +231,7 @@ export function Welcome({
           }}
         />
         <div className="orb-composer-foot">
-          <span className="orb-hint">⌘/Ctrl + Enter 发送</span>
+          <span className="orb-hint">{tx('⌘/Ctrl + Enter 发送')}</span>
           <span className="orb-spacer" />
           <button
             type="button"
@@ -239,7 +239,7 @@ export function Welcome({
             disabled={busy || text.trim() === ''}
             onClick={() => void submit()}
           >
-            <BusyLabel phase={phase} idle="开始" />
+            <BusyLabel phase={phase} idle={tx('开始')} />
           </button>
         </div>
       </div>
@@ -250,7 +250,7 @@ export function Welcome({
       <section className="orb-section">
         <h2 className="orb-section-title">
           <IconClapper className="orb-section-icon" />
-          创作媒体类型
+          {tx('创作媒体类型')}
         </h2>
         <div className="orb-pipelines">
           {(catalog?.pipelines ?? []).map((pipeline) => {
@@ -261,11 +261,11 @@ export function Welcome({
                 type="button"
                 className="orb-pipeline"
                 disabled={busy}
-                title={pipeline.description + '（' + pipeline.best_for + '）'}
+                title={tx(pipeline.description) + '（' + tx(pipeline.best_for) + '）'}
                 onClick={() => pickPipeline(pipeline.command)}
               >
                 <Icon className="orb-pipeline-icon" />
-                <span className="orb-pipeline-name">{pipeline.name}</span>
+                <span className="orb-pipeline-name">{tx(pipeline.name)}</span>
               </button>
             )
           })}
@@ -282,7 +282,7 @@ export function Welcome({
           >
             <span className="orb-disclosure-caret">{historyOpen ? '▾' : '▸'}</span>
             <IconHistory className="orb-section-icon" />
-            历史项目
+            {tx('历史项目')}
             <span className="orb-count">{projects.length}</span>
           </button>
           {historyOpen ? (
@@ -301,7 +301,7 @@ export function Welcome({
                     await api.removeProject(id)
                     await onRefresh()
                     await onRefreshTrash()
-                    setNotice('已移到回收站，可以在下方还原。')
+                    setNotice(tx('已移到回收站，可以在下方还原。'))
                   }}
                 />
               ))}

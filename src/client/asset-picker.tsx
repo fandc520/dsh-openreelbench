@@ -16,6 +16,8 @@ import { useEffect, useRef, useState } from 'react'
 
 import { comfy } from './comfy.ts'
 
+import { tx } from './i18n.ts'
+
 /** One file ComfyUI can load, as `/comfyui/loadarea` reports it. */
 export interface AssetFile {
   name: string
@@ -92,7 +94,7 @@ export function AssetPicker({ kinds, current, onPick, onClose }: AssetPickerProp
       setFiles(data.files ?? [])
       setError(null)
     } catch (cause) {
-      setError('读不到 ComfyUI 的素材列表：' + (cause as Error).message)
+      setError(tx('读不到 ComfyUI 的素材列表：') + (cause as Error).message)
     } finally {
       setLoading(false)
     }
@@ -126,7 +128,7 @@ export function AssetPicker({ kinds, current, onPick, onClose }: AssetPickerProp
     try {
       const name = await comfy.uploadAsset(file)
       await refresh()
-      setFlash('已上传：' + name)
+      setFlash(tx('已上传：') + name)
       window.setTimeout(() => setFlash(null), 2500)
     } catch (cause) {
       setError((cause as Error).message)
@@ -143,8 +145,8 @@ export function AssetPicker({ kinds, current, onPick, onClose }: AssetPickerProp
   // explain why.
   const accept = wanted.map((kind) => kind + '/*').join(',')
   const noun = wanted.length === 1
-    ? { image: '图片', video: '视频', audio: '音频' }[wanted[0]!]
-    : '素材'
+    ? { image: tx('图片'), video: tx('视频'), audio: tx('音频') }[wanted[0]!]
+    : tx('素材')
   const visible = files
     .filter((file) => wanted.includes(file.kind))
     .filter((file) => tab === 'all' || file.source === tab)
@@ -155,9 +157,9 @@ export function AssetPicker({ kinds, current, onPick, onClose }: AssetPickerProp
   visible.forEach((file, index) => { columns[index % 3]!.push(file) })
 
   const tabs: Array<{ id: SourceTab; label: string }> = [
-    { id: 'all', label: '全部' },
-    { id: 'imported', label: '已导入' },
-    { id: 'generated', label: '已生成' },
+    { id: 'all', label: tx('全部') },
+    { id: 'imported', label: tx('已导入') },
+    { id: 'generated', label: tx('已生成') },
   ]
 
   return (
@@ -177,7 +179,7 @@ export function AssetPicker({ kinds, current, onPick, onClose }: AssetPickerProp
 
           <label
             className="orb-dropzone"
-            title="点击选择，或把文件拖进来 / 粘贴进来"
+            title={tx('点击选择，或把文件拖进来 / 粘贴进来')}
             onMouseEnter={() => { hovering.current = true }}
             onMouseLeave={() => { hovering.current = false }}
             onDragOver={(event) => event.preventDefault()}
@@ -198,20 +200,20 @@ export function AssetPicker({ kinds, current, onPick, onClose }: AssetPickerProp
                 if (file !== undefined) void upload(file)
               }}
             />
-            {busy ? '上传中…' : '上传到服务器'}
+            {busy ? tx('上传中…') : tx('上传到服务器')}
           </label>
 
           <span className="orb-spacer" />
-          <button type="button" className="orb-btn orb-btn-small" onClick={onClose}>关闭</button>
+          <button type="button" className="orb-btn orb-btn-small" onClick={onClose}>{tx('关闭')}</button>
         </div>
 
         {flash !== null ? <p className="orb-note orb-note-ok">{flash}</p> : null}
         {error !== null ? <p className="orb-note orb-note-error">{error}</p> : null}
 
         {loading
-          ? <p className="orb-picker-empty">读取中…</p>
+          ? <p className="orb-picker-empty">{tx('读取中…')}</p>
           : visible.length === 0
-            ? <p className="orb-picker-empty">这里还没有{noun}。上传一个，或先生成一些。</p>
+            ? <p className="orb-picker-empty">{tx('这里还没有')}{noun}{tx('。上传一个，或先生成一些。')}</p>
             : (
               <div className="orb-picker-grid">
                 {columns.map((column, index) => (

@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { LibraryProject } from './api.ts'
+import { tx } from './i18n.ts'
 
 export interface ProjectCardProps {
   project: LibraryProject
@@ -101,9 +102,9 @@ export function ProjectCard({ project, disabled, onOpen, onRename, onRemove }: P
         />
         <div className="orb-project-actions">
           <button type="button" className="orb-btn orb-btn-small" disabled={busy}
-            onClick={() => { setTitle(project.title); setMode('idle') }}>取消</button>
+            onClick={() => { setTitle(project.title); setMode('idle') }}>{tx('取消')}</button>
           <button type="button" className="orb-btn orb-btn-small orb-btn-primary" disabled={busy}
-            onClick={() => void commitRename()}>{busy ? '保存中…' : '保存'}</button>
+            onClick={() => void commitRename()}>{busy ? tx('保存中…') : tx('保存')}</button>
         </div>
       </div>
     )
@@ -112,15 +113,15 @@ export function ProjectCard({ project, disabled, onOpen, onRename, onRemove }: P
   if (mode === 'confirming') {
     return (
       <div className="orb-project orb-project-editing" ref={root}>
-        <span className="orb-project-title">移除「{project.title}」？</span>
+        <span className="orb-project-title">{tx('移除「')}{project.title}{tx('」？')}</span>
         <span className="orb-project-meta">
-          移到回收站，不是删除——素材和成片都还在，可以手动移回来。
+          {tx('移到回收站，不是删除——素材和成片都还在，可以手动移回来。')}
         </span>
         <div className="orb-project-actions">
           <button type="button" className="orb-btn orb-btn-small" disabled={busy}
-            onClick={() => setMode('idle')}>取消</button>
+            onClick={() => setMode('idle')}>{tx('取消')}</button>
           <button type="button" className="orb-btn orb-btn-small orb-btn-danger" disabled={busy}
-            onClick={() => void commitRemove()}>{busy ? '移除中…' : '移除'}</button>
+            onClick={() => void commitRemove()}>{busy ? tx('移除中…') : tx('移除')}</button>
         </div>
       </div>
     )
@@ -145,8 +146,8 @@ export function ProjectCard({ project, disabled, onOpen, onRename, onRemove }: P
         className="orb-kebab"
         aria-haspopup="menu"
         aria-expanded={menuOpen}
-        aria-label="更多操作"
-        title="更多操作"
+        aria-label={tx('更多操作')}
+        title={tx('更多操作')}
         onClick={() => setMenuOpen((open) => !open)}
       >
         ⋯
@@ -155,11 +156,11 @@ export function ProjectCard({ project, disabled, onOpen, onRename, onRemove }: P
       {menuOpen ? (
         <div className="orb-menu" role="menu">
           <button type="button" role="menuitem" className="orb-menu-item"
-            onClick={() => { setMenuOpen(false); onOpen(project.id) }}>编辑</button>
+            onClick={() => { setMenuOpen(false); onOpen(project.id) }}>{tx('编辑')}</button>
           <button type="button" role="menuitem" className="orb-menu-item"
-            onClick={() => { setMenuOpen(false); setMode('renaming') }}>重命名</button>
+            onClick={() => { setMenuOpen(false); setMode('renaming') }}>{tx('重命名')}</button>
           <button type="button" role="menuitem" className="orb-menu-item orb-menu-item-danger"
-            onClick={() => { setMenuOpen(false); setMode('confirming') }}>移除</button>
+            onClick={() => { setMenuOpen(false); setMode('confirming') }}>{tx('移除')}</button>
         </div>
       ) : null}
     </div>

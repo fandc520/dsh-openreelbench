@@ -12,6 +12,7 @@
  * whole `video` object back with that one key replaced.
  */
 import { BUILT_IN_PLAYBOOKS } from '../playbooks.ts'
+import { LANGUAGE_OPTIONS, tx } from './i18n.ts'
 
 export type FieldPath = readonly [string, ...string[]]
 
@@ -21,6 +22,15 @@ export interface FieldSpec {
   hint?: string
   placeholder?: string
   kind: 'text' | 'number' | 'boolean' | 'select' | 'list'
+  /**
+   * A number field that takes fractions.
+   *
+   * Every other number here is a count — frames, seconds, a CRF step — so
+   * `numeric` is the right keypad for them, and it is the WRONG one for a
+   * 0.1–2 multiplier: that keypad has no decimal separator on it.
+   */
+  decimal?: boolean
+
   /** Rendered from live settings, so custom playbooks appear in the picker. */
   options?: (value: Record<string, unknown> | undefined) => Array<{ value: string; label: string }>
   /** Lay this field beside the next ones in a row. */
@@ -37,24 +47,48 @@ export interface FieldGroup {
 function styleOptions(value: Record<string, unknown> | undefined): Array<{ value: string; label: string }> {
   const custom = (value?.playbooks ?? {}) as Record<string, { name?: string }>
   const entries = new Map<string, string>()
+  // `BUILT_IN_PLAYBOOKS` is a constant table, so its names are translated
+  // here — where the option is built for display — rather than in the table.
   for (const [id, playbook] of Object.entries(BUILT_IN_PLAYBOOKS)) {
-    entries.set(id, playbook.name + '（' + id + '）')
+    entries.set(id, tx(playbook.name) + '（' + id + '）')
   }
   for (const [id, playbook] of Object.entries(custom)) {
-    entries.set(id, (playbook?.name ?? id) + '（' + id + '，自定义）')
+    entries.set(id, (playbook?.name ?? id) + '（' + id + tx('，自定义）'))
   }
   return [...entries].map(([value_, label]) => ({ value: value_, label }))
 }
 
+/**
+ * The two panel languages.
+ *
+ * Native names, never translated: someone who cannot read the current language
+ * has to be able to find their own in this list, and "Chinese" is no help to a
+ * reader who only reads Chinese.
+ */
+function languageOptions(): Array<{ value: string; label: string }> {
+  return LANGUAGE_OPTIONS.map((entry) => ({ value: entry.id, label: entry.label }))
+}
+
 export const FIELD_GROUPS: FieldGroup[] = [
   {
+    title: '语言',
+    fields: [
+      {
+        path: ['language'],
+        label: '界面语言',
+        hint: '同时决定新项目的脚本与配音语种，可在配音页按项目改。不影响导演指令本身。',
+        kind: 'select',
+        options: languageOptions,
+      },
+    ],
+  },
+  {
     title: '工作区',
-    blurb: '成片和素材落在哪里。',
     fields: [
       {
         path: ['workspaceRoot'],
         label: '项目根目录',
-        hint: '成片、素材、状态都落在这里。留空则用 $DSH_HOME/data/dsh-openreelbench/projects（在 C 盘）。',
+        hint: '项目存储目录。留空则在 $DSH_HOME/data/dsh-openreelbench/projects，默认 C 盘。',
         placeholder: 'D:/AiStudio',
         kind: 'text',
       },
@@ -62,44 +96,38 @@ export const FIELD_GROUPS: FieldGroup[] = [
   },
   {
     title: 'ComfyUI 工作流绑定',
-    blurb: '每项能力用 dsh-comfyui 工作流库里的哪一条。只填名称——参数由那份清单说了算，'
-      + '在这里再写一遍必然漂移。用名称不用 id：id 每次重新提取画布都会变。',
+    // Names, not ids: an id changes every time the canvas is re-extracted.
+    // Parameters are the workflow list's business — restating them here would
+    // be a second copy that drifts.
+    blurb: '指定各环节调用的工作流，可多选；第一条是默认。标题是用到它的页面，括号里是做什么。',
     fields: [
       {
         path: ['bindings', 'tts', 'workflows'],
         label: '配音（TTS）',
-        hint: '逐段生成旁白。第一条是默认，必填，否则配音页无法生成；其余作为候选出现在工作台的下拉菜单里。',
         placeholder: 'Qwen3-TTS(Text)',
         kind: 'list',
       },
       {
         path: ['bindings', 'image', 'workflows'],
-        label: '配图（文生图）',
-        hint: '逐段生成画面。第一条是默认，其余作为候选出现在工作台的下拉菜单里。',
+        label: '分镜（文生图）',
         placeholder: 'Krea-T2I-Afterlight',
         kind: 'list',
       },
       {
         path: ['bindings', 'music', 'workflows'],
-        label: '配乐（文生音乐）',
-        hint: '整片音乐床交给 Agent 选曲并用这条工作流生成。可选——不绑定时，合成页配乐栏仍会显示项目里手填过的名称。'
-          + '第一条是默认，其余作为候选出现在合成页的下拉菜单里。',
+        label: '合成（文生音乐）',
         placeholder: 'Music-Gen',
         kind: 'list',
       },
       {
         path: ['bindings', 'voice_query', 'workflows'],
-        label: '音色查询',
-        hint: '输出所选音色的参考音频，供配音页试听。不绑定时「试听」按钮是灰的。'
-          + '最小形态：🎭 Character Voices 的 reference_audio_only 接一个 SaveAudio。'
-          + '第一条是默认，其余作为候选出现在工作台的下拉菜单里。',
+        label: '配音（音色试听）',
         placeholder: 'Voice-Query',
         kind: 'list',
       },
       {
         path: ['bindings', 'voice_design', 'workflows'],
-        label: '音色设计',
-        hint: '造一个新音色。可选——造音色是准备工作，不在管线里。第一条是默认，其余作为候选出现在工作台的下拉菜单里。',
+        label: '配音（音色设计）',
         placeholder: 'Qwen3-VoiceDesign',
         kind: 'list',
       },
@@ -107,29 +135,39 @@ export const FIELD_GROUPS: FieldGroup[] = [
   },
   {
     title: '创作默认值',
-    blurb: '新项目从这里起步，之后可以在项目详情页单独改。',
     fields: [
       {
         path: ['defaultStyle'],
         label: '默认风格',
-        hint: '决定画面提示词模板、旁白语气、语速估算和单段时长上下限。',
+        hint: '决定提示词模板、旁白语气、语速与单段时长。',
         kind: 'select',
         options: styleOptions,
       },
       {
         path: ['defaultDurationSeconds'],
         label: '默认时长（秒）',
-        hint: '用户没说要多长时，按这个值估算脚本字数。',
+        hint: '用户没说时长时按它估算脚本字数。',
         kind: 'number',
       },
     ],
   },
   {
     title: '成片输出',
-    blurb: '合成的画面规格与字幕。画面观感和节奏归风格库管，不在这里。',
+    blurb: '画幅由立项页的投放平台决定，这里只调倍率。',
     fields: [
-      { path: ['video', 'width'], label: '宽', kind: 'number', row: 'size' },
-      { path: ['video', 'height'], label: '高', kind: 'number', row: 'size' },
+      // A width and a height used to live here. They were a second answer to a
+      // question the platform had already answered, and only one of the two
+      // ever reached the picture generator — so a 竖屏 project got 16:9 stills.
+      // A multiplier cannot contradict the aspect ratio; it can only make the
+      // same frame cheaper.
+      {
+        path: ['video', 'renderScale'],
+        label: '生成系数',
+        hint: '0.1–2，可填小数。乘在投放平台的画幅基线上：0.5 → 16:9 出 960×540。分镜图与成片同尺寸。',
+        kind: 'number',
+        decimal: true,
+        row: 'size',
+      },
       { path: ['video', 'fps'], label: '帧率', kind: 'number', row: 'size' },
       {
         path: ['video', 'crf'],
@@ -148,27 +186,24 @@ export const FIELD_GROUPS: FieldGroup[] = [
       {
         path: ['writeSubtitles'],
         label: '输出 .srt 字幕',
-        hint: '字幕时间轴按 ffprobe 实测的配音长度排，不按脚本预估。',
-        kind: 'boolean',
-      },
-      {
-        path: ['burnSubtitles'],
-        label: '把字幕烧进画面',
-        hint: '需要重新编码，且依赖系统中文字体；失败时改回旁挂 .srt。',
+        // Burn-in is NOT here. It is per export, not per install: the same cut
+        // goes to a platform that plays a sidecar .srt and to one that does
+        // not, and the compose screen asks every time.
+        hint: '时间轴按实测配音长度排。烧进画面在合成页逐次决定。',
         kind: 'boolean',
       },
     ],
   },
   {
     title: '本机环境',
-    blurb: '这台机器上的可执行文件与耐心上限。装好 FFmpeg 就不用动。',
+    blurb: '装好 FFmpeg 就不用动。',
     fields: [
       { path: ['ffmpegPath'], label: 'ffmpeg 路径', placeholder: 'ffmpeg', kind: 'text', row: 'bin' },
       { path: ['ffprobePath'], label: 'ffprobe 路径', placeholder: 'ffprobe', kind: 'text', row: 'bin' },
       {
         path: ['renderTimeoutMs'],
         label: '合成超时（毫秒）',
-        hint: '单次 openreel_compose 的上限，默认 900000（15 分钟）。',
+        hint: '单次合成上限，默认 900000（15 分钟）。',
         kind: 'number',
       },
     ],

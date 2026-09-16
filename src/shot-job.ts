@@ -30,6 +30,18 @@ export interface ShotJobItem {
 export interface ShotJobInput {
   projectId: string
   workflow: string
+  /**
+   * The frame every picture must come back at.
+   *
+   * Carried in the REQUEST, not left to the stage skill. The skill said "尺寸
+   * 按成片画幅生成" and gave a table keyed on the platform — which meant the
+   * model had to know the project's platform, look it up, and remember that a
+   * render scale existed. It did none of those, the workflow's own default
+   * won, and a 9:16 project got 16:9 stills that compose cropped the sides off.
+   * A number in the message cannot be looked up wrong.
+   */
+  width: number
+  height: number
   negativePrompt: string
   /** Reference image names in ComfyUI's input directory. Names only. */
   references: readonly string[]
@@ -60,6 +72,12 @@ export function buildShotJob(input: ShotJobInput): string {
     '项目 `' + input.projectId + '`，请用 ComfyUI 生成下面 ' + input.shots.length + ' 张分镜。',
     '',
     workflowLine(input.workflow),
+    // Ahead of the prompts on purpose: it applies to every one of them, and a
+    // constraint stated after a list of eighteen items is a constraint read
+    // after eighteen decisions have already been made.
+    '尺寸：**' + input.width + 'x' + input.height + '**（宽x高）。'
+      + '这是成片画幅，每一张都必须按它生成——工作流的默认尺寸不要用，'
+      + '出错画幅合成时只能裁掉两边。',
     '负向提示词：' + input.negativePrompt,
   ]
 

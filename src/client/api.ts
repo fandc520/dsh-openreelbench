@@ -14,8 +14,10 @@ export interface ProjectMarker {
   style: string
   created_at: string
   target_duration_seconds: number
-  /** Where the film is headed. Decides the output frame; see PLATFORM_FRAMES. */
+  /** Where the film is headed. Decides the output frame; see FRAME_GROUPS. */
   target_platform?: string
+  /** What language this film is written and narrated in. Absent = follow the panel. */
+  language?: string
   voice: string
   /** A voice-design proposal the agent left for the panel to pick up. */
   voice_design_name?: string
@@ -203,6 +205,39 @@ export interface PluginState {
   /** Saved edit versions, newest first. */
   cuts: Cut[]
   bindings: Record<string, { workflows?: string[]; workflow?: string; notes: string }>
+  /**
+   * The film's language, resolved host-side from the project's own choice and
+   * the panel setting. The screens read THIS rather than resolving it again.
+   */
+  contentLanguage?: string
+  /**
+   * The frame this project renders and generates at: the platform's baseline
+   * times the settings' render scale, resolved host-side.
+   *
+   * Served rather than worked out in the browser, because the shots screen has
+   * to ask for the SAME pixels compose will cut to. Optional for an older host,
+   * where the screens fall back to the landscape baseline.
+   */
+  frame?: {
+    width: number
+    height: number
+    fps: number
+    baseWidth: number
+    baseHeight: number
+    scale: number
+    source: 'platform' | 'default'
+    shape: string
+    label: string
+  }
+  /**
+   * Project-relative paths of takes that have a pre-trim copy on disk — the
+   * ones the audio screen can offer 撤销裁剪 on.
+   *
+   * Optional because an older host does not send it; absent reads as "nothing
+   * is known to be trimmed", which hides the button rather than offering an
+   * undo that would 404.
+   */
+  trimmed?: string[]
 }
 
 export interface Catalog {
@@ -258,19 +293,38 @@ export function bindingWorkflows(
 /**
  * What each platform renders to, for the picker's hint text.
  *
- * The host decides the real frame (`src/media-profile.ts`); this is a label so
- * the user can see the consequence before saving. Keep the two in step - a
- * picker that promises a shape the renderer does not produce is worse than a
- * picker with no hint at all.
+ * The host decides the real frame (`src/media-profile.ts`); this mirrors its
+ * groups so the user can see the consequence before saving. Keep the two in
+ * step — a picker that promises a shape the renderer does not produce is worse
+ * than a picker with no hint at all; the test suite compares them.
+ *
+ * GROUPED BY SHAPE, not one option per platform. The frame is the only thing
+ * this choice decides, so offering 抖音 and 微信视频号 separately would ask for
+ * a distinction that produces byte-identical output.
  */
-export const PLATFORM_FRAMES: ReadonlyArray<{ id: string; label: string; frame: string }> = [
-  { id: 'generic', label: '不指定', frame: '用设置里的默认画幅' },
-  { id: 'youtube', label: 'YouTube', frame: '1920×1080 横屏 16:9' },
-  { id: 'bilibili', label: '哔哩哔哩', frame: '1920×1080 横屏 16:9' },
-  { id: 'douyin', label: '抖音', frame: '1080×1920 竖屏 9:16' },
-  { id: 'xiaohongshu', label: '小红书', frame: '1080×1440 竖屏 3:4' },
-  { id: 'wechat', label: '微信视频号', frame: '1080×1920 竖屏 9:16' },
+export const FRAME_GROUPS: ReadonlyArray<{
+  id: string
+  /** The shape, which is what the user is actually choosing. */
+  label: string
+  /** Who publishes here. */
+  names: string
+  /** Every platform in this group; the head is what gets stored. */
+  platforms: readonly string[]
+  baseWidth: number
+  baseHeight: number
+}> = [
+  { id: 'landscape-16-9', label: '横屏 16:9', names: 'YouTube / 哔哩哔哩 / 不指定',
+    platforms: ['youtube', 'bilibili', 'generic'], baseWidth: 1920, baseHeight: 1080 },
+  { id: 'portrait-9-16', label: '竖屏 9:16', names: '抖音 / 微信视频号',
+    platforms: ['douyin', 'wechat'], baseWidth: 1080, baseHeight: 1920 },
+  { id: 'portrait-3-4', label: '竖屏 3:4', names: '小红书',
+    platforms: ['xiaohongshu'], baseWidth: 1080, baseHeight: 1440 },
 ]
+
+/** The group a stored platform belongs to. Anything unknown lands in the first. */
+export function frameGroupOf(platform: string | undefined): (typeof FRAME_GROUPS)[number] {
+  return FRAME_GROUPS.find((group) => group.platforms.includes(platform ?? '')) ?? FRAME_GROUPS[0]!
+}
 
 /**
  * The shot-language vocabulary, with Chinese labels for the pickers.
@@ -440,6 +494,7 @@ export const api = {
   updateProject: (body: {
     project: string
     title?: string
+    language?: string
     target_duration_seconds?: number
     style?: string
     target_platform?: string

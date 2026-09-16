@@ -13,7 +13,8 @@
  * shorter stays a click. Without that, every card selection would jitter the
  * strip, and every pan would select whatever card it started on.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { tx } from './i18n.ts'
 
 export interface StripProps {
   children: React.ReactNode
@@ -113,7 +114,7 @@ export function Strip({ children, className, ariaLabel, arrows = true }: StripPr
     <div className="orb-strip-wrap">
       {arrows && overflow.left ? (
         <button type="button" className="orb-strip-arrow orb-strip-arrow-left"
-          aria-label="向左" onClick={() => nudge(-1)}>‹</button>
+          aria-label={tx('向左')} onClick={() => nudge(-1)}>‹</button>
       ) : null}
       <div
         ref={viewport}
@@ -128,7 +129,7 @@ export function Strip({ children, className, ariaLabel, arrows = true }: StripPr
       </div>
       {arrows && overflow.right ? (
         <button type="button" className="orb-strip-arrow orb-strip-arrow-right"
-          aria-label="向右" onClick={() => nudge(1)}>›</button>
+          aria-label={tx('向右')} onClick={() => nudge(1)}>›</button>
       ) : null}
     </div>
   )

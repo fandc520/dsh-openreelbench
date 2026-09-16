@@ -65,9 +65,9 @@ head('项目')
 console.log('id       ' + marker.id)
 console.log('标题     ' + marker.title)
 console.log('风格     ' + resolved + (fallback ? '  ⚠ 项目写的 "' + marker.style + '" 不存在，回退了' : ''))
-const profile = resolveVideoProfile(config.video, marker.target_platform)
+const profile = resolveVideoProfile(marker.target_platform, config.video.renderScale, config.video.fps)
 console.log('平台     ' + (marker.target_platform ?? '（未设置）')
-  + '  →  ' + profile.width + 'x' + profile.height + '（' + profile.source + '）')
+  + '  →  ' + profile.label + '（' + profile.source + '）')
 
 if (script === undefined) {
   console.log(NL + '还没有脚本，后面的都算不了。')

@@ -27,6 +27,8 @@ import { Rail, buildRail } from './rail.tsx'
 import { Welcome } from './welcome.tsx'
 import { readMemory, takePendingScreen, writeMemory } from './session-memory.ts'
 
+import { tx, useT } from './i18n.ts'
+
 export interface WorkbenchProps {
   /** Push text into this session; the panel's only way to reach the model. */
   send: (text: string) => Promise<void>
@@ -63,14 +65,21 @@ const SCREENS: Partial<Record<ScreenId, (props: ScreenProps) => JSX.Element>> = 
 
 /** Screens implemented so far. A missing one renders its own placeholder. */
 const SCREEN_TITLES: Record<ScreenId, string> = {
-  project: '项目详情',
-  script: '脚本',
-  'assets-audio': '配音',
-  'assets-shots': '配图',
-  timeline: '时间线',
+  project: tx('项目详情'),
+  script: tx('脚本'),
+  'assets-audio': tx('配音'),
+  'assets-shots': tx('配图'),
+  timeline: tx('时间线'),
 }
 
 export function Workbench({ send, sessionId }: WorkbenchProps): JSX.Element {
+  // Subscribe this tree to the language.
+  //
+  // `tx()` reads the store but does not subscribe, so one hook at each root is
+  // what makes a change in Settings repaint everything below it. Three roots,
+  // because the shell mounts the tool views itself with no provider above them.
+  useT()
+
   // Restored on mount so a trip to the chat tab and back lands where it left.
   // A pending target from a tool card wins over the remembered position.
   const restored = (() => {
@@ -222,11 +231,11 @@ export function Workbench({ send, sessionId }: WorkbenchProps): JSX.Element {
     return (
       <div className="orb-workbench orb-centered">
         {error === null
-          ? <p className="orb-note">读取项目中…</p>
+          ? <p className="orb-note">{tx('读取项目中…')}</p>
           : (
             <div className="orb-empty">
               <p className="orb-note orb-note-error">{error}</p>
-              <button type="button" className="orb-btn" onClick={backToWelcome}>返回</button>
+              <button type="button" className="orb-btn" onClick={backToWelcome}>{tx('返回')}</button>
             </div>
           )}
       </div>
@@ -240,17 +249,17 @@ export function Workbench({ send, sessionId }: WorkbenchProps): JSX.Element {
   return (
     <div className="orb-workbench">
       <header className="orb-topbar">
-        <button type="button" className="orb-back" onClick={backToWelcome} title="回到欢迎页">←</button>
+        <button type="button" className="orb-back" onClick={backToWelcome} title={tx('回到欢迎页')}>←</button>
         <div className="orb-topbar-body">
           <span className="orb-topbar-title">{state.project.title}</span>
           <span className="orb-topbar-meta">
             {state.pipeline.definition.name} · {state.project.target_duration_seconds}s ·
-            {' '}{state.style.playbook.name}
-            {state.project.voice === '' ? ' · 音色未定' : ' · ' + state.project.voice}
+            {' '}{tx(state.style.playbook.name)}
+            {state.project.voice === '' ? tx(' · 音色未定') : ' · ' + state.project.voice}
           </span>
         </div>
         <button type="button" className="orb-btn" disabled={loading} onClick={() => void reload()}>
-          {loading ? '刷新中…' : '刷新'}
+          {loading ? tx('刷新中…') : tx('刷新')}
         </button>
       </header>
 
@@ -274,9 +283,9 @@ export function Workbench({ send, sessionId }: WorkbenchProps): JSX.Element {
           <div className="orb-screen orb-placeholder">
             <h2 className="orb-screen-title">{SCREEN_TITLES[screen]}</h2>
             <p className="orb-note">
-              这一页还没做。当前阶段 <code>{current.stage.id}</code>，状态 <code>{current.status}</code>。
+              {tx('这一页还没做。当前阶段')} <code>{current.stage.id}</code>{tx('，状态')} <code>{current.status}</code>。
             </p>
-            <p className="orb-hint">{current.stage.hint}</p>
+            <p className="orb-hint">{tx(current.stage.hint)}</p>
           </div>
         )}
     </div>

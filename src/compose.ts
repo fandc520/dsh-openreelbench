@@ -497,7 +497,7 @@ function geometry(fit: Playbook['fit'], width: number, height: number): string[]
  * linear push-in. The source is first fitted to twice the output size: zooming
  * a frame that is already at output resolution resamples upward and shimmers.
  */
-function stillFilter(config: Config, playbook: Playbook, frames: number): string {
+function stillFilter(config: RenderConfig, playbook: Playbook, frames: number): string {
   const { width, height, fps } = config.video
   if (!playbook.kenBurns) {
     return [...geometry(playbook.fit, width, height), 'setsar=1', 'fps=' + fps, 'format=yuv420p'].join(',')
@@ -594,6 +594,16 @@ export interface ComposeResult {
   warnings: string[]
 }
 
+/**
+ * Config with the frame resolved onto it.
+ *
+ * `Config['video']` is what the USER sets; a render also needs the pixels the
+ * platform and the scale worked out. Widening it here keeps every filter
+ * builder reading one object instead of taking width and height as two more
+ * arguments that could be passed in the wrong order.
+ */
+type RenderConfig = Omit<Config, 'video'> & { video: Config['video'] & { width: number; height: number } }
+
 export async function renderProject(options: ComposeOptions): Promise<ComposeResult> {
   const { layout, script, manifest, playbook, cut, signal } = options
 
@@ -601,8 +611,13 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
   // through `config.video` as before. Threading a second width/height through
   // the filter builders would leave two sources of truth for the same number,
   // and one of them would eventually be read by mistake.
-  const profile = resolveVideoProfile(options.config.video, options.targetPlatform)
-  const config: Config = {
+  //
+  // Settings no longer carry a width and a height — the platform's baseline
+  // times `renderScale` is the whole answer — so the resolved pair is spliced
+  // in here and the local type says so.
+  const profile = resolveVideoProfile(
+    options.targetPlatform, options.config.video.renderScale, options.config.video.fps)
+  const config: RenderConfig = {
     ...options.config,
     video: { ...options.config.video, width: profile.width, height: profile.height, fps: profile.fps },
   }
@@ -738,7 +753,13 @@ export async function renderProject(options: ComposeOptions): Promise<ComposeRes
   // Per render, not per install: whether this cut needs subtitles baked in is a
   // decision about where it is going, and that changes between exports of the
   // same project. The setting stays as the default.
-  const burning = (options.burnSubtitles ?? config.burnSubtitles) && cues.length > 0
+  // Defaults to OFF when nobody said, and there is no setting behind it any
+  // more. Burn-in is per export, not per install — the same cut goes to a
+  // platform that plays a sidecar .srt and to one that does not. The panel
+  // states it on every render and `openreel_compose` takes it as an argument,
+  // so the only case this default covers is a caller that mentioned neither,
+  // where the sidecar is the reversible choice: burning is a re-encode.
+  const burning = (options.burnSubtitles ?? false) && cues.length > 0
 
   // Burning reads an ASS we write, never the SRT.
   //

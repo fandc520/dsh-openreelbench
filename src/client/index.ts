@@ -44,6 +44,7 @@ import type { Config } from '../config.ts'
 import { OPENREEL_NAMESPACE, type ClientContext } from './scope.ts'
 import { MediaCard } from './media-card.tsx'
 import { SettingsSection } from './settings.tsx'
+import { setLanguage, tx } from './i18n.ts'
 import { injectStyles } from './styles.ts'
 import { injectWorkbenchStyles } from './workbench-styles.ts'
 import { Workbench } from './workbench.tsx'
@@ -65,6 +66,22 @@ export function apply(ctx: ClientContext): void {
   // Bound on this fiber, so the scope's disposer unwinds with the plugin.
   const scope = ctx.settingsScope.bind<Config>({ namespace: OPENREEL_NAMESPACE })
 
+  /*
+   * The panel's language, pushed into one module-level store.
+   *
+   * Every surface reads it from there rather than being handed it: the tool
+   * views are mounted by the shell with no provider above them, and a second
+   * source for this would show one half of a screen in each language.
+   */
+  ctx.effect(() => {
+    const sync = (): void => {
+      const language = scope.getSnapshot().value?.language
+      if (language === 'zh' || language === 'en') setLanguage(language)
+    }
+    sync()
+    return scope.subscribe(sync)
+  }, 'dsh-openreelbench: language')
+
   // One sidebar entry in Settings: the shell projects each settings.section
   // registration into a nav row (label/order) and renders its component in the
   // content column, passing { close }. The section id doubles as the storage
@@ -77,7 +94,7 @@ export function apply(ctx: ClientContext): void {
       name: 'conversation.view',
       id: 'openreel',
       order: 40,
-      label: () => 'OpenReel 创意台',
+      label: () => tx('OpenReel 创意台'),
       // A session-scoped slot passes its session id to `inject`, and the face
       // returned here reaches the component as props. Sending goes through the
       // session's own `prompt` — see SessionsService for why the two more
@@ -87,11 +104,11 @@ export function apply(ctx: ClientContext): void {
         send: async (text: string): Promise<void> => {
           const session = ctx.sessions.binding(sessionId)?.session
           if (session === undefined) {
-            throw new Error('OpenReel 创意台：会话 ' + sessionId + ' 已不可用，无法发送')
+            throw new Error(tx('OpenReel 创意台：会话 ') + sessionId + tx(' 已不可用，无法发送'))
           }
           const result = await session.prompt([{ type: 'text', text }], 'queue')
           if (!result.ok) {
-            throw new Error('发送失败：' + result.error.code + ' ' + result.error.message)
+            throw new Error(tx('发送失败：') + result.error.code + ' ' + result.error.message)
           }
         },
       }),
@@ -113,7 +130,7 @@ export function apply(ctx: ClientContext): void {
   }
 
   ctx.slots.inject('settings.section', () => ctx.slots.register(
-    { name: 'settings.section', id: OPENREEL_NAMESPACE, order: 40, label: () => 'OpenReel 创意台' },
+    { name: 'settings.section', id: OPENREEL_NAMESPACE, order: 40, label: () => tx('OpenReel 创意台') },
     () => h(SettingsSection, { scope }),
   ))
 }

@@ -21,6 +21,11 @@
  */
 import z from '@deepseek-ai/schemastery'
 
+// A closed set rather than a locale string: every label has to actually exist
+// in the dictionary, and 'fr-CA' silently falling back to Chinese is worse
+// than not offering it.
+import { UI_LANGUAGES, type UiLanguage } from './i18n.js'
+
 import { DEFAULT_STYLE, type Playbook } from './playbooks.js'
 
 /**
@@ -80,8 +85,16 @@ export function defaultWorkflow(binding: CapabilityBinding | undefined): string 
  * product reveal. Keeping them here too would give every style the same feel.
  */
 export interface VideoProfile {
-  width: number
-  height: number
+  /**
+   * How much of the platform's baseline frame to actually render.
+   *
+   * This replaced a width and a height. Those were two answers to a question
+   * the platform had already answered — and only one of the two ever reached
+   * the picture generator, so a 抖音 project got 16:9 stills that compose then
+   * cropped. A multiplier cannot contradict the aspect ratio; it can only make
+   * the same frame cheaper.
+   */
+  renderScale: number
   fps: number
   codec: string
   crf: number
@@ -89,6 +102,19 @@ export interface VideoProfile {
 }
 
 export interface Config {
+  /**
+   * The panel's language, and the default language of what gets generated.
+   *
+   * ONE setting, not two. Someone driving an English panel is working in
+   * English, and a project that narrates in Chinese because the default never
+   * moved is a whole film regenerated. A project can still override the
+   * narration language on the 配音 page — see `ProjectMarker.language`.
+   *
+   * It does NOT translate the director skills. Those instruct the model; the
+   * language they are WRITTEN in and the language they ask for are different
+   * questions, and the requests carry the second one explicitly.
+   */
+  language: UiLanguage
   /** Project root. Empty means `$DSH_HOME/data/dsh-openreelbench/projects`. */
   workspaceRoot: string
   ffmpegPath: string
@@ -98,7 +124,6 @@ export interface Config {
   video: VideoProfile
   /** The SRT is always a sidecar; burning it in costs a re-encode. */
   writeSubtitles: boolean
-  burnSubtitles: boolean
   subtitleFont: string
   bindings: {
     tts: CapabilityBinding
@@ -132,6 +157,11 @@ const binding = () => z.object({
 })
 
 export const Config: z<Config> = z.object({
+  // A union of constants, not a free string: every label has to exist in the
+  // dictionary, and a value nothing translates would render as blank chrome.
+  language: z.union(UI_LANGUAGES.map((id) => z.const(id))).default('zh')
+    .description('界面语言 / Interface language。同时决定新项目的脚本与配音语种，'
+      + '可在配音页按项目改。不影响导演指令本身。'),
   workspaceRoot: z.string().default('')
     .description('项目根目录。留空 = $DSH_HOME/data/dsh-openreelbench/projects。成片、素材、状态都落在这里，建议放非系统盘。'),
   ffmpegPath: z.string().default('ffmpeg')
@@ -142,19 +172,19 @@ export const Config: z<Config> = z.object({
     .description('默认成片时长（秒）。用户没说要多长时用这个值估算脚本字数。'),
 
   video: z.object({
-    width: z.number().min(256).max(7680).default(1920).description('成片宽度（像素）'),
-    height: z.number().min(256).max(4320).default(1080).description('成片高度（像素）'),
+    renderScale: z.number().min(0.1).max(2).default(1)
+      .description('生成系数。画幅由立项页的投放平台决定（16:9 基线 1920x1080 / 9:16 基线 1080x1920 / '
+        + '3:4 基线 1080x1440），这个系数乘上去就是实际尺寸——分镜图按它生成，成片也按它合成。'
+        + '1 = 原尺寸；0.5 = 一半（16:9 出 960x540）；0.3 = 三成。奇数像素会向偶数取整（编码器要求）。'),
     fps: z.number().min(12).max(60).default(30).description('帧率'),
     codec: z.string().default('libx264').description('视频编码器。libx264 兼容性最好；有 N 卡可试 h264_nvenc。'),
     crf: z.number().min(0).max(51).default(20).description('画质。数字越小越清晰、文件越大；18–23 是常用区间。'),
     preset: z.string().default('medium').description('编码速度档。ultrafast/veryfast/medium/slow——越慢文件越小。'),
-  }).description('编码参数。画面观感（推近、裁切）和节奏（留白、单段时长）归风格库管，不在这里。'),
+  }).description('编码参数。画幅由投放平台决定，这里只调它的倍率；'
+    + '画面观感（推近、裁切）和节奏（留白、单段时长）归风格库管，都不在这里。'),
 
   writeSubtitles: z.boolean().default(true)
     .description('输出 .srt 字幕文件（与成片同名同目录）。字幕时间轴按实测配音排，不按脚本预估。'),
-  burnSubtitles: z.boolean().default(false)
-    .description('把字幕烧进画面的默认值。需要重新编码，且依赖系统中文字体；'
-      + '关闭时字幕只作为旁挂 .srt。成片页可以逐次覆盖这个默认。'),
   subtitleFont: z.string().default('')
     .description('烧录字幕的字体名，留空用「Microsoft YaHei」。'
       + '字体必须装在本机——装不上时 libass 会静默换成别的字体，不会报错。'),

@@ -12,6 +12,7 @@
  *   POST /openreel/trash/purge          delete one for real
  *   POST /openreel/import               pull generated media into the project
  *   POST /openreel/asset/trim           cut an asset's head and tail with ffmpeg
+ *   POST /openreel/asset/restore        put a trimmed asset back the way it was
  *   POST /openreel/validate             check an artifact without writing it
  *   GET  /openreel/cuts?project=        edit versions of the finished film
  *   POST /openreel/cuts                 save one
@@ -42,8 +43,13 @@ import { listPlaybooks, resolvePlaybook } from './playbooks.js'
 import { buildScenePrompts } from './prompt.js'
 import { checkSceneVariation } from './variation.js'
 import { scoreSlideshowRisk } from './slideshow.js'
-import { AssetError, IMPORT_KINDS, type ImportKind, type ImportRequest, importAssets, musicPatchOf, trimAudioAsset } from './assets.js'
+import {
+  AssetError, IMPORT_KINDS, type ImportKind, type ImportRequest,
+  importAssets, listTrimmedAudio, musicPatchOf, restoreAudioAsset, trimAudioAsset,
+} from './assets.js'
 import { MIX_BOUNDS } from './audio-mix.js'
+import { CONTENT_LANGUAGE_IDS, resolveContentLanguage } from './content-language.js'
+import { resolveVideoProfile } from './media-profile.js'
 import { listPipelines, resolvePipeline } from './pipelines.js'
 import { planSections } from './compose.js'
 import { type ComposeResultPayload, composeProject } from './render-job.js'
@@ -517,6 +523,27 @@ export function mountStudioRoutes(ctx: Context, runtime: PluginRuntime): (() => 
           cuts,
           film: filmPath === undefined ? null : { path: filmPath, url: mediaUrl(projectId, filmPath) },
           bindings: config.bindings,
+          // The frame, resolved once and served: the platform's baseline times
+          // the render scale. The shots screen needs the SAME numbers compose
+          // will cut to — a panel that worked them out again in the browser is
+          // exactly how a vertical project ended up with 16:9 stills.
+          frame: resolveVideoProfile(
+            status.project.target_platform
+              ?? (typeof (artifacts.brief as { target_platform?: unknown } | undefined)?.target_platform === 'string'
+                ? (artifacts.brief as { target_platform: string }).target_platform
+                : undefined),
+            config.video.renderScale,
+            config.video.fps,
+          ),
+          // Which takes have a pre-trim copy on disk, so the panel can offer
+          // undo on exactly those. A separate top-level key rather than a flag
+          // inside the manifest, for the same reason `prompts` is one: the
+          // manifest is served verbatim and submitted back.
+          trimmed: await listTrimmedAudio(layout),
+          // What language this film is in: the project's own choice, or the
+          // panel's language when it has never made one. Resolved host-side so
+          // the screens and the requests they compose cannot disagree.
+          contentLanguage: resolveContentLanguage(status.project.language, config.language).id,
         })
       } catch (error) {
         fail(response, error)
@@ -570,6 +597,7 @@ export function mountStudioRoutes(ctx: Context, runtime: PluginRuntime): (() => 
         }
         const patch: {
           title?: string
+          language?: string
           targetDurationSeconds?: number
           style?: string
           voice?: string
@@ -589,6 +617,20 @@ export function mountStudioRoutes(ctx: Context, runtime: PluginRuntime): (() => 
         if (typeof input.title === 'string' && input.title.trim() !== '') patch.title = input.title.trim()
         if (typeof input.style === 'string' && input.style.trim() !== '') patch.style = input.style.trim()
         if (typeof input.voice === 'string') patch.voice = input.voice.trim()
+        if (typeof input.language === 'string') {
+          const language = input.language.trim()
+          // Checked rather than trusted: this steers what the model writes, so
+          // a value nothing recognises would silently mean "Chinese" and the
+          // panel would go on showing the language the user picked.
+          if (!CONTENT_LANGUAGE_IDS.includes(language)) {
+            sendJson(response, 400, {
+              error: 'language must be one of ' + CONTENT_LANGUAGE_IDS.join(', ')
+                + ', got ' + JSON.stringify(language),
+            })
+            return
+          }
+          patch.language = language
+        }
         if (typeof input.voice_design_name === 'string') patch.voiceDesignName = input.voice_design_name.trim()
         if (typeof input.voice_design_prompt === 'string') patch.voiceDesignPrompt = input.voice_design_prompt.trim()
         if (typeof input.lora_name === 'string') patch.loraName = input.lora_name.trim()
@@ -1020,13 +1062,63 @@ export function mountStudioRoutes(ctx: Context, runtime: PluginRuntime): (() => 
           return
         }
         const { layout } = await machine.requireProject(input.project)
+        const config = runtime.getConfig()
         const result = await trimAudioAsset({
-          ffmpegPath: runtime.getConfig().ffmpegPath,
+          ffmpegPath: config.ffmpegPath,
+          ffprobePath: config.ffprobePath,
           layout,
           relativePath: input.path,
           start: typeof input.start === 'number' ? input.start : 0,
           end: typeof input.end === 'number' ? input.end : undefined,
         })
+        // The file is shorter now, so the length the manifest records is
+        // simply wrong. Correcting it is what makes the panel's on-screen
+        // times and the compose plan agree with what is on disk.
+        if (result.seconds !== undefined) {
+          await machine.reviseAssetDuration(input.project, result.path, result.seconds)
+        }
+        sendJson(response, 200, result)
+      } catch (error) {
+        fail(response, error)
+      }
+    },
+  }))
+
+  // ---- POST /openreel/asset/restore ----------------------------------------
+  // Undo every trim on one take at once. There is no per-cut history to step
+  // back through — a trim rewrites the file — so the only honest undo is "the
+  // take as it was generated", which is what `originals/` holds.
+  disposers.push(webServer.register({
+    kind: 'exact',
+    path: '/openreel/asset/restore',
+    handler: async (request, response) => {
+      try {
+        if (request.method !== 'POST') {
+          sendJson(response, 405, { error: 'POST only' })
+          return
+        }
+        if (!sameOrigin(request)) {
+          sendJson(response, 403, { error: 'cross-origin writes are refused' })
+          return
+        }
+        const input = ((await readJsonBody(request)) ?? {}) as Record<string, unknown>
+        if (typeof input.project !== 'string' || input.project === '') {
+          sendJson(response, 400, { error: 'project is required' })
+          return
+        }
+        if (typeof input.path !== 'string' || input.path === '') {
+          sendJson(response, 400, { error: 'path is required' })
+          return
+        }
+        const { layout } = await machine.requireProject(input.project)
+        const result = await restoreAudioAsset({
+          ffprobePath: runtime.getConfig().ffprobePath,
+          layout,
+          relativePath: input.path,
+        })
+        if (result.seconds !== undefined) {
+          await machine.reviseAssetDuration(input.project, result.path, result.seconds)
+        }
         sendJson(response, 200, result)
       } catch (error) {
         fail(response, error)

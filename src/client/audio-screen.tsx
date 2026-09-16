@@ -36,8 +36,11 @@ import { ComfyError, comfy, resolveWorkflowId, runAndWait } from './comfy.ts'
 import { type AssetFile, AssetPicker, inputAssetUrl, useAssetUrls } from './asset-picker.tsx'
 import { Spinner } from './busy.tsx'
 import { type Selection, Waveform } from './waveform.tsx'
+import { CONTENT_LANGUAGES, resolveContentLanguage } from '../content-language.js'
 import { buildVoiceJob } from '../voice-job.js'
 import { buildScenePlanJob, buildVoiceDesignJob, buildVoiceProposalJob } from '../voice-extra-jobs.js'
+
+import { tx } from './i18n.ts'
 
 export interface AudioScreenProps {
   state: PluginState
@@ -113,6 +116,28 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
   const [progress, setProgress] = useState(0)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | undefined>(undefined)
+  /**
+   * A per-file counter appended to the media URL.
+   *
+   * Trimming rewrites the file under the SAME path, and that URL string is
+   * what both `<audio>` and the waveform key their reload on — an identical
+   * string means the effect never re-runs and the panel goes on drawing the
+   * take from before the cut, which is exactly what "点了没反应" was.
+   *
+   * The recorded duration cannot stand in for this: undo puts the old length
+   * back, so trim → undo → trim would land on a URL the browser has already
+   * cached under different bytes.
+   */
+  const [mediaRev, setMediaRev] = useState<ReadonlyMap<string, number>>(() => new Map())
+  /**
+   * What the last trim or restore did, shown NEXT TO the buttons.
+   *
+   * Everything else on this screen reports into the note above the submit
+   * button, at the bottom of a long page. That is fine for "配音回来了", which
+   * you go looking for; it is useless for a trim, where you are staring at the
+   * waveform and the only question is whether anything happened at all.
+   */
+  const [editNote, setEditNote] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [auditionUrl, setAuditionUrl] = useState<string | undefined>(undefined)
   const [playingAll, setPlayingAll] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -155,6 +180,22 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
 
   const active = sections.find((section) => section.id === activeId) ?? sections[0]
   const done = sections.filter((section) => section.path !== undefined).length
+  /**
+   * What language this film is narrated in.
+   *
+   * Resolved host-side (the project's own choice, else the panel's language)
+   * and read back, never worked out here — the script request budgets in this
+   * language's unit, and two copies of the decision is how the two disagree.
+   */
+  const contentLanguage = resolveContentLanguage(state.contentLanguage, undefined)
+  /**
+   * Sections still waiting for a take. Drives the fill-the-gaps button.
+   *
+   * A section with no line can never get one, so it is not "remaining" — it
+   * would keep the button lit forever and generate() refuses it anyway.
+   */
+  const missing = sections.filter(
+    (section) => section.path === undefined && section.text.trim() !== '')
 
   const voiceReferences = state.project.voice_references ?? []
   const assetUrls = useAssetUrls()
@@ -198,8 +239,8 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
         changed.push(...await comfy.refreshParams(id).catch(() => []))
       }
       say('ok', changed.length === 0
-        ? '音色列表已刷新，工作流参数没有变化。'
-        : '音色列表已刷新，工作流参数更新了：' + [...new Set(changed)].join('、')) 
+        ? tx('音色列表已刷新，工作流参数没有变化。')
+        : tx('音色列表已刷新，工作流参数更新了：') + [...new Set(changed)].join('、')) 
     } catch (error) {
       say('error', (error as Error).message)
     } finally {
@@ -218,7 +259,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
     if (prompt !== '' && designPrompt === '') setDesignPrompt(prompt)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.project.voice_design_name, state.project.voice_design_prompt])
-  useEffect(() => { setSelection(null); setPreviewUrl(undefined) }, [activeId])
+  useEffect(() => { setSelection(null); setPreviewUrl(undefined); setEditNote(null) }, [activeId])
 
   /**
    * Drives playAll(): the click handler only points activeId at the next
@@ -247,6 +288,32 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
 
   function say(kind: 'ok' | 'error', text: string): void {
     setResult({ kind, text })
+  }
+
+  /** Force one file's URL to change, so every player of it reloads. */
+  function bumpMedia(path: string): void {
+    setMediaRev((current) => {
+      const next = new Map(current)
+      next.set(path, (current.get(path) ?? 0) + 1)
+      return next
+    })
+  }
+
+  /**
+   * Set the film's narration language.
+   *
+   * Saved on the project rather than held for this visit: it governs the
+   * SCRIPT as well, and the script screen has to see the same answer. A
+   * per-visit choice would let one screen write English lines and the other
+   * budget them as Chinese characters.
+   */
+  async function saveLanguage(next: string): Promise<void> {
+    try {
+      await api.updateProject({ project: state.project.id, language: next })
+      await onReload()
+    } catch (error) {
+      say('error', (error as Error).message)
+    }
   }
 
   async function saveVoice(next: string): Promise<void> {
@@ -290,13 +357,13 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
   async function addVoiceReference(file: AssetFile): Promise<void> {
     setPickerOpen(false)
     setPickedUrls((previous) => new Map(previous).set(file.name, file.url))
-    if (voiceReferences.includes(file.name)) { say('error', '这段参考音频已经在列表里了。'); return }
-    await saveVoiceReferences([...voiceReferences, file.name], '加了一段参考音频：' + file.name)
+    if (voiceReferences.includes(file.name)) { say('error', tx('这段参考音频已经在列表里了。')); return }
+    await saveVoiceReferences([...voiceReferences, file.name], tx('加了一段参考音频：') + file.name)
   }
 
   async function removeVoiceReference(name: string): Promise<void> {
     if (playingRef === name) setPlayingRef(null)
-    await saveVoiceReferences(voiceReferences.filter((entry) => entry !== name), '去掉了一段参考音频')
+    await saveVoiceReferences(voiceReferences.filter((entry) => entry !== name), tx('去掉了一段参考音频'))
   }
 
   /** Generate one section's narration and record it on the manifest. */
@@ -321,11 +388,11 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
   async function generate(ids: readonly string[]): Promise<void> {
     if (working !== null || phase !== null) return
     if (voice.trim() === '') {
-      say('error', '先选一个音色。整片配错音色等于整片重做。')
+      say('error', tx('先选一个音色。整片配错音色等于整片重做。'))
       return
     }
     if (ttsWorkflow.trim() === '') {
-      say('error', '还没绑定配音工作流。去设置页的「ComfyUI 工作流绑定」里填上。')
+      say('error', tx('还没绑定配音工作流。去设置页的「ComfyUI 工作流绑定」里填上。'))
       return
     }
     try {
@@ -340,7 +407,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
       .filter((section): section is NonNullable<typeof section> =>
         section !== undefined && section.text.trim() !== '')
     if (wanted.length === 0) {
-      say('error', '这些段落还没有台词。')
+      say('error', tx('这些段落还没有台词。'))
       return
     }
 
@@ -353,6 +420,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
         workflow: ttsWorkflow,
         voice,
         voiceReferences,
+        ...(contentLanguage.id === 'zh' ? {} : { languageName: contentLanguage.name }),
         sections: wanted.map((section) => ({
           id: section.id,
           text: section.text,
@@ -369,12 +437,12 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
         if (next !== undefined && signatureOf(next) !== before) {
           await onReload()
           setPhase(null)
-          say('ok', '配音回来了，逐段听一下。')
+          say('ok', tx('配音回来了，逐段听一下。'))
           return
         }
       }
       setPhase(null)
-      say('error', '等了十分钟没等到配音。去对话里看看 Agent 卡在哪。')
+      say('error', tx('等了十分钟没等到配音。去对话里看看 Agent 卡在哪。'))
     } catch (error) {
       setPhase(null)
       say('error', (error as Error).message)
@@ -389,7 +457,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
    * That is what the 音色查询 binding is for.
    */
   async function audition(): Promise<void> {
-    if (voice.trim() === '') { say('error', '先选一个音色。'); return }
+    if (voice.trim() === '') { say('error', tx('先选一个音色。')); return }
     setWorking('audition')
     setResult(null)
     try {
@@ -400,7 +468,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
         onProgress: setProgress,
       })
       const audio = media.find((item) => item.kind === 'audio') ?? media[0]
-      if (audio === undefined) throw new ComfyError('音色查询工作流没有返回音频')
+      if (audio === undefined) throw new ComfyError(tx('音色查询工作流没有返回音频'))
       setAuditionUrl(audio.url)
     } catch (error) {
       say('error', error instanceof ComfyError ? error.message : (error as Error).message)
@@ -429,27 +497,85 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
     setActiveId(queue[0]!)
   }
 
+  /** POST a trim or a restore and read back the take's new length. */
+  async function editAudio(route: string, body: Record<string, unknown>): Promise<number | undefined> {
+    const response = await fetch(route, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const payload = await response.json() as { error?: string; seconds?: number }
+    if (!response.ok) throw new Error(payload.error ?? tx('请求失败'))
+    return typeof payload.seconds === 'number' ? payload.seconds : undefined
+  }
+
+  /**
+   * Keep the selection, drop the rest. Destructive — the file is rewritten.
+   *
+   * `working` is set to a literal rather than to the section id on purpose:
+   * the strip reads `working === section.id` as "generating", and a trim that
+   * lit that label said the wrong thing about what was happening.
+   */
   async function trim(): Promise<void> {
     if (active?.path === undefined || selection === null) return
-    setWorking(active.id)
+    const path = active.path
+    const was = active.seconds
+    setWorking('trim')
+    setEditNote(null)
     try {
-      await fetch('/openreel/asset/trim', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          project: state.project.id,
-          path: active.path,
-          start: selection.start,
-          end: selection.end,
-        }),
-      }).then(async (r) => { if (!r.ok) throw new Error((await r.json()).error) })
+      const seconds = await editAudio('/openreel/asset/trim', {
+        project: state.project.id,
+        path,
+        start: selection.start,
+        end: selection.end,
+      })
       setSelection(null)
-      // Cache-bust: the file changed underneath the same URL.
       setPreviewUrl(undefined)
+      // Before the reload, not after: the waveform should redraw the moment
+      // the host says it is done, not one round trip later.
+      bumpMedia(path)
       await onReload()
-      say('ok', '裁好了。')
+      setEditNote({
+        kind: 'ok',
+        text: seconds === undefined
+          ? tx('裁好了')
+          : tx('裁好了 · ') + (was === undefined ? '' : was.toFixed(2) + 's → ') + seconds.toFixed(2) + 's',
+      })
     } catch (error) {
-      say('error', (error as Error).message)
+      setEditNote({ kind: 'error', text: (error as Error).message })
+    } finally {
+      setWorking(null)
+    }
+  }
+
+  /**
+   * Undo every trim on this take at once.
+   *
+   * Not "one step back": a trim rewrites the file, so there is no stack of
+   * cuts to walk. What the host keeps is the take as it was generated, and
+   * that is the only point anyone can actually aim at on a waveform.
+   */
+  async function restore(): Promise<void> {
+    if (active?.path === undefined) return
+    const path = active.path
+    setWorking('restore')
+    setEditNote(null)
+    try {
+      const seconds = await editAudio('/openreel/asset/restore', {
+        project: state.project.id,
+        path,
+      })
+      setSelection(null)
+      setPreviewUrl(undefined)
+      bumpMedia(path)
+      await onReload()
+      setEditNote({
+        kind: 'ok',
+        text: tx('已还原成刚生成时的样子')
+          + (seconds === undefined ? '' : ' · ' + seconds.toFixed(2) + 's'),
+      })
+    } catch (error) {
+      setEditNote({ kind: 'error', text: (error as Error).message })
     } finally {
       setWorking(null)
     }
@@ -465,7 +591,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
         status: 'completed',
         artifacts: { asset_manifest_audio: manifest },
         human_approved: true,
-        note: '在OpenReel 创意台确认配音',
+        note: tx('在OpenReel 创意台确认配音'),
       })
       await onReload()
 
@@ -493,61 +619,90 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
   const audioSrc = previewUrl ?? (active?.path === undefined
     ? undefined
     : '/openreel/media?project=' + encodeURIComponent(state.project.id)
-      + '&path=' + encodeURIComponent(active.path) + '&v=' + (active.seconds ?? 0))
+      + '&path=' + encodeURIComponent(active.path) + '&v=' + (active.seconds ?? 0)
+      + '&r=' + (mediaRev.get(active.path) ?? 0))
+
+  /**
+   * Which takes still have an untrimmed copy on disk. The host lists them
+   * because only the host can see `originals/`; an older host sends nothing,
+   * and then undo is simply offered as unavailable rather than as a 404.
+   */
+  const trimmedPaths = new Set(state.trimmed ?? [])
+  const canRestore = active?.path !== undefined && trimmedPaths.has(active.path)
 
   return (
     <div className="orb-screen">
       <header className="orb-screen-head">
-        <h2 className="orb-screen-title">配音</h2>
+        <h2 className="orb-screen-title">{tx('配音')}</h2>
         <span className="orb-spacer" />
         <span className={'orb-pill ' + (approved ? 'orb-pill-ok' : 'orb-pill-wait')}>
-          {approved ? '已审核' : '待确认'}
+          {approved ? tx('已审核') : tx('待确认')}
         </span>
       </header>
 
       {comfyUp === false ? (
         <p className="orb-note orb-note-error">
-          连不上 dsh-comfyui，这一页的生成功能都不可用。确认它已安装并启用。
+          {tx('连不上 dsh-comfyui，这一页的生成功能都不可用。确认它已安装并启用。')}
         </p>
       ) : null}
 
       <section className="orb-card">
         <div className="orb-card-head">
           <IconSpark className="orb-section-icon" />
-          <h3 className="orb-card-title">配音生成</h3>
+          <h3 className="orb-card-title">{tx('配音生成')}</h3>
           <span className="orb-card-meta">
-            <span><b>{done}</b>/{sections.length} 段已生成</span>
+            <span><b>{done}</b>/{sections.length}{tx(' 段已生成')}</span>
           </span>
+          <span className="orb-spacer" />
+          {/* A REFERENCE for the request, not a switch on the workflow: which
+              slot carries a language — or whether the workflow has one — is the
+              workflow's business, so the note says so rather than promising it
+              will take effect. It also governs the script, which is why it is
+              stored on the project and not held for this visit. */}
+          <label className="orb-inline-pick">
+            <span className="orb-hint">{tx('语种')}</span>
+            <select
+              className="orb-select orb-select-small"
+              value={contentLanguage.id}
+              disabled={working !== null || phase !== null}
+              title={tx('台词和配音都用这个语言。作为参考写进给 Agent 的请求——工作流需支持该语种，否则 Agent 会按它能做的处理')}
+              onChange={(event) => void saveLanguage(event.target.value)}
+            >
+              {CONTENT_LANGUAGES.map((entry) => (
+                <option key={entry.id} value={entry.id}>{entry.label}</option>
+              ))}
+            </select>
+          </label>
           <span className="orb-spacer" />
           {ttsChoices.length > 1 ? (
             <label className="orb-inline-pick">
-              <span className="orb-hint">工作流</span>
+              <span className="orb-hint">{tx('工作流')}</span>
               <select
                 className="orb-select orb-select-small"
                 value={ttsWorkflow}
                 disabled={working !== null || phase !== null}
-                title="这个能力绑定了多条工作流，选一条用于这次生成"
+                title={tx('这个能力绑定了多条工作流，选一条用于这次生成')}
                 onChange={(event) => setTtsPick(event.target.value)}
               >
                 {ttsChoices.map((name, index) => (
-                  <option key={name} value={name}>{index === 0 ? name + '（默认）' : name}</option>
+                  <option key={name} value={name}>{index === 0 ? name + tx('（默认）') : name}</option>
                 ))}
               </select>
             </label>
           ) : (
-            <span className="orb-hint">工作流 {ttsWorkflow === '' ? '（未绑定）' : ttsWorkflow}</span>
+            <span className="orb-hint">{tx('工作流')} {ttsWorkflow === '' ? tx('（未绑定）') : ttsWorkflow}</span>
           )}
         </div>
         <div className="orb-card-body">
         {active !== undefined ? (
           <div className="orb-take-detail">
             <div className="orb-line">
-              <span className="orb-line-label">台词</span>
-              <p className="orb-take-text">{active.text || '（这一段没有台词）'}</p>
+              <span className="orb-line-label">{tx('台词')}</span>
+              <p className="orb-take-text">{active.text || tx('（这一段没有台词）')}</p>
             </div>
             {active.deliveryNote !== '' ? (
               <div className="orb-line">
-                <span className="orb-line-label">表达</span>
+                <span className="orb-line-label">{tx('表达')}</span>
                 <p className="orb-take-text orb-hint">{active.deliveryNote}</p>
               </div>
             ) : null}
@@ -556,34 +711,69 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
             {audioSrc !== undefined ? <audio ref={player} className="orb-audio" src={audioSrc} controls /> : null}
 
             <div className="orb-actions">
-              <span className="orb-hint">
-                {phase === null ? '' : '已交给 Agent，生成中会出现在对话里。'}
+              <span className={'orb-hint'
+                + (editNote?.kind === 'error' ? ' orb-note-error' : '')
+                + (editNote?.kind === 'ok' ? ' orb-note-ok' : '')}>
+                {working === 'trim' ? tx('正在裁剪…')
+                  : working === 'restore' ? tx('正在还原…')
+                    : editNote !== null ? editNote.text
+                      : phase === null ? '' : tx('已交给 Agent，生成中会出现在对话里。')}
               </span>
               <span className="orb-spacer" />
+              {/* Rendered even with nothing to undo, disabled rather than
+                  hidden: trimming is destructive, and a button that appears
+                  only after the damage is a promise made too late to read. */}
+              <button type="button" className="orb-btn orb-btn-small"
+                disabled={!canRestore || working !== null}
+                onClick={() => void restore()}
+                title={canRestore
+                  ? tx('把这一段还原成刚生成时的样子，之前的裁剪全部作废')
+                  : tx('这一段还没裁剪过，没有可还原的版本')}>{tx('撤销裁剪')}</button>
               <button type="button" className="orb-btn orb-btn-small"
                 disabled={selection === null || working !== null || active.path === undefined}
-                onClick={() => void trim()}>裁掉选区外</button>
+                onClick={() => void trim()}
+                title={selection === null
+                  ? tx('先在波形上拖选要保留的部分')
+                  : tx('只保留选中的 ') + (selection.end - selection.start).toFixed(2)
+                    + tx(' 秒，文件会被直接改写（可撤销）')}>{tx('裁剪')}</button>
+              {/* The common case after a partial run: some takes landed, one
+                  failed or was added later. Regenerating the lot to fill a
+                  hole costs the whole batch of TTS again, so the hole gets its
+                  own button. Hidden when there is no hole, and when nothing
+                  has been generated at all, since it is 全部生成 then. */}
+              {missing.length === 0 || missing.length === sections.length ? null : (
+                <button
+                  type="button"
+                  className="orb-btn orb-btn-small"
+                  disabled={working !== null || phase !== null}
+                  onClick={() => void generate(missing.map((section) => section.id))}
+                  title={tx('只生成还没有配音的那几段，已经有的不动')}
+                >
+                  <BusyLabel phase={phase} idle={tx('生成剩余（') + missing.length + '）'} />
+                </button>
+              )}
               <button
                 type="button"
                 className="orb-btn orb-btn-small orb-btn-accent"
                 disabled={working !== null || phase !== null || sections.length === 0}
                 onClick={() => void generate(sections.map((section) => section.id))}
+                title={tx('整批重新生成，已有配音会被替换')}
               >
-                <BusyLabel phase={phase} idle="全部生成" />
+                <BusyLabel phase={phase} idle={tx('全部生成')} />
               </button>
               <button type="button" className="orb-btn orb-btn-small orb-btn-accent"
                 disabled={working !== null || phase !== null}
                 onClick={() => void generate([active.id])}>
                 <IconSpark className="orb-btn-icon" />
                 {phase === null
-                  ? (active.path === undefined ? '生成这一段' : '重新生成')
+                  ? (active.path === undefined ? tx('生成这一段') : tx('重新生成'))
                   : <BusyLabel phase={phase} idle="" />}
               </button>
             </div>
           </div>
         ) : null}
 
-        <Strip ariaLabel="配音序列">
+        <Strip ariaLabel={tx('配音序列')}>
           {sections.map((section, index) => {
             const screenTime = onScreen.get(section.id)
             // Uniform width on purpose. Cards used to scale with duration at
@@ -601,15 +791,15 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                 className={classes.join(' ')}
                 onClick={() => { setPlayingAll(false); setActiveId(section.id) }}
                 title={(section.label || section.text.slice(0, 30))
-                  + (section.seconds === undefined ? '' : ' · 配音 ' + section.seconds.toFixed(2) + 's'
-                    + (screenTime === undefined ? '' : ' · 占屏 ' + screenTime.toFixed(2) + 's（含风格留白）'))}
+                  + (section.seconds === undefined ? '' : tx(' · 配音 ') + section.seconds.toFixed(2) + 's'
+                    + (screenTime === undefined ? '' : tx(' · 占屏 ') + screenTime.toFixed(2) + tx('s（含风格留白）')))}
               >
                 <span className="orb-take-index">{index + 1}</span>
                 <span className="orb-take-id">{section.id}</span>
                 <span className="orb-take-time">
                   {working === section.id
-                    ? '生成中'
-                    : section.seconds === undefined ? '未生成'
+                    ? tx('生成中')
+                    : section.seconds === undefined ? tx('未生成')
                       : (screenTime ?? section.seconds).toFixed(1) + 's'}
                 </span>
               </button>
@@ -620,11 +810,11 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
             className={'orb-take-card orb-take-all' + (playingAll ? ' orb-take-current' : '')}
             disabled={done === 0}
             onClick={playAll}
-            title={playingAll ? '停止连播' : '按顺序播放已生成的段落，不合并文件'}
+            title={playingAll ? tx('停止连播') : tx('按顺序播放已生成的段落，不合并文件')}
           >
             <span className="orb-take-index">{playingAll ? '■' : '▶'}</span>
-            <span className="orb-take-id">全部</span>
-            <span className="orb-take-time">{done}/{sections.length} 段</span>
+            <span className="orb-take-id">{tx('全部')}</span>
+            <span className="orb-take-time">{done}/{sections.length}{tx(' 段')}</span>
           </button>
         </Strip>
         </div>
@@ -633,43 +823,43 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
       <section className="orb-card">
         <div className="orb-card-head">
           <IconMic className="orb-section-icon" />
-          <h3 className="orb-card-title">音色</h3>
+          <h3 className="orb-card-title">{tx('音色')}</h3>
           <span className="orb-card-meta">
-            <span>{voices.length > 0 ? '音色库 ' + voices.length + ' 个' : comfyUp === true ? '读不到音色库' : ''}</span>
-            <span>{queryWorkflow === '' ? '试听需先绑定「音色查询」工作流' : '试听工作流 ' + queryWorkflow}</span>
+            <span>{voices.length > 0 ? tx('音色库 ') + voices.length + tx(' 个') : comfyUp === true ? tx('读不到音色库') : ''}</span>
+            <span>{queryWorkflow === '' ? tx('试听需先绑定「音色查询」工作流') : tx('试听工作流 ') + queryWorkflow}</span>
           </span>
           <span className="orb-spacer" />
           <button
             type="button"
             className="orb-btn orb-btn-small"
             disabled={working !== null || comfyUp !== true}
-            title="重新读一遍 ComfyUI 的音色库，并同步两条工作流保存的参数清单"
+            title={tx('重新读一遍 ComfyUI 的音色库，并同步两条工作流保存的参数清单')}
             onClick={() => void refreshVoices()}
           >
-            {working === 'voices' ? <><Spinner />刷新中…</> : '刷新列表'}
+            {working === 'voices' ? <><Spinner />{tx('刷新中…')}</> : tx('刷新列表')}
           </button>
           <button
             type="button"
             className="orb-btn orb-btn-small"
             disabled={working !== null || comfyUp !== true || voice === '' || queryWorkflow === ''}
-            title={queryWorkflow === '' ? '设置 → OpenReel 创意台 → 绑定「音色查询」工作流' : '播放这个音色的参考片段'}
+            title={queryWorkflow === '' ? tx('设置 → OpenReel 创意台 → 绑定「音色查询」工作流') : tx('播放这个音色的参考片段')}
             onClick={() => void audition()}
           >
-            {working === 'audition' ? <><Spinner />试听中…</> : '试听'}
+            {working === 'audition' ? <><Spinner />{tx('试听中…')}</> : tx('试听')}
           </button>
         </div>
         <div className="orb-card-body">
           <div className="orb-duo-split">
             <div className="orb-duo-col">
               <label className="orb-field">
-                <span className="orb-label">音色库</span>
+                <span className="orb-label">{tx('音色库')}</span>
                 <select
                   className="orb-select"
                   value={voice}
                   disabled={working !== null}
                   onChange={(event) => void saveVoice(event.target.value)}
                 >
-                  <option value="">（未选）</option>
+                  <option value="">{tx('（未选）')}</option>
                   {voices.map((name) => <option key={name} value={name}>{name}</option>)}
                 </select>
               </label>
@@ -680,11 +870,11 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                   one from a sample are two answers to the same question, and a
                   third container made them look like two unrelated features. */}
               <div className="orb-subhead">
-                <span className="orb-subhead-label">参考音频</span>
+                <span className="orb-subhead-label">{tx('参考音频')}</span>
                 <span className="orb-hint">
                   {voiceReferences.length === 0
-                    ? '声音克隆用，整个项目共用'
-                    : '整个项目共用 · ' + voiceReferences.length + ' 段'}
+                    ? tx('声音克隆用，整个项目共用')
+                    : tx('整个项目共用 · ') + voiceReferences.length + tx(' 段')}
                 </span>
               </div>
 
@@ -698,7 +888,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                       type="button"
                       className={'orb-slot-media orb-slot-audio'
                         + (playingRef === name ? ' orb-slot-audio-on' : '')}
-                      title={playingRef === name ? '停止' : '试听这一段'}
+                      title={playingRef === name ? tx('停止') : tx('试听这一段')}
                       onClick={() => setPlayingRef(playingRef === name ? null : name)}
                     >{playingRef === name ? '■' : '▶'}</button>
                     {playingRef === name ? (
@@ -708,7 +898,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                         onEnded={() => setPlayingRef(null)}
                         onError={() => {
                           setPlayingRef(null)
-                          say('error', '播放不了 ' + name + '。它可能已经不在 ComfyUI 的输入目录里了。')
+                          say('error', tx('播放不了 ') + name + tx('。它可能已经不在 ComfyUI 的输入目录里了。'))
                         }}
                         hidden
                       />
@@ -717,7 +907,7 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                     <button
                       type="button"
                       className="orb-slot-x"
-                      aria-label="移除这一槽"
+                      aria-label={tx('移除这一槽')}
                       disabled={working !== null}
                       onClick={() => void removeVoiceReference(name)}
                     >×</button>
@@ -727,45 +917,45 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                   type="button"
                   className="orb-slot orb-slot-empty"
                   disabled={working !== null}
-                  title="从 ComfyUI 的素材里指定一段；浏览器里也可以上传新的"
+                  title={tx('从 ComfyUI 的素材里指定一段；浏览器里也可以上传新的')}
                   onClick={() => setPickerOpen(true)}
                 >
                   <span className="orb-slot-index">{voiceReferences.length + 1}</span>
-                  <span className="orb-slot-add">指定参考音频</span>
+                  <span className="orb-slot-add">{tx('指定参考音频')}</span>
                 </button>
               </div>
-              <p className="orb-hint">槽位按顺序对应工作流的加载参数。</p>
+              <p className="orb-hint">{tx('槽位按顺序对应工作流的加载参数。')}</p>
             </div>
 
             <div className="orb-duo-col">
               <div className="orb-col-head">
-                <b>音色设计</b>
+                <b>{tx('音色设计')}</b>
                 <span className="orb-hint">
-                  工作流 {designWorkflow === '' ? '（未绑定）' : designWorkflow} · 交给 Agent 去跑
+                  {designWorkflow === '' ? tx('（未绑定）') : designWorkflow}
                 </span>
                 <span className="orb-spacer" />
                 <button
                   type="button"
                   className="orb-btn orb-btn-small"
                   disabled={working !== null}
-                  title="让 Agent 看着项目题材和风格，提一个音色方案"
+                  title={tx('让 Agent 看着项目题材和风格，提一个音色方案')}
                   onClick={() => {
                     void onSend(buildVoiceProposalJob(state.project.id))
-                    say('ok', '已经让 Agent 想一个，写好后这里会自动填上。')
+                    say('ok', tx('已经让 Agent 想一个，写好后这里会自动填上。'))
                   }}
-                ><IconSpark className="orb-btn-icon" />自动生成</button>
+                ><IconSpark className="orb-btn-icon" />{tx('自动生成')}</button>
               </div>
               <input
                 className="orb-input"
                 value={designName}
-                placeholder="音色名称，例如 jiangshuo_male"
+                placeholder={tx('音色名称，例如 jiangshuo_male')}
                 onChange={(event) => setDesignName(event.target.value)}
               />
               <textarea
                 className="orb-input orb-textarea"
                 rows={3}
                 value={designPrompt}
-                placeholder="想要什么样的声音，例如：沉稳中年男声，语速偏慢，略带磁性"
+                placeholder={tx('想要什么样的声音，例如：沉稳中年男声，语速偏慢，略带磁性')}
                 onChange={(event) => setDesignPrompt(event.target.value)}
               />
               <div className="orb-col-foot">
@@ -782,9 +972,9 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
                       prompt: designPrompt.trim(),
                       refreshWorkflows: [ttsWorkflow, queryWorkflow].filter((n) => n.trim() !== ''),
                     }))
-                    say('ok', '已经交给 Agent。做好之后按它的提示刷新一次工作流快照，再回来选音色。')
+                    say('ok', tx('已经交给 Agent。做好之后按它的提示刷新一次工作流快照，再回来选音色。'))
                   }}
-                >创建音色</button>
+                >{tx('创建音色')}</button>
               </div>
             </div>
           </div>
@@ -802,17 +992,17 @@ export function AudioScreen({ state, onReload, onSend, onGoToStage }: AudioScree
       <div className="orb-cta">
         <button type="button" className="orb-cta-primary"
           disabled={working !== null || done < sections.length || sections.length === 0}
-          title={done < sections.length ? '还有 ' + (sections.length - done) + ' 段没生成，补齐才能提交' : undefined}
+          title={done < sections.length ? tx('还有 ') + (sections.length - done) + tx(' 段没生成，补齐才能提交') : undefined}
           onClick={() => void submit()}>
           <IconPlay className="orb-cta-icon" />
-          {working === 'submit' ? '提交中…' : approved ? '重新提交配音' : '确认配音，进入配图'}
+          {working === 'submit' ? tx('提交中…') : approved ? tx('重新提交配音') : tx('确认配音，进入配图')}
         </button>
         <p className="orb-cta-hint">
           {done < sections.length
-            ? '还有 ' + (sections.length - done) + ' 段没生成，补齐才能提交。'
+            ? tx('还有 ') + (sections.length - done) + tx(' 段没生成，补齐才能提交。')
             : approved
-              ? '这一版已经确认过了。再提交一次会替换配音，配图和成片要重做。'
-              : '这一页所有段落听过之后的下一步——之后才会开始配图。'}
+              ? tx('这一版已经确认过了。再提交一次会替换配音，配图和成片要重做。')
+              : tx('这一页所有段落听过之后的下一步——之后才会开始配图。')}
         </p>
         {result !== null ? (
           <p className={'orb-note ' + (result.kind === 'ok' ? 'orb-note-ok' : 'orb-note-error')}>{result.text}</p>

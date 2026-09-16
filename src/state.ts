@@ -275,6 +275,7 @@ export class StateMachine {
     targetDurationSeconds?: number
     style?: string
     voice?: string
+    language?: string
     voiceDesignName?: string
     voiceDesignPrompt?: string
     loraName?: string
@@ -299,6 +300,7 @@ export class StateMachine {
           : {}),
         ...(patch.style !== undefined ? { style: patch.style } : {}),
         ...(patch.voice !== undefined ? { voice: patch.voice } : {}),
+        ...(patch.language !== undefined ? { language: patch.language } : {}),
         ...(patch.voiceDesignName !== undefined ? { voice_design_name: patch.voiceDesignName } : {}),
         ...(patch.voiceDesignPrompt !== undefined ? { voice_design_prompt: patch.voiceDesignPrompt } : {}),
         ...(patch.loraName !== undefined ? { lora_name: patch.loraName } : {}),
@@ -459,6 +461,56 @@ export class StateMachine {
     await this.serialize(projectId, async () => {
       await ensureDir(layout.artifactsDir)
       await writeJsonAtomic(join(layout.artifactsDir, name + '.json'), value)
+    })
+  }
+
+  /**
+   * Correct a take's recorded length after the file itself was rewritten.
+   *
+   * NOT a second way into a gated artifact, and the narrowness is the guard:
+   * it can only overwrite `duration_seconds` on an asset already in the
+   * manifest, at a path the caller just legally rewrote. It cannot add an
+   * asset, remove one, or repoint one at a different file — every claim the
+   * gate checks is untouched, and the result is schema-validated anyway.
+   *
+   * It exists because trimming is deliberately ungated (see `tool-edit.ts`)
+   * while the duration the manifest records is a MEASUREMENT of the file, not
+   * a decision anyone made — `verifyAssets` already overwrites whatever a
+   * caller declares with what ffprobe reports, so the rule that this number
+   * belongs to the file is the one already in force here.
+   *
+   * Leaving it stale is not governance, it is a stale cache: the compose plan,
+   * the on-screen times and the panel's media URL are all derived from it, so
+   * a trim that does not update it shows up as "the button did nothing".
+   *
+   * Returns false when nothing matched, so a caller can tell "corrected" from
+   * "that path is not in this manifest".
+   */
+  async reviseAssetDuration(projectId: string, assetPath: string, seconds: number): Promise<boolean> {
+    if (!Number.isFinite(seconds) || seconds <= 0) return false
+    const { layout } = await this.requireProject(projectId)
+    return this.serialize(projectId, async () => {
+      const manifest = await this.readArtifact<AssetManifest>(layout, 'asset_manifest_audio')
+      if (manifest === undefined) return false
+      let touched = false
+      const assets = (manifest.assets ?? []).map((asset) => {
+        if (asset.path !== assetPath) return asset
+        touched = true
+        return { ...asset, duration_seconds: seconds }
+      })
+      if (!touched) return false
+      const next = { ...manifest, assets }
+      const issues = validateArtifact('asset_manifest_audio', next)
+      if (issues.length > 0) {
+        throw new StateViolationError(
+          'SCHEMA_INVALID',
+          'SCHEMA INVALID: correcting the duration of ' + assetPath + ' would break the manifest:'
+          + String.fromCharCode(10) + formatIssues(issues),
+        )
+      }
+      await ensureDir(layout.artifactsDir)
+      await writeJsonAtomic(join(layout.artifactsDir, 'asset_manifest_audio.json'), next)
+      return true
     })
   }
 

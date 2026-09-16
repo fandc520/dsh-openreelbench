@@ -30,6 +30,8 @@ import {
 } from './fields.ts'
 import { type SettingsScope, useScope } from './scope.ts'
 
+import { tx, useT } from './i18n.ts'
+
 interface Edit {
   path: FieldPath
   value: unknown
@@ -51,9 +53,12 @@ function toText(value: unknown): string {
 function fromText(spec: FieldSpec, text: string): { value: unknown } | { error: string } {
   if (spec.kind === 'number') {
     const trimmed = text.trim()
-    if (trimmed === '') return { error: '不能为空' }
+    if (trimmed === '') return { error: tx('不能为空') }
     const parsed = Number(trimmed)
-    if (!Number.isFinite(parsed)) return { error: '要填数字' }
+    if (!Number.isFinite(parsed)) return { error: tx('要填数字') }
+    // A whole-number field says so here rather than quietly truncating: 0.5
+    // frames per second is a typo, and rounding it would hide the typo.
+    if (spec.decimal !== true && !Number.isInteger(parsed)) return { error: tx('要填整数') }
     return { value: parsed }
   }
   return { value: text }
@@ -66,6 +71,12 @@ function toList(value: unknown): string[] {
 }
 
 export function SettingsSection({ scope }: SettingsSectionProps): JSX.Element | null {
+  // Subscribe this tree to the language.
+  //
+  // `tx()` reads the store but does not subscribe, so one hook at each root is
+  // what makes a change in Settings repaint everything below it. Three roots,
+  // because the shell mounts the tool views itself with no provider above them.
+  useT()
   const snapshot = useScope(scope)
   const [edits, setEdits] = useState<Map<string, Edit>>(new Map())
   const [saving, setSaving] = useState(false)
@@ -92,7 +103,7 @@ export function SettingsSection({ scope }: SettingsSectionProps): JSX.Element | 
         const edit = edits.get(fieldKey(spec.path))
         if (edit === undefined) continue
         if (spec.kind === 'number' && typeof edit.value !== 'number') {
-          found.set(fieldKey(spec.path), typeof edit.value === 'string' ? edit.value : '无效')
+          found.set(fieldKey(spec.path), typeof edit.value === 'string' ? edit.value : tx('无效'))
         }
       }
     }
@@ -159,9 +170,9 @@ export function SettingsSection({ scope }: SettingsSectionProps): JSX.Element | 
         await scope.set(field, value)
       }
       setEdits(new Map())
-      setResult({ kind: 'ok', text: '已保存。项目根目录、绑定和风格立即生效；正在进行的合成沿用旧值。' })
+      setResult({ kind: 'ok', text: tx('已保存。项目根目录、绑定和风格立即生效；正在进行的合成沿用旧值。') })
     } catch (error) {
-      setResult({ kind: 'error', text: '保存失败：' + (error as Error).message })
+      setResult({ kind: 'error', text: tx('保存失败：') + (error as Error).message })
     } finally {
       setSaving(false)
     }
@@ -176,13 +187,13 @@ export function SettingsSection({ scope }: SettingsSectionProps): JSX.Element | 
 
     const head = (
       <div className="orb-field-head">
-        <span className="orb-label">{spec.label}</span>
-        {overridden ? <span className="orb-badge">已覆盖</span> : null}
+        <span className="orb-label">{tx(spec.label)}</span>
+        {overridden ? <span className="orb-badge">{tx('已覆盖')}</span> : null}
       </div>
     )
     const hint = spec.hint === undefined
       ? null
-      : <div className={error === undefined ? 'orb-hint' : 'orb-hint orb-note-error'}>{error ?? spec.hint}</div>
+      : <div className={error === undefined ? 'orb-hint' : 'orb-hint orb-note-error'}>{error ?? tx(spec.hint)}</div>
 
     if (spec.kind === 'boolean') {
       const checked = edit !== undefined ? edit.value === true : stored === true
@@ -195,8 +206,8 @@ export function SettingsSection({ scope }: SettingsSectionProps): JSX.Element | 
               disabled={readOnly}
               onChange={(event) => stage(spec, event.target.checked)}
             />
-            <span className="orb-label">{spec.label}</span>
-            {overridden ? <span className="orb-badge">已覆盖</span> : null}
+            <span className="orb-label">{tx(spec.label)}</span>
+            {overridden ? <span className="orb-badge">{tx('已覆盖')}</span> : null}
           </label>
           {hint}
         </div>
@@ -218,9 +229,9 @@ export function SettingsSection({ scope }: SettingsSectionProps): JSX.Element | 
             disabled={readOnly}
             onChange={(event) => stage(spec, event.target.value)}
           >
-            {known ? null : <option value={current}>{current === '' ? '（未设置）' : current + '（未定义）'}</option>}
+            {known ? null : <option value={current}>{current === '' ? tx('（未设置）') : current + tx('（未定义）')}</option>}
             {options.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>{tx(option.label)}</option>
             ))}
           </select>
           {hint}
@@ -239,12 +250,12 @@ export function SettingsSection({ scope }: SettingsSectionProps): JSX.Element | 
           <div className="orb-list">
             {rows.map((value, index) => (
               <div className="orb-list-row" key={index}>
-                {index === 0 ? <span className="orb-list-tag">默认</span> : null}
+                {index === 0 ? <span className="orb-list-tag">{tx('默认')}</span> : null}
                 <input
                   className="orb-input"
                   type="text"
                   value={value}
-                  placeholder={index === 0 ? (spec.placeholder ?? '默认工作流') : '候选工作流'}
+                  placeholder={index === 0 ? (spec.placeholder ?? tx('默认工作流')) : tx('候选工作流')}
                   disabled={readOnly}
                   spellCheck={false}
                   onChange={(event) => {
@@ -257,7 +268,7 @@ export function SettingsSection({ scope }: SettingsSectionProps): JSX.Element | 
                   type="button"
                   className="orb-list-remove"
                   disabled={readOnly || items.length === 0}
-                  aria-label="删除这一条"
+                  aria-label={tx('删除这一条')}
                   onClick={() => {
                     const next = items.filter((_, itemIndex) => itemIndex !== index)
                     stageList(spec, next)
@@ -274,7 +285,7 @@ export function SettingsSection({ scope }: SettingsSectionProps): JSX.Element | 
             disabled={readOnly}
             onClick={() => stageList(spec, [...items, ''])}
           >
-            + 添加工作流
+            {tx('+ 添加工作流')}
           </button>
           {hint}
         </div>
@@ -290,7 +301,7 @@ export function SettingsSection({ scope }: SettingsSectionProps): JSX.Element | 
         <input
           className={error === undefined ? 'orb-input' : 'orb-input orb-invalid'}
           type="text"
-          inputMode={spec.kind === 'number' ? 'numeric' : undefined}
+          inputMode={spec.kind !== 'number' ? undefined : spec.decimal === true ? 'decimal' : 'numeric'}
           value={text}
           placeholder={spec.placeholder ?? ''}
           disabled={readOnly}
@@ -327,36 +338,33 @@ export function SettingsSection({ scope }: SettingsSectionProps): JSX.Element | 
     <div className="orb-card">
       {FIELD_GROUPS.map((group) => (
         <div className="orb-group orb-group-boxed" key={group.title}>
-          <div className="orb-group-title">{group.title}</div>
-          {group.blurb === undefined ? null : <p className="orb-group-blurb">{group.blurb}</p>}
+          {/* FIELD_GROUPS is a module-level table, so its strings stay
+              Chinese and are translated here, at the point of display —
+              a tx() in the table would run once at import and never again. */}
+          <div className="orb-group-title">{tx(group.title)}</div>
+          {group.blurb === undefined ? null : <p className="orb-group-blurb">{tx(group.blurb)}</p>}
           {renderFields(group.fields)}
         </div>
       ))}
 
-      <div className="orb-group">
-        <div className="orb-hint">
-          风格库本身（提示词模板、一致性锚点、质量红线）在 profile 的 <code>cordis.yml</code> 里编辑，
-          这里只选用哪一套。
-        </div>
-      </div>
 
       <div className="orb-actions">
-        {loading ? <span className="orb-note">读取中…</span> : null}
+        {loading ? <span className="orb-note">{tx('读取中…')}</span> : null}
         {!loading && !snapshot.writable
-          ? <span className="orb-note orb-note-warn">当前连接不接受写入，改动无法保存。</span>
+          ? <span className="orb-note orb-note-warn">{tx('当前连接不接受写入，改动无法保存。')}</span>
           : null}
         {result !== null
           ? <span className={result.kind === 'ok' ? 'orb-note orb-note-ok' : 'orb-note orb-note-error'}>{result.text}</span>
           : null}
         <span className="orb-spacer" />
-        <button className="orb-btn" type="button" disabled={!dirty || saving} onClick={discard}>撤销</button>
+        <button className="orb-btn" type="button" disabled={!dirty || saving} onClick={discard}>{tx('撤销')}</button>
         <button
           className="orb-btn orb-btn-primary"
           type="button"
           disabled={!dirty || blocked || readOnly}
           onClick={() => { void save() }}
         >
-          {saving ? '保存中…' : '保存'}
+          {saving ? tx('保存中…') : tx('保存')}
         </button>
       </div>
     </div>

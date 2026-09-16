@@ -15,6 +15,7 @@
  * samples, and walking them on every repaint would make dragging crawl.
  */
 import { useEffect, useRef, useState } from 'react'
+import { tx } from './i18n.ts'
 
 export interface Selection {
   start: number
@@ -80,7 +81,7 @@ export function Waveform({
       .then((response) => response.arrayBuffer())
       .then((bytes) => context.decodeAudioData(bytes))
       .then((decoded) => { if (live) setBuffer(decoded) })
-      .catch(() => { if (live) setError('这段音频读不出来') })
+      .catch(() => { if (live) setError(tx('这段音频读不出来')) })
       .finally(() => {
         void context.close()
         if (live) setLoading(false)
@@ -191,14 +192,14 @@ export function Waveform({
         }}
       />
       <div className="orb-wave-foot">
-        {loading ? <span className="orb-hint">读取波形…</span> : null}
+        {loading ? <span className="orb-hint">{tx('读取波形…')}</span> : null}
         {error !== null ? <span className="orb-hint orb-note-error">{error}</span> : null}
         {buffer !== null && error === null && !loading ? (
           <span className="orb-hint">
             {selection === null
-              ? '全长 ' + buffer.duration.toFixed(2) + ' 秒 · 在波形上拖选要保留的部分'
-              : '保留 ' + selection.start.toFixed(2) + ' – ' + selection.end.toFixed(2)
-                + ' 秒（共 ' + (selection.end - selection.start).toFixed(2) + ' 秒），点一下取消'}
+              ? tx('全长 ') + buffer.duration.toFixed(2) + tx(' 秒 · 在波形上拖选要保留的部分')
+              : tx('保留 ') + selection.start.toFixed(2) + ' – ' + selection.end.toFixed(2)
+                + tx(' 秒（共 ') + (selection.end - selection.start).toFixed(2) + tx(' 秒），点一下取消')}
           </span>
         ) : null}
       </div>
